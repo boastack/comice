@@ -58,6 +58,54 @@ export type Mapping = {
 }
 
 /**
+ * Validates the constructor-time shape of MappingOptions and throws with a
+ * specific, actionable message on the first problem found. This runs once,
+ * at `.map().to(...)` call time, not per frame — a programmer error (a
+ * malformed config object) throws, fails loud, and is easy to fix, while
+ * bad runtime input degrades instead (see apply() below, which stays
+ * silent on purpose for a signal value that's merely out of range this
+ * frame). A malformed `range`/`output` or an out-of-bounds `smoothing`
+ * would otherwise silently misbehave every single frame forever (e.g.
+ * smoothing >= 1 means the mapped value never updates past its first
+ * frame) rather than fail once, immediately, at the call site where it's
+ * actually easy to fix.
+ */
+function validateOptions(options: MappingOptions): void {
+  const { range, output, multiplier, offset, smoothing } = options
+
+  function assertFiniteRange(value: [number, number] | undefined, label: string): void {
+    if (!value) return
+    const [min, max] = value
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      throw new RangeError(`[comice] mapping ${label} must be finite numbers, got [${min}, ${max}].`)
+    }
+    if (min >= max) {
+      throw new RangeError(
+        `[comice] mapping ${label} must have min < max, got [${min}, ${max}]. ` +
+          `A degenerate or reversed range clamps every value to the same output forever — ` +
+          `use \`invert: true\` instead of reversing the range to flip direction.`,
+      )
+    }
+  }
+
+  assertFiniteRange(range, 'range')
+  assertFiniteRange(output, 'output')
+
+  if (multiplier !== undefined && !Number.isFinite(multiplier)) {
+    throw new RangeError(`[comice] mapping multiplier must be a finite number, got ${multiplier}.`)
+  }
+  if (offset !== undefined && !Number.isFinite(offset)) {
+    throw new RangeError(`[comice] mapping offset must be a finite number, got ${offset}.`)
+  }
+  if (smoothing !== undefined && (!Number.isFinite(smoothing) || smoothing < 0 || smoothing >= 1)) {
+    throw new RangeError(
+      `[comice] mapping smoothing must be a finite number in [0, 1), got ${smoothing}. ` +
+        `smoothing >= 1 means the mapped value would never update past its first frame.`,
+    )
+  }
+}
+
+/**
  * Builds a single source -> target mapping. `source` is a plain signal key
  * (e.g. 'bass') — resolving 'audio.bass' down to 'bass' against a specific
  * driver's signal bag is the caller's job (see index.ts's `.map()`), so
@@ -69,6 +117,8 @@ export function createMapping(
   paramName: string,
   options: MappingOptions = {},
 ): Mapping {
+  validateOptions(options)
+
   const {
     range = DEFAULT_RANGE,
     output = range,
@@ -84,7 +134,14 @@ export function createMapping(
 
   function apply(signals: Readonly<SignalValues>): void {
     const raw = signals[sourceKey]
-    if (typeof raw !== 'number') return
+    // Absent (driver not warmed up yet), array-shaped (spectrum data, not
+    // mappable to a single parameter), or non-finite (a NaN/Infinity from
+    // a buggy or degenerate driver signal) all degrade the same way: skip
+    // this frame silently and try again next frame. This is a runtime
+    // input problem, not a configuration problem — see validateOptions()
+    // above for the config-time throw path — so per-frame bad data never
+    // takes the mapping down, it just misses a frame.
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) return
 
     const bounded = clamp ? clampTo(raw, range) : raw
     let t = normalize(bounded, range)

@@ -209,3 +209,81 @@ describe('createMapping — does not mutate the target beyond setParam', () => {
     expect(setSpy).toHaveBeenCalledWith('amount', 0.5)
   })
 })
+
+describe('createMapping — construction-time validation (programmer error throws)', () => {
+  // A malformed config object throws once, loudly, at the call site
+  // where it's easy to fix — it does not silently misbehave every frame
+  // forever. Bad *runtime* signal data (the next describe block below)
+  // is the opposite: it degrades, it never throws.
+
+  it('throws on a reversed range (min >= max)', () => {
+    const target = fakeTarget()
+    expect(() => createMapping('bass', target, 'amount', { range: [1, 0] })).toThrow(RangeError)
+  })
+
+  it('throws on a degenerate range (min === max)', () => {
+    const target = fakeTarget()
+    expect(() => createMapping('bass', target, 'amount', { range: [1, 1] })).toThrow(RangeError)
+  })
+
+  it('throws on a reversed output range', () => {
+    const target = fakeTarget()
+    expect(() => createMapping('bass', target, 'amount', { output: [1, 0] })).toThrow(RangeError)
+  })
+
+  it('throws on a non-finite range', () => {
+    const target = fakeTarget()
+    expect(() => createMapping('bass', target, 'amount', { range: [0, Infinity] })).toThrow(RangeError)
+    expect(() => createMapping('bass', target, 'amount', { range: [NaN, 1] })).toThrow(RangeError)
+  })
+
+  it('throws on a non-finite multiplier or offset', () => {
+    const target = fakeTarget()
+    expect(() => createMapping('bass', target, 'amount', { multiplier: NaN })).toThrow(RangeError)
+    expect(() => createMapping('bass', target, 'amount', { offset: Infinity })).toThrow(RangeError)
+  })
+
+  it('throws on smoothing outside [0, 1)', () => {
+    const target = fakeTarget()
+    expect(() => createMapping('bass', target, 'amount', { smoothing: 1 })).toThrow(RangeError)
+    expect(() => createMapping('bass', target, 'amount', { smoothing: 1.5 })).toThrow(RangeError)
+    expect(() => createMapping('bass', target, 'amount', { smoothing: -0.1 })).toThrow(RangeError)
+    expect(() => createMapping('bass', target, 'amount', { smoothing: NaN })).toThrow(RangeError)
+  })
+
+  it('accepts smoothing at the valid boundary (0)', () => {
+    const target = fakeTarget()
+    expect(() => createMapping('bass', target, 'amount', { smoothing: 0 })).not.toThrow()
+  })
+
+  it('accepts a valid range/output combination without throwing', () => {
+    const target = fakeTarget()
+    expect(() =>
+      createMapping('bass', target, 'amount', { range: [0, 100], output: [0, 0.8], smoothing: 0.5 }),
+    ).not.toThrow()
+  })
+})
+
+describe('createMapping — bad runtime signal data degrades instead of throwing', () => {
+  it('skips a frame silently when the live signal value is NaN', () => {
+    const target = fakeTarget()
+    const mapping = createMapping('bass', target, 'amount')
+    expect(() => mapping.apply({ bass: NaN })).not.toThrow()
+    expect(target.values.amount).toBeUndefined()
+  })
+
+  it('skips a frame silently when the live signal value is Infinity', () => {
+    const target = fakeTarget()
+    const mapping = createMapping('bass', target, 'amount')
+    expect(() => mapping.apply({ bass: Infinity })).not.toThrow()
+    expect(target.values.amount).toBeUndefined()
+  })
+
+  it('recovers on the next frame once the signal is finite again', () => {
+    const target = fakeTarget()
+    const mapping = createMapping('bass', target, 'amount')
+    mapping.apply({ bass: NaN })
+    mapping.apply({ bass: 0.6 })
+    expect(target.values.amount).toBeCloseTo(0.6)
+  })
+})
