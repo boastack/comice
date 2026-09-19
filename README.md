@@ -27,7 +27,7 @@ comice('.hero')
 
 `distort()` never mentions audio. `audio()` never mentions distort. The mapping in between is the only thing that knows both names exist, so every driver works with every plugin without either side being rewritten for the other.
 
-### Where it stands next to GSAP
+### A different layer than GSAP
 
 GSAP and Motion animate properties: move this left, fade that to half opacity, count a number up. A property is the whole element at once, so no animation library can reach inside a picture and change what individual pixels are doing, turn a video into dots, or make a headline sit behind someone's shoulder. That's not a gap in GSAP, it's a different layer, working one level deeper.
 
