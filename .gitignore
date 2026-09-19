@@ -8,6 +8,8 @@ coverage/
 # Editor/tool-generated, not part of the source.
 .cursorindexingignore
 .specstory/
+.claude/
+.vscode/
 
 # legacy/ HTML, JS and shader logic are kept as reference (the SDF/liquid-
 # morph math the morph plugin ports from) — the video/audio demo media is
