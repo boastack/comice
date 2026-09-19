@@ -1,0 +1,80 @@
+.soundtrack-control {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  color: #f4f4f4;
+  background: rgba(18, 18, 18, 0.78);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.soundtrack-control:hover {
+  border-color: rgba(0, 198, 92, 0.55);
+  background: rgba(24, 24, 24, 0.92);
+  transform: translateY(-1px);
+}
+
+.soundtrack-control:focus-visible {
+  outline: 2px solid #00c65c;
+  outline-offset: 3px;
+}
+
+.soundtrack-control svg {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  overflow: visible;
+}
+
+.soundtrack-control .sound-bar {
+  fill: currentColor;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.soundtrack-control[data-state="playing"] {
+  color: #00c65c;
+}
+
+.soundtrack-control[data-state="playing"] .sound-bar {
+  animation: soundtrack-pulse 900ms ease-in-out infinite alternate;
+}
+
+.soundtrack-control[data-state="playing"] .sound-bar:nth-child(2) { animation-delay: -300ms; }
+.soundtrack-control[data-state="playing"] .sound-bar:nth-child(3) { animation-delay: -600ms; }
+
+.soundtrack-control[data-state="muted"] .sound-bar,
+.soundtrack-control[data-state="ready"] .sound-bar {
+  opacity: 0.52;
+  transform: scaleY(0.45);
+}
+
+@keyframes soundtrack-pulse {
+  from { transform: scaleY(0.38); }
+  to { transform: scaleY(1); }
+}
+
+@media (max-width: 600px) {
+  .soundtrack-control {
+    top: 14px;
+    right: 14px;
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .soundtrack-control,
+  .soundtrack-control .sound-bar { transition: none; animation: none !important; }
+}
