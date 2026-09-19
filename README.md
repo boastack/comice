@@ -1,7 +1,7 @@
 <h1 align="center">comice</h1>
 
 <h3 align="center">
-  A GPU interaction engine for images and video.
+  A GPU interaction engine for images and video, with native scroll, hover, pointer, drag, click, time, and audio drivers.
 </h3>
 
 <p align="center">
