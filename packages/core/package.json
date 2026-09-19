@@ -1,0 +1,61 @@
+{
+  "name": "comice",
+  "version": "0.1.0",
+  "description": "A state machine and event system for images and video interaction.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./machine": {
+      "types": "./dist/machine.d.ts",
+      "import": "./dist/machine.js",
+      "require": "./dist/machine.cjs"
+    },
+    "./scheduler": {
+      "types": "./dist/scheduler.d.ts",
+      "import": "./dist/scheduler.js",
+      "require": "./dist/scheduler.cjs"
+    },
+    "./drivers": {
+      "types": "./dist/drivers/index.d.ts",
+      "import": "./dist/drivers/index.js",
+      "require": "./dist/drivers/index.cjs"
+    },
+    "./drivers/audio": {
+      "types": "./dist/drivers/audio.d.ts",
+      "import": "./dist/drivers/audio.js",
+      "require": "./dist/drivers/audio.cjs"
+    },
+    "./mapping": {
+      "types": "./dist/mapping.d.ts",
+      "import": "./dist/mapping.js",
+      "require": "./dist/mapping.cjs"
+    }
+  },
+  "sideEffects": false,
+  "files": ["dist/", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit --composite false --incremental false"
+  },
+  "keywords": [
+    "media",
+    "webgl",
+    "state-machine",
+    "video",
+    "image",
+    "interaction",
+    "zero-dependencies",
+    "typescript"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}
