@@ -1,5 +1,5 @@
 /**
- * comice/core/drivers/audio.test
+ * test/audio.test — packages/core/src/drivers/audio.ts
  * ─────────────────────────────────────────────────────────────────────────────
  * happy-dom (see /bunfig.toml preload) has no Web Audio API, so this file
  * installs a minimal fake AudioContext/AnalyserNode/MediaElementAudioSourceNode
@@ -13,8 +13,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
-import { audio } from './audio.js'
-import { getSharedScheduler } from '../scheduler.js'
+import { audio } from '../packages/core/src/drivers/audio.js'
+import { getSharedScheduler } from '../packages/core/src/scheduler.js'
 
 // ─────────────────────────────────────────────────────────────────────────
 // Fakes

@@ -1,5 +1,5 @@
 /**
- * comice/core/index.test
+ * test/index.test — packages/core/src/index.ts
  * ─────────────────────────────────────────────────────────────────────────────
  * Runs against happy-dom (see /bunfig.toml preload) since comice() queries
  * the real DOM. Covers the public surface: comice()/.use()/.driver()/
@@ -8,8 +8,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
-import { comice, type ComiceHandle, type ComicePlugin } from './index.js'
-import type { Driver, DriverSignal, MappableTarget, NamedSignalDriver, SignalValues } from './types.js'
+import { comice, type ComiceHandle, type ComicePlugin } from '../packages/core/src/index.js'
+import type { Driver, DriverSignal, MappableTarget, NamedSignalDriver, SignalValues } from '../packages/core/src/types.js'
 
 function fakePlugin(): ComicePlugin & { setupCalls: number; teardownCalls: number } {
   return {
