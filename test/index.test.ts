@@ -293,4 +293,72 @@ describe('comice() — .map().to()', () => {
     expect(() => driver.fire({ bass: 0.5 })).not.toThrow()
     expect(plugin.values.amount).toBeUndefined()
   })
+
+  it('one mapping throwing (e.g. a plugin validating its own param) does not block other mappings on the same signal', () => {
+    const handle = comice(el) as ComiceHandle
+    const throwingPlugin: ComicePlugin = {
+      name: 'throwing',
+      setup() {},
+      params: {
+        getParam: () => 0,
+        setParam: () => {
+          throw new Error('rejected')
+        },
+      },
+    }
+    const healthyPlugin = mappablePlugin()
+    handle.use(throwingPlugin).use(healthyPlugin)
+
+    const driver = fakeSignalDriver()
+    handle
+      .driver(driver)
+      .map('bass')
+      .to(throwingPlugin, 'amount')
+      .map('bass')
+      .to(healthyPlugin, 'amount')
+
+    expect(() => driver.fire({ bass: 0.5 })).not.toThrow()
+    expect(healthyPlugin.values.amount).toBeCloseTo(0.5)
+  })
+})
+
+describe('comice() — .destroy() crash isolation', () => {
+  let el: HTMLElement
+
+  beforeEach(() => {
+    el = document.createElement('div')
+  })
+
+  it('a throwing plugin teardown does not stop later plugins from being torn down', () => {
+    const handle = comice(el) as ComiceHandle
+    const throwing: ComicePlugin = {
+      name: 'throwing',
+      setup() {},
+      teardown() {
+        throw new Error('boom')
+      },
+    }
+    const healthy = fakePlugin()
+    handle.use(throwing).use(healthy)
+
+    expect(() => handle.destroy()).not.toThrow()
+    expect(healthy.teardownCalls).toBe(1)
+  })
+
+  it('a throwing driver teardown does not stop later driver teardowns from running', () => {
+    const handle = comice(el) as ComiceHandle
+    const throwingDriver: Driver = {
+      name: 'throwing-driver',
+      attach() {
+        return () => {
+          throw new Error('boom')
+        }
+      },
+    }
+    const healthyDriver = fakeDriver()
+    handle.driver(throwingDriver).driver(healthyDriver)
+
+    expect(() => handle.destroy()).not.toThrow()
+    expect(healthyDriver.teardownCalls).toBe(1)
+  })
 })

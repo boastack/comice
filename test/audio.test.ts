@@ -230,6 +230,37 @@ describe('audio driver', () => {
     expect(onSignals).not.toHaveBeenCalled()
   })
 
+  it('accepts an already-connected AudioNode directly as `source`, bypassing element resolution', () => {
+    const context = new (globalThis as any).AudioContext()
+    const fakeNode = { connect: mock(), disconnect: mock() }
+    const driver = audio({ source: fakeNode as unknown as AudioNode })
+    const onSignals = mock()
+    driver.attachSignals!(target, onSignals)
+    // Nothing in the fake here creates its own AudioContext (the caller's
+    // node is used as-is) — this exercises the "already an AudioNode"
+    // branch of source resolution rather than the element/selector path.
+    raf.flush(16)
+    expect(lastContext).not.toBeNull()
+  })
+
+  it('reuses a cached MediaElementAudioSourceNode instead of calling createMediaElementSource twice', () => {
+    // Two separate audio() drivers pointed at the same element: Web Audio
+    // throws on a second createMediaElementSource() call for one element,
+    // so the driver must reuse the node it cached on the element itself.
+    const driverA = audio({ source: '#track' })
+    driverA.attachSignals!(target, mock())
+    raf.flush(16)
+    const contextA = lastContext!
+    const createSpy = mock(contextA.createMediaElementSource.bind(contextA))
+    contextA.createMediaElementSource = createSpy
+
+    const driverB = audio({ source: '#track' })
+    driverB.attachSignals!(target, mock())
+    raf.flush(32)
+
+    expect(createSpy).not.toHaveBeenCalled() // reused the cached node, no second creation
+  })
+
   it('does not create a new AudioContext on every frame once resolved', () => {
     const driver = audio({ source: '#track' })
     const onSignals = mock()
@@ -239,6 +270,34 @@ describe('audio driver', () => {
     raf.flush(32)
     raf.flush(48)
     expect(lastContext).toBe(first)
+  })
+
+  it('resumes a suspended AudioContext on the next tick (most browsers require a user gesture)', () => {
+    const driver = audio({ source: '#track' })
+    const onSignals = mock()
+    driver.attachSignals!(target, onSignals)
+    raf.flush(16) // creates the context
+
+    lastContext!.state = 'suspended'
+    const resumeSpy = mock(lastContext!.resume.bind(lastContext))
+    lastContext!.resume = resumeSpy
+
+    raf.flush(32)
+    expect(resumeSpy).toHaveBeenCalled()
+  })
+
+  it('a rejected resume() is swallowed rather than crashing the scheduler', () => {
+    const driver = audio({ source: '#track' })
+    const onSignals = mock()
+    driver.attachSignals!(target, onSignals)
+    raf.flush(16) // creates the context
+
+    lastContext!.state = 'suspended'
+    lastContext!.resume = mock(() => Promise.reject(new Error('gesture required')))
+
+    // resume() rejecting must not surface as an unhandled rejection or
+    // stop the next tick from running.
+    expect(() => raf.flush(32)).not.toThrow()
   })
 
   it('teardown disconnects the analyser and stops the scheduler entry', () => {
@@ -375,5 +434,42 @@ describe('audio driver — beat/onset/drop events', () => {
     raf.flush(2000)
 
     expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('a throwing "beat" listener does not stop the onBeat option callback from firing', () => {
+    const onBeat = mock()
+    const driver = audio({ source: '#track', onBeat })
+    driver.on!('beat', () => {
+      throw new Error('boom')
+    })
+    driver.attachSignals!(target, mock())
+    raf.flush(16)
+
+    warmUpRollingAverage(40, 45)
+    expect(() => {
+      lastContext!.analyser!.setFrequencyData(new Array(512).fill(220))
+      raf.flush(2000)
+    }).not.toThrow()
+
+    expect(onBeat).toHaveBeenCalled()
+  })
+
+  it('a throwing listener does not stop other listeners for the same event', () => {
+    const driver = audio({ source: '#track' })
+    const throwing = mock(() => {
+      throw new Error('boom')
+    })
+    const healthy = mock()
+    driver.on!('beat', throwing)
+    driver.on!('beat', healthy)
+    driver.attachSignals!(target, mock())
+    raf.flush(16)
+
+    warmUpRollingAverage(40, 45)
+    lastContext!.analyser!.setFrequencyData(new Array(512).fill(220))
+    raf.flush(2000)
+
+    expect(throwing).toHaveBeenCalled()
+    expect(healthy).toHaveBeenCalled()
   })
 })
