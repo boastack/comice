@@ -1,2 +1,10 @@
 [test]
 preload = ["./test/happydom.ts"]
+
+# 100% coverage on every file in packages/core/src/. Bun checks this
+# threshold PER FILE, not against the "All files" aggregate, and only
+# enforces it (non-zero exit code) when --coverage is passed — `bun test`
+# alone for everyday local runs stays fast and unaffected. `pnpm
+# test:coverage` runs the enforced version; CI should use that, not
+# plain `bun test`.
+coverageThreshold = { lines = 1.0, functions = 1.0 }
