@@ -1,0 +1,35 @@
+{
+  "name": "comice",
+  "description": "A state machine and event system for images and video interaction.",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=10"
+  },
+  "type": "module",
+  "packageManager": "pnpm@10.13.1",
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "bun test",
+    "dev": "turbo run build --watch",
+    "size": "size-limit"
+  },
+  "size-limit": [
+    {
+      "name": "comice (core, ESM)",
+      "path": "packages/core/dist/index.js",
+      "limit": "10 kB"
+    }
+  ],
+  "devDependencies": {
+    "@happy-dom/global-registrator": "^20.14.5",
+    "@size-limit/preset-small-lib": "^11.0.0",
+    "@types/bun": "^1.4.2",
+    "size-limit": "^11.0.0",
+    "tsup": "^8.0.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  }
+}

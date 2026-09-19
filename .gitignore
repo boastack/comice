@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.turbo/
+*.log
+.DS_Store
+coverage/
+
+# Editor/tool-generated, not part of the source.
+.cursorindexingignore
+.specstory/
+
+# legacy/ HTML, JS and shader logic are kept as reference (the SDF/liquid-
+# morph math the morph plugin ports from) — the video/audio demo media is
+# not, to keep clone size small. See ROADMAP.md section 0.
+legacy/assets/video/
+legacy/assets/audio/
+
+# Internal planning doc, not meant to be public on GitHub.
+ROADMAP.md
