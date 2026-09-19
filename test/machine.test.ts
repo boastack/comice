@@ -186,6 +186,15 @@ describe('createInstance — event subscriptions', () => {
     expect(listener).not.toHaveBeenCalled()
   })
 
+  it('the unsubscribe function returned by on(\'*\', ...) works', () => {
+    const instance = createInstance()
+    const listener = mock()
+    const unsub = instance.on('*', listener)
+    unsub()
+    instance.transition('entering')
+    expect(listener).not.toHaveBeenCalled()
+  })
+
   it('an illegal transition does not emit any event', () => {
     const instance = createInstance()
     const listener = mock()
@@ -213,5 +222,59 @@ describe('createInstance — multiple instances are independent', () => {
     a.transition('entering')
     expect(a.state).toBe('entering')
     expect(b.state).toBe('idle')
+  })
+})
+
+describe('createInstance — listener crash isolation', () => {
+  it('a throwing listener does not stop other listeners from being notified for the same event', () => {
+    const instance = createInstance()
+    const throwing = mock(() => {
+      throw new Error('boom')
+    })
+    const healthy = mock()
+    instance.on('*', throwing)
+    instance.on('*', healthy)
+
+    expect(() => instance.transition('entering')).not.toThrow()
+    expect(throwing).toHaveBeenCalledTimes(1)
+    expect(healthy).toHaveBeenCalledTimes(1)
+  })
+
+  it('a throwing wildcard listener does not stop a typed listener for the same event', () => {
+    const instance = createInstance()
+    instance.on('*', () => {
+      throw new Error('boom')
+    })
+    const typedListener = mock()
+    instance.on('entering', typedListener)
+
+    expect(() => instance.transition('entering')).not.toThrow()
+    expect(typedListener).toHaveBeenCalledTimes(1)
+  })
+
+  it('state has already mutated even if every listener throws', () => {
+    const instance = createInstance()
+    instance.on('*', () => {
+      throw new Error('boom')
+    })
+    instance.transition('entering')
+    expect(instance.state).toBe('entering')
+  })
+
+  it('warns via console.warn when a listener throws (dev mode)', () => {
+    const instance = createInstance()
+    const warnSpy = mock()
+    const originalWarn = console.warn
+    console.warn = warnSpy
+    try {
+      instance.on('*', () => {
+        throw new Error('boom')
+      })
+      instance.transition('entering')
+      expect(warnSpy).toHaveBeenCalled()
+      expect(warnSpy.mock.calls[0][0]).toContain('[comice]')
+    } finally {
+      console.warn = originalWarn
+    }
   })
 })

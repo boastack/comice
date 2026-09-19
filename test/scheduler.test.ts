@@ -135,6 +135,93 @@ describe('createScheduler', () => {
       globalThis.requestAnimationFrame = original
     }
   })
+
+  describe('crash isolation', () => {
+    // The scheduler is a SHARED loop across every Comice instance, plugin
+    // and driver on the page. One entry throwing must not silently kill
+    // the loop for everyone else — these tests pin down exactly that.
+
+    it('a throwing callback does not stop other callbacks from running the same frame', () => {
+      const original = globalThis.requestAnimationFrame
+      let queued: FrameRequestCallback | null = null
+      globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+        queued = cb
+        return 1
+      }) as typeof requestAnimationFrame
+
+      try {
+        const scheduler = createScheduler()
+        const throwing = mock(() => {
+          throw new Error('boom')
+        })
+        const healthy = mock()
+        scheduler.add(throwing, () => true)
+        scheduler.add(healthy, () => true)
+        expect(() => queued!(16)).not.toThrow()
+        expect(throwing).toHaveBeenCalledTimes(1)
+        expect(healthy).toHaveBeenCalledTimes(1)
+      } finally {
+        globalThis.requestAnimationFrame = original
+      }
+    })
+
+    it('the loop keeps re-scheduling itself after a callback throws', () => {
+      const original = globalThis.requestAnimationFrame
+      const box: { queued: FrameRequestCallback | null } = { queued: null }
+      globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+        box.queued = cb
+        return 1
+      }) as typeof requestAnimationFrame
+
+      try {
+        const scheduler = createScheduler()
+        const throwing = mock(() => {
+          throw new Error('boom')
+        })
+        scheduler.add(throwing, () => true)
+
+        const firstTick = box.queued!
+        box.queued = null
+        firstTick(16)
+        // If tick() itself had thrown (instead of isolating the callback),
+        // it would never reach the requestAnimationFrame(tick) call that
+        // re-queues the next frame — box.queued would still be null here.
+        expect(box.queued).not.toBeNull()
+
+        const secondTick = box.queued!
+        expect(() => secondTick(32)).not.toThrow()
+        expect(throwing).toHaveBeenCalledTimes(2)
+      } finally {
+        globalThis.requestAnimationFrame = original
+      }
+    })
+
+    it('warns via console.warn when a callback throws (dev mode)', () => {
+      const original = globalThis.requestAnimationFrame
+      let queued: FrameRequestCallback | null = null
+      globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+        queued = cb
+        return 1
+      }) as typeof requestAnimationFrame
+
+      const warnSpy = mock()
+      const originalWarn = console.warn
+      console.warn = warnSpy
+
+      try {
+        const scheduler = createScheduler()
+        scheduler.add(() => {
+          throw new Error('boom')
+        }, () => true)
+        queued!(16)
+        expect(warnSpy).toHaveBeenCalled()
+        expect(warnSpy.mock.calls[0][0]).toContain('[comice]')
+      } finally {
+        globalThis.requestAnimationFrame = original
+        console.warn = originalWarn
+      }
+    })
+  })
 })
 
 describe('createVisibilityGate', () => {
@@ -164,6 +251,59 @@ describe('createVisibilityGate', () => {
     // correct default before the first observer callback fires.
     expect(gate.isVisible()).toBe(false)
     gate.destroy()
+  })
+
+  it('becomes visible once IntersectionObserver reports an intersection', () => {
+    // happy-dom's IntersectionObserver never fires its callback on its
+    // own (see the note above) — this installs a fake one that fires
+    // synchronously on observe(), same technique used for audio.test.ts,
+    // to exercise the actual onScreen-flip branch of the gate.
+    const original = globalThis.IntersectionObserver
+    let capturedCallback: IntersectionObserverCallback | null = null
+    ;(globalThis as any).IntersectionObserver = class {
+      constructor(callback: IntersectionObserverCallback) {
+        capturedCallback = callback
+      }
+      observe(observedTarget: Element) {
+        capturedCallback!(
+          [{ isIntersecting: true, target: observedTarget } as IntersectionObserverEntry],
+          this as unknown as IntersectionObserver,
+        )
+      }
+      disconnect() {}
+      unobserve() {}
+    }
+
+    try {
+      const gate = createVisibilityGate(target)
+      expect(gate.isVisible()).toBe(true)
+      gate.destroy()
+    } finally {
+      globalThis.IntersectionObserver = original
+    }
+  })
+
+  it('updates isVisible() when a real visibilitychange event fires', () => {
+    // happy-dom does not flip document.hidden for us on its own, so this
+    // stubs the getter (the only part of "document.hidden" happy-dom
+    // won't let a test control directly) and then dispatches the actual
+    // event the gate's own listener is registered for — exercising the
+    // real onVisibilityChange handler, not just its registration.
+    const originalDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'hidden')
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+
+    try {
+      const gate = createVisibilityGate(target)
+      document.dispatchEvent(new Event('visibilitychange'))
+      expect(gate.isVisible()).toBe(false) // tab now hidden, regardless of onScreen
+      gate.destroy()
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(document, 'hidden', originalDescriptor)
+      } else {
+        delete (document as any).hidden
+      }
+    }
   })
 
   it('destroy() disconnects the observer and removes the visibilitychange listener without throwing', () => {

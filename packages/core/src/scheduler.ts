@@ -19,6 +19,9 @@ export type Scheduler = {
   stop(): void
 }
 
+declare const process: { env: { NODE_ENV?: string } } | undefined
+const __DEV__ = typeof process === 'undefined' || process.env?.NODE_ENV !== 'production'
+
 /**
  * Creates a new, independent scheduler. Used directly by tests, and by
  * anything that deliberately wants its own rAF loop separate from core's.
@@ -37,8 +40,28 @@ export function createScheduler(): Scheduler {
     const deltaMs = lastTimestamp ? timestamp - lastTimestamp : 16.67
     lastTimestamp = timestamp
 
+    // Every entry runs inside its own try/catch. This loop is SHARED
+    // across every Comice instance, plugin and driver on the page — one
+    // instance's bug (a plugin's update() throwing, a driver's per-frame
+    // callback throwing) must not silently kill every other instance's
+    // animation. Without this isolation, an uncaught throw here would
+    // both abort the remaining entries THIS frame (Set#forEach stops
+    // iterating on a thrown error) and abort tick() itself, which means
+    // the `requestAnimationFrame(tick)` call below never runs again —
+    // the entire shared loop stops forever, for everyone, silently.
     entries.forEach((entry) => {
-      if (entry.isActive()) entry.callback(deltaMs, timestamp)
+      if (!entry.isActive()) return
+      try {
+        entry.callback(deltaMs, timestamp)
+      } catch (err) {
+        if (__DEV__) {
+          console.warn(
+            '[comice] A scheduler callback threw and was skipped this frame. ' +
+              'The shared loop continues for every other instance.',
+            err,
+          )
+        }
+      }
     })
 
     if (entries.size > 0) {

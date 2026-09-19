@@ -30,6 +30,9 @@ export { createScheduler, createVisibilityGate, getSharedScheduler } from './sch
 export * from './types.js'
 export * from './drivers/index.js'
 
+declare const process: { env: { NODE_ENV?: string } } | undefined
+const __DEV__ = typeof process === 'undefined' || process.env?.NODE_ENV !== 'production'
+
 /**
  * A plugin is anything with a `setup` hook. Plugins receive the raw element
  * and the state machine instance, and are responsible for their own
@@ -135,7 +138,16 @@ function wrap(target: Element): ComiceHandle {
         // not from a separate scheduler entry — so a mapping never reads
         // a signal bag older than the frame that produced it, and there
         // is exactly one write to each plugin param per driver update.
-        mappings.forEach((mapping) => mapping.apply(latestSignals))
+        // Each mapping runs in isolation: one mapping's target.setParam()
+        // throwing (a plugin's own validation, say) must not stop every
+        // OTHER mapping on this instance from applying its signal.
+        mappings.forEach((mapping) => {
+          try {
+            mapping.apply(latestSignals)
+          } catch (err) {
+            if (__DEV__) console.warn('[comice] A .map().to() mapping threw and was skipped this update.', err)
+          }
+        })
       })
       driverTeardowns.push(teardown)
     }
@@ -158,8 +170,25 @@ function wrap(target: Element): ComiceHandle {
 
   const originalDestroy = instance.destroy
   handle.destroy = (): void => {
-    driverTeardowns.forEach((teardown) => teardown())
-    plugins.forEach((plugin) => plugin.teardown?.())
+    // Every teardown runs in isolation. destroy() is a cleanup path —
+    // one driver's or plugin's teardown throwing must not stop the
+    // REST of the teardowns from running, or every plugin/driver after
+    // the offending one in the array leaks (GPU textures, event
+    // listeners, timers never released).
+    driverTeardowns.forEach((teardown) => {
+      try {
+        teardown()
+      } catch (err) {
+        if (__DEV__) console.warn('[comice] A driver teardown threw during destroy().', err)
+      }
+    })
+    plugins.forEach((plugin) => {
+      try {
+        plugin.teardown?.()
+      } catch (err) {
+        if (__DEV__) console.warn(`[comice] Plugin "${plugin.name}" teardown threw during destroy().`, err)
+      }
+    })
     visibility.destroy()
     originalDestroy()
   }

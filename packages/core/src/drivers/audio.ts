@@ -32,6 +32,12 @@
 import { createVisibilityGate, getSharedScheduler } from '../scheduler.js'
 import type { NamedSignalDriver, SignalValues } from '../types.js'
 
+// audio.ts is a standalone bundle entry (see the file header) and does not
+// import index.ts or machine.ts, so it keeps its own copy of the __DEV__
+// guard rather than sharing one — same pattern, independently declared.
+declare const process: { env: { NODE_ENV?: string } } | undefined
+const __DEV__ = typeof process === 'undefined' || process.env?.NODE_ENV !== 'production'
+
 export type AudioSource = string | HTMLMediaElement | AudioNode
 
 export type AudioOptions = {
@@ -148,8 +154,20 @@ export function audio(options: AudioOptions = {}): NamedSignalDriver {
 
   const listeners = new Map<string, Set<(payload?: unknown) => void>>()
 
+  // Every .on() listener is notified in isolation, same discipline as
+  // machine.ts's emit(). This driver's detectOnsets() calls emit()
+  // immediately before calling the matching onBeat/onOnset/onDrop
+  // constructor callback on the same line (see below) — without
+  // isolation here, one bad .on('beat', ...) listener would also take
+  // down the onBeat() callback that was about to run right after it.
   function emit(event: string, payload?: unknown): void {
-    listeners.get(event)?.forEach((fn) => fn(payload))
+    listeners.get(event)?.forEach((fn) => {
+      try {
+        fn(payload)
+      } catch (err) {
+        if (__DEV__) console.warn(`[comice] An audio driver "${event}" listener threw.`, err)
+      }
+    })
   }
 
   return {

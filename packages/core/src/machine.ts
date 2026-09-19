@@ -55,8 +55,7 @@ import type {
 // Build-time constant injected by tsup/esbuild via `define`. Declared here
 // for TypeScript only — the real string literal is substituted before the
 // code ever executes, so `process` is never accessed at runtime. This
-// avoids depending on @types/node for a browser-only package, following
-// the same pattern verino's core uses for the identical problem.
+// avoids depending on @types/node for a browser-only package.
 declare const process: { env: { NODE_ENV?: string } } | undefined
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -130,10 +129,27 @@ export function createInstance(options: ComiceOptions = {}): ComiceInstance {
 
   // ── MUTATION PIPELINE ────────────────────────────────────────────────────
 
+  function notify(fn: StateListener, snapshot: StateListenerSnapshot, event: ComiceEvent): void {
+    try {
+      fn(snapshot, event)
+    } catch (err) {
+      if (__DEV__) {
+        console.warn(`[comice] A listener for "${event.type}" threw on instance ${instanceId}.`, err)
+      }
+    }
+  }
+
+  /**
+   * Every subscriber is notified in isolation. One listener throwing must
+   * not stop the REST of the listeners for this same event from being
+   * notified — the state has already mutated by the time emit() runs (see
+   * applyState below), so a listener failing here is purely a "did this
+   * one subscriber hear about it" problem, never a state-corruption one.
+   */
   function emit(event: ComiceEvent): void {
     const snapshot = getSnapshot()
-    listenersAll.forEach((fn) => fn(snapshot, event))
-    listenersByType.get(event.type)?.forEach((fn) => fn(snapshot, event))
+    listenersAll.forEach((fn) => notify(fn, snapshot, event))
+    listenersByType.get(event.type)?.forEach((fn) => notify(fn, snapshot, event))
   }
 
   /**
