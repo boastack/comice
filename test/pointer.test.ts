@@ -1,5 +1,5 @@
 /**
- * comice/core/drivers/pointer.test
+ * test/pointer.test — packages/core/src/drivers/pointer.ts
  * ─────────────────────────────────────────────────────────────────────────────
  * Runs against happy-dom (see /bunfig.toml preload). Drives the rAF loop
  * manually via a fake requestAnimationFrame, same approach as
@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
-import { pointer } from './pointer.js'
+import { pointer } from '../packages/core/src/drivers/pointer.js'
 
 function makePointerEvent(type: string, clientX: number, clientY: number): PointerEvent {
   return new PointerEvent(type, { clientX, clientY, bubbles: true })

@@ -1,5 +1,5 @@
 /**
- * comice/core/machine.test
+ * test/machine.test — packages/core/src/machine.ts
  * ─────────────────────────────────────────────────────────────────────────────
  * Pure state machine tests — no DOM, matches machine.ts's own "zero DOM,
  * zero WebGL, zero side effects" contract. Pins down the legal-transition
@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it, mock } from 'bun:test'
-import { createInstance } from './machine.js'
+import { createInstance } from '../packages/core/src/machine.js'
 
 describe('createInstance — initial state', () => {
   it('starts idle with zero progress and identity transforms', () => {

@@ -1,5 +1,5 @@
 /**
- * comice/core/scheduler.test
+ * test/scheduler.test — packages/core/src/scheduler.ts
  * ─────────────────────────────────────────────────────────────────────────────
  * Runs against happy-dom (see /bunfig.toml preload) since scheduler.ts uses
  * requestAnimationFrame, IntersectionObserver, and document.hidden.
@@ -12,7 +12,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
-import { createScheduler, createVisibilityGate } from './scheduler.js'
+import { createScheduler, createVisibilityGate } from '../packages/core/src/scheduler.js'
 
 describe('createScheduler', () => {
   it('does not start a rAF loop until something is added', () => {

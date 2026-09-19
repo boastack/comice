@@ -1,12 +1,12 @@
 /**
- * comice/core/mapping.test
+ * test/mapping.test — packages/core/src/mapping.ts
  * ─────────────────────────────────────────────────────────────────────────────
  * Pure tests, no DOM — matches mapping.ts's own zero-DOM contract.
  */
 
 import { describe, expect, it, mock } from 'bun:test'
-import { createMapping } from './mapping.js'
-import type { MappableTarget } from './types.js'
+import { createMapping } from '../packages/core/src/mapping.js'
+import type { MappableTarget } from '../packages/core/src/types.js'
 
 function fakeTarget(): MappableTarget & { values: Record<string, number> } {
   const values: Record<string, number> = {}
