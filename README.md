@@ -1,7 +1,7 @@
 <h1 align="center">comice</h1>
 
 <h3 align="center">
-  A state machine and event system for images and video interaction.
+  A GPU interaction engine for images and video.
 </h3>
 
 <p align="center">
@@ -16,7 +16,7 @@
 
 A web page normally draws an image by handing it to the browser and letting the browser paint it, and you get no say over individual pixels. Comice puts that image or video on the graphics card instead, as a texture on a flat rectangle that sits exactly where the original element was. Once it's there, a small program runs over every pixel every frame, and that program can react to scrolling, the cursor, a drag, or audio.
 
-That's the whole idea. Everything else is plugins deciding what that per-pixel program does, and every plugin is a **state machine** (`idle → entering → active → leaving`) driven by real events, not a timeline of guessed durations. Interrupt one mid-transition and it reverses from wherever it actually is, rather than snapping back to a hardcoded start.
+That's the whole idea. Everything else is plugins deciding what that per-pixel program does. Underneath, every plugin is driven by a **state machine** (`idle → entering → active → leaving`), reacting to real events rather than a timeline of guessed durations. Interrupt one mid-transition and it reverses from wherever it actually is, rather than snapping back to a hardcoded start.
 
 ```js
 comice('.hero')
@@ -37,7 +37,7 @@ The natural setup is GSAP (or Motion, or Lenis) drives, Comice renders: a timeli
 
 ## Status
 
-**Pre-release.** `packages/core` (the `comice` package) exists and is tested; no plugins have shipped yet. Not yet published to npm. See [`ROADMAP.md`](./ROADMAP.md) for what's built and what's next (it's gitignored, internal notes, read it locally rather than on GitHub).
+**Pre-release.** The state machine, drivers, and the Driver → Signal → Mapping → Plugin Parameter layer are built and tested. The WebGL texture-on-plane pipeline (the part that actually puts media on the GPU) has not been built yet, and no plugins have shipped. Not yet published to npm. See [`ROADMAP.md`](./ROADMAP.md) for what's built and what's next (it's gitignored, internal notes, read it locally rather than on GitHub).
 
 ---
 
