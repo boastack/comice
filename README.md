@@ -5,7 +5,7 @@
 </h3>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-private%20pre--release-orange" alt="Private, pre-release" />&nbsp;
+  <img src="https://img.shields.io/badge/status-pre--release-orange" alt="Pre-release" />&nbsp;
   <img src="https://img.shields.io/badge/dependencies-0-20C55C" alt="Zero dependencies" />&nbsp;
   <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-strict-20C55C" alt="TypeScript" /></a>
 </p>
@@ -37,7 +37,7 @@ The natural setup is GSAP (or Motion, or Lenis) drives, Comice renders: a timeli
 
 ## Status
 
-**Private, pre-release.** `packages/core` (the `comice` package) exists and is tested; no plugins have shipped yet. Not yet published to npm. See [`ROADMAP.md`](./ROADMAP.md) for what's built and what's next (it's gitignored, internal notes, read it locally rather than on GitHub).
+**Pre-release.** `packages/core` (the `comice` package) exists and is tested; no plugins have shipped yet. Not yet published to npm. See [`ROADMAP.md`](./ROADMAP.md) for what's built and what's next (it's gitignored, internal notes, read it locally rather than on GitHub).
 
 ---
 
