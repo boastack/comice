@@ -1,0 +1,33 @@
+{
+  "name": "@comice/spotlight",
+  "version": "0.1.0",
+  "description": "One item emphasised, its peers receding.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "sideEffects": false,
+  "files": ["dist/", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit --composite false --incremental false"
+  },
+  "peerDependencies": {
+    "comice": "workspace:*"
+  },
+  "devDependencies": {
+    "comice": "workspace:*"
+  },
+  "keywords": ["media", "spotlight", "hover", "comice-plugin"],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}
