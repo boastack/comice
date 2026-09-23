@@ -7,7 +7,9 @@
 <p align="center">
   <img src="https://img.shields.io/badge/status-pre--release-orange" alt="Pre-release" />&nbsp;
   <img src="https://img.shields.io/badge/dependencies-0-20C55C" alt="Zero dependencies" />&nbsp;
-  <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-strict-20C55C" alt="TypeScript" /></a>
+  <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-strict-20C55C" alt="TypeScript" /></a>&nbsp;
+  <img src="https://img.shields.io/badge/node-%3E%3D18-20C55C" alt="Node >=18" />&nbsp;
+  <img src="https://img.shields.io/badge/license-MIT-20C55C" alt="MIT License" />
 </p>
 
 ---
