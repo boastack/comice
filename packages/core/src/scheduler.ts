@@ -35,9 +35,20 @@ export function createScheduler(): Scheduler {
   const entries = new Set<{ callback: FrameCallback; isActive: () => boolean }>()
   let rafId: number | null = null
   let lastTimestamp = 0
+  // Tracked separately from lastTimestamp's own value — a real frame
+  // timestamp can legitimately BE 0 (the fake requestAnimationFrame every
+  // test in this package drives frames through commonly starts callers at
+  // 0, and even a real rAF timestamp is a DOMHighResTimeStamp that is 0 at
+  // the start of a very short-lived page). Using `lastTimestamp ? ... :
+  // ...` to detect "first tick" treated that legitimate 0 as falsy, so the
+  // tick immediately AFTER a first tick at timestamp 0 fell back to the
+  // 16.67 default instead of computing the real elapsed delta — surfaced
+  // by drivers/time.ts's own tests, which drive exactly that sequence.
+  let hasTicked = false
 
   function tick(timestamp: number): void {
-    const deltaMs = lastTimestamp ? timestamp - lastTimestamp : 16.67
+    const deltaMs = hasTicked ? timestamp - lastTimestamp : 16.67
+    hasTicked = true
     lastTimestamp = timestamp
 
     // Every entry runs inside its own try/catch. This loop is SHARED
@@ -74,6 +85,7 @@ export function createScheduler(): Scheduler {
   function ensureRunning(): void {
     if (rafId === null) {
       lastTimestamp = 0
+      hasTicked = false
       rafId = requestAnimationFrame(tick)
     }
   }
