@@ -1,3 +1,6 @@
 export { scroll, type ScrollOptions } from './scroll.js'
 export { hover, type HoverOptions } from './hover.js'
 export { pointer, type PointerOptions } from './pointer.js'
+export { drag, type DragOptions } from './drag.js'
+export { click, type ClickOptions } from './click.js'
+export { time, type TimeOptions } from './time.js'
