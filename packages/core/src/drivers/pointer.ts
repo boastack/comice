@@ -12,8 +12,22 @@
  * a plugin written against progress alone still works unmodified; the
  * `pointer` and `velocity` fields are what field-based plugins actually
  * want.
+ *
+ * Rides getSharedScheduler() rather than a private requestAnimationFrame
+ * loop — this driver predates that discipline (drag.ts/time.ts, written
+ * after T1-T5 established it, both use the shared scheduler already); this
+ * was the last state-machine driver still running its own loop, flagged as
+ * a known follow-up in ROADMAP.md. Fixing it here also closes the same
+ * falsy-zero-timestamp bug scheduler.ts's own tick() hit and fixed during
+ * the time.ts driver work: `lastTimestamp ? ... : 16.67` treats a
+ * legitimate timestamp of 0 as "no previous frame," so the tick right after
+ * a genuine 0-timestamp frame silently fell back to the 16.67ms default
+ * instead of the real elapsed delta. getSharedScheduler().add() already
+ * hands every callback a correct deltaMs, so this driver no longer needs
+ * to compute one by hand at all.
  */
 
+import { getSharedScheduler } from '../scheduler.js'
 import type { Driver, DriverSignal } from '../types.js'
 
 export type PointerOptions = {
@@ -29,14 +43,13 @@ export function pointer(options: PointerOptions = {}): Driver {
   return {
     name: 'pointer',
     attach(target, onSignal) {
-      let rafId: number | null = null
       let lastX = 0
       let lastY = 0
       let smoothX = 0
       let smoothY = 0
-      let lastTimestamp = 0
       let inside = false
       let havePosition = false
+      let destroyed = false
 
       function withinRadius(x: number, y: number, rect: DOMRect): boolean {
         if (radius <= 0) return x >= 0 && x <= rect.width && y >= 0 && y <= rect.height
@@ -70,10 +83,7 @@ export function pointer(options: PointerOptions = {}): Driver {
         inside = false
       }
 
-      function tick(timestamp: number): void {
-        const deltaMs = lastTimestamp ? timestamp - lastTimestamp : 16.67
-        lastTimestamp = timestamp
-
+      function tick(deltaMs: number): void {
         if (inside && havePosition) {
           const prevX = smoothX
           const prevY = smoothY
@@ -101,18 +111,20 @@ export function pointer(options: PointerOptions = {}): Driver {
           onSignal({ progress: 0, pointer: { x: smoothX, y: smoothY }, velocity: 0 })
           havePosition = false
         }
-
-        rafId = requestAnimationFrame(tick)
       }
 
       target.addEventListener('pointermove', onMove as EventListener)
       target.addEventListener('pointerleave', onLeaveWindow)
-      rafId = requestAnimationFrame(tick)
+      const unregisterFromScheduler = getSharedScheduler().add(
+        (deltaMs) => tick(deltaMs),
+        () => !destroyed,
+      )
 
       return () => {
+        destroyed = true
         target.removeEventListener('pointermove', onMove as EventListener)
         target.removeEventListener('pointerleave', onLeaveWindow)
-        if (rafId !== null) cancelAnimationFrame(rafId)
+        unregisterFromScheduler()
       }
     },
   }
