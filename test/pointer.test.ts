@@ -1,12 +1,18 @@
 /**
  * test/pointer.test — packages/core/src/drivers/pointer.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Runs against happy-dom (see /bunfig.toml preload). Drives the rAF loop
- * manually via a fake requestAnimationFrame, same approach as
- * scheduler.test.ts, so timing is deterministic rather than racing a timer.
+ * Runs against happy-dom (see /bunfig.toml preload). Drives the shared
+ * scheduler's rAF loop manually via a fake requestAnimationFrame, same
+ * approach as scheduler.test.ts/drag.test.ts, so timing is deterministic
+ * rather than racing a timer. pointer.ts rides getSharedScheduler() (not a
+ * private rAF loop, as of this file's own fix) — getSharedScheduler().stop()
+ * in afterEach is required so each test starts from a clean scheduler,
+ * otherwise `queued.length` stops mapping 1:1 to "one rAF pending" once a
+ * previous test's entries leak into the next.
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
+import { getSharedScheduler } from '../packages/core/src/scheduler.js'
 import { pointer } from '../packages/core/src/drivers/pointer.js'
 
 function makePointerEvent(type: string, clientX: number, clientY: number): PointerEvent {
@@ -46,6 +52,7 @@ describe('pointer driver', () => {
 
   afterEach(() => {
     globalThis.requestAnimationFrame = originalRAF
+    getSharedScheduler().stop()
     target.remove()
   })
 
@@ -141,6 +148,38 @@ describe('pointer driver', () => {
     const remaining = queued.length
     flushOneFrame(16)
     expect(queued.length).toBeLessThanOrEqual(remaining)
+  })
+
+  it('computes a real elapsed delta on the tick after a genuine timestamp-0 first frame', () => {
+    // Regression test for the exact bug this driver's shared-scheduler
+    // migration fixed: scheduler.ts's own tick() used to (and, before this
+    // driver rode it, pointer.ts's private loop independently duplicated
+    // the same bug) treat `lastTimestamp ? ... : 16.67` as its "first
+    // frame?" check, which treats a legitimate timestamp of 0 as falsy —
+    // so the tick immediately after a first tick AT 0 silently fell back
+    // to the 16.67ms default instead of computing the real elapsed delta.
+    // With `lag: 0`, smoothing snaps instantly regardless of deltaMs, so
+    // this asserts on velocity instead, which is directly proportional to
+    // deltaMs and would silently read wrong under the old bug.
+    const driver = pointer({ radius: 200, lag: 0.5 })
+    const onSignal = mock()
+    const detach = driver.attach(target, onSignal)
+
+    target.dispatchEvent(makePointerEvent('pointermove', 0, 0))
+    flushOneFrame(0) // first tick, genuinely AT timestamp 0
+    onSignal.mockClear()
+
+    target.dispatchEvent(makePointerEvent('pointermove', 100, 0))
+    flushOneFrame(1000) // a real 1000ms later — deltaMs must be ~1000, not 16.67
+
+    const signal = onSignal.mock.calls[0][0]
+    // At lag 0.5 over a real ~1000ms delta, smoothing should have nearly
+    // fully caught up to the new raw position (t approaches 1 as deltaMs
+    // grows) — under the 16.67ms-fallback bug, t would stay tiny and
+    // smoothX would barely have moved from 0.
+    expect(signal.pointer.x).toBeGreaterThan(90)
+
+    detach()
   })
 
   it('lag=0 snaps smoothing instantly to the raw pointer position', () => {
