@@ -32,6 +32,11 @@
       "import": "./dist/drivers/audio.js",
       "require": "./dist/drivers/audio.cjs"
     },
+    "./gl": {
+      "types": "./dist/gl/index.d.ts",
+      "import": "./dist/gl/index.js",
+      "require": "./dist/gl/index.cjs"
+    },
     "./mapping": {
       "types": "./dist/mapping.d.ts",
       "import": "./dist/mapping.js",

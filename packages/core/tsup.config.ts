@@ -8,6 +8,7 @@ export default defineConfig({
     'src/mapping.ts',
     'src/drivers/index.ts',
     'src/drivers/audio.ts',
+    'src/gl/index.ts',
   ],
   format: ['esm', 'cjs'],
   dts: { compilerOptions: { composite: false, incremental: false } },
