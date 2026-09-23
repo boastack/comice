@@ -20,6 +20,9 @@ importers:
       '@types/bun':
         specifier: ^1.4.2
         version: 1.4.2
+      comice:
+        specifier: workspace:*
+        version: link:packages/core
       size-limit:
         specifier: ^11.0.0
         version: 11.2.0
@@ -33,9 +36,51 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/color:
+    devDependencies:
+      comice:
+        specifier: workspace:*
+        version: link:../core
+
   packages/core: {}
 
+  packages/dissolve:
+    devDependencies:
+      comice:
+        specifier: workspace:*
+        version: link:../core
+
+  packages/distort:
+    devDependencies:
+      comice:
+        specifier: workspace:*
+        version: link:../core
+
+  packages/morph:
+    devDependencies:
+      comice:
+        specifier: workspace:*
+        version: link:../core
+
+  packages/rail:
+    devDependencies:
+      comice:
+        specifier: workspace:*
+        version: link:../core
+
   packages/reveal:
+    devDependencies:
+      comice:
+        specifier: workspace:*
+        version: link:../core
+
+  packages/seed:
+    devDependencies:
+      comice:
+        specifier: workspace:*
+        version: link:../core
+
+  packages/spotlight:
     devDependencies:
       comice:
         specifier: workspace:*
