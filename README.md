@@ -37,23 +37,30 @@ The natural setup is GSAP (or Motion, or Lenis) drives, Comice renders: a timeli
 
 ## Status
 
-**Pre-release.** The state machine, drivers, and the Driver → Signal → Mapping → Plugin Parameter layer are built and tested. The WebGL texture-on-plane pipeline (the part that actually puts media on the GPU) has not been built yet, and no plugins have shipped. Not yet published to npm. See [`ROADMAP.md`](./ROADMAP.md) for what's built and what's next (it's gitignored, internal notes, read it locally rather than on GitHub).
+**Pre-release.** The state machine, all seven drivers, the Driver → Signal → Mapping → Plugin Parameter layer, the full WebGL2 pipeline (texture-on-plane, multi-texture residency, the mask field, temporal feedback, the noise/displacement library), and fourteen plugins are built and tested — `reveal`, `morph`, `dissolve`, `distort`, `spotlight`, `rail`, `color`, `seed`, `mosaic`, `ascii`, `aura`, `type`, `layout`, `particles`. Every plugin ships either its complete spec card or a documented, tested subset — never a placeholder. Not yet published to npm. See [`ROADMAP.md`](./ROADMAP.md) for the full per-file status and what's next (it's gitignored, internal notes, read it locally rather than on GitHub).
 
 ---
 
 ## Architecture
 
 ```
-comice/               required, under 10 kB, zero effects
+comice/                required, under 10 kB, zero effects
   ├── the state machine (idle/entering/active/leaving)
-  ├── native drivers (scroll, pointer, hover, no dependency on anything)
+  ├── native drivers (scroll, hover, pointer, drag, click, time — no dependency on anything)
   ├── the shared render loop (one requestAnimationFrame for every instance on the page)
   └── the Driver → Signal → Mapping → Plugin Parameter layer
+
+comice/gl              opt-in, its own bundle entry — the WebGL2 pipeline
+                        (texture-on-plane, multi-texture residency, the
+                        mask field, temporal feedback, noise/displacement)
 
 comice/drivers/audio   opt-in, its own bundle entry, importing comice
                         core never pulls in Web Audio boilerplate
 
-@comice/*              opt-in plugins (not yet built or published)
+@comice/*              opt-in plugins, built and tested: reveal, morph,
+                        dissolve, distort, spotlight, rail, color, seed,
+                        mosaic, ascii, aura, type, layout, particles.
+                        Not yet published to npm.
 ```
 
 Comice core ships with **zero effects**. Every visual effect is a plugin, registered explicitly and tree-shaken when unused, the same shape GSAP uses (core changes a number over time; ScrollTrigger and SplitText are separate add-ons), except Comice's core puts media on the GPU rather than tweening DOM properties.
@@ -71,11 +78,11 @@ Comice core ships with **zero effects**. Every visual effect is a plugin, regist
 
 ### Drivers
 
-`scroll()`, `hover()`, and `pointer()` each drive the state machine directly through a single normalised `progress` value (0..1). `audio()` is different: it's a `NamedSignalDriver`, reporting a bag of named values every frame (`bass`, `mid`, `high`, `energy`, `amplitude`, `spectrum`) plus discrete `beat`/`onset`/`drop` events, routed to plugin parameters through `.map()` rather than driving `progress` directly, since audio has no single honest notion of "how far along" it is.
+`scroll()`, `hover()`, `pointer()`, `drag()`, `click()`, and `time()` each drive the state machine directly through a single normalised `progress` value (0..1) — all six state-machine drivers are built. `audio()` is different: it's a `NamedSignalDriver`, reporting a bag of named values every frame (`bass`, `mid`, `high`, `energy`, `amplitude`, `spectrum`) plus discrete `beat`/`onset`/`drop` events, routed to plugin parameters through `.map()` rather than driving `progress` directly, since audio has no single honest notion of "how far along" it is.
 
 ### Where a plugin's work lands
 
-Every plugin reduces to one of five operations: **merge** (many pieces become one), **breakout** (one piece becomes many), **distribute** (pieces travel into an arrangement), **mask** (media takes the shape of something), or **recompose** (one layout becomes another). The planned catalogue is 18 plugins across this shape, `vision`, `morph`, `reveal`, `dissolve`, `rail`, `spotlight`, `distort`, `mosaic`, `ascii`, `color`, `aura`, `type`, `layout`, `space`, `particles`, `footage`, `seed`, `persist`, none of which have shipped yet.
+Every plugin reduces to one of five operations: **merge** (many pieces become one), **breakout** (one piece becomes many), **distribute** (pieces travel into an arrangement), **mask** (media takes the shape of something), or **recompose** (one layout becomes another). The full catalogue is 18 plugins across this shape. Fourteen ship today — `reveal`, `morph`, `dissolve`, `distort`, `spotlight`, `rail`, `color`, `seed`, `mosaic`, `ascii`, `aura`, `type`, `layout`, `particles` — each with either its complete spec card or a genuine, documented, tested subset. The remaining four — `vision`, `spatial`, `footage`, `persist` — are blocked on `vision` (on-device ML for depth/segmentation), which needs its own design pass before it or anything depending on it can be built.
 
 ### Design principles
 
@@ -94,7 +101,7 @@ pnpm install
 pnpm build           # tsup build across all packages
 pnpm typecheck        # tsc --noEmit across all packages
 pnpm test             # bun test
-pnpm test:coverage     # bun test --coverage, enforces 100% on packages/core/src/
+pnpm test:coverage     # bun test --coverage, enforces 100% line/function coverage on every package
 pnpm size              # size-limit check against the 10kB core budget
 ```
 
