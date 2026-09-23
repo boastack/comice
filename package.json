@@ -15,7 +15,8 @@
     "test": "bun test",
     "test:coverage": "bun test --coverage",
     "dev": "turbo run build --watch",
-    "size": "size-limit"
+    "size": "size-limit",
+    "harness": "pnpm build && python3 -m http.server 8743 --directory ."
   },
   "size-limit": [
     {

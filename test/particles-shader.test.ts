@@ -29,6 +29,26 @@ describe('compileParticlesProgram', () => {
     expect(compileParticlesProgram(context.gl, { mode })).not.toBeNull()
   })
 
+  it('mode "cloud" does not throw on attribute setup even though a_baseVertex is unused in its own vertex shader', () => {
+    // Regression test for a real bug found against an actual browser's
+    // WebGL2 implementation (not this fake — see this exact fix's own
+    // commit, and fake-webgl2.ts's getAttribLocation()/
+    // enableVertexAttribArray() comments for the full story): a GLSL `in`
+    // attribute that's declared but never READ anywhere in a shader's
+    // main() may be optimized away entirely by a spec-compliant
+    // compiler, making getAttribLocation() return -1.
+    // packages/particles/src/shader.ts's shared vertex-shader header
+    // declares `a_baseVertex` for both modes, but 'cloud' mode's own
+    // main() never references it (only 'shatter' does) — compiling AND
+    // fully setting up 'cloud' mode's vertex attributes, all the way
+    // through to a non-null program, is what proves the -1 guard around
+    // enableVertexAttribArray/vertexAttribPointer actually works, not
+    // just that compilation itself succeeded.
+    const context = createFakeGLContext(canvas)
+    const program = compileParticlesProgram(context.gl, { mode: 'cloud' })
+    expect(program).not.toBeNull()
+  })
+
   it.each(MODES)('compiles successfully with fluid motion enabled for mode "%s"', (mode) => {
     const context = createFakeGLContext(canvas)
     expect(compileParticlesProgram(context.gl, { mode, fluid: true })).not.toBeNull()

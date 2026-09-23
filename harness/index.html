@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>comice — real-browser GLSL verification harness</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0c0c0c;
+    color: #eee;
+  }
+  header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #272727;
+    position: sticky;
+    top: 0;
+    background: #0c0c0c;
+    z-index: 10;
+  }
+  header h1 { margin: 0 0 4px; font-size: 18px; }
+  header p { margin: 0; color: #999; font-size: 13px; }
+  #status {
+    margin-top: 10px;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+  }
+  .ok { color: #4ade80; }
+  .fail { color: #f87171; }
+  .pending { color: #999; }
+  main {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 16px;
+    padding: 20px 24px;
+  }
+  .card {
+    border: 1px solid #272727;
+    border-radius: 10px;
+    padding: 14px;
+    background: #151515;
+  }
+  .card h2 {
+    margin: 0 0 4px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card .config {
+    margin: 0 0 10px;
+    color: #888;
+    font-size: 11px;
+    font-family: ui-monospace, monospace;
+  }
+  .stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+    background: #000;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .stage img, .stage video, .stage div {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 100px;
+    border: 1px solid currentColor;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>comice — real-browser GLSL verification</h1>
+  <p>Every plugin with real GLSL, loaded against real (canvas-generated) media in an actual WebGL2 context — not a test fake. Each card reports whether its shader actually compiled/linked, not just whether the JS ran.</p>
+  <div id="status" class="pending">Loading media and modules…</div>
+</header>
+
+<main id="grid"></main>
+
+<script type="importmap">
+{
+  "imports": {
+    "comice": "../packages/core/dist/index.js",
+    "comice/gl": "../packages/core/dist/gl/index.js",
+    "comice/scheduler": "../packages/core/dist/scheduler.js",
+    "comice/drivers": "../packages/core/dist/drivers/index.js",
+    "@comice/morph": "../packages/morph/dist/index.js",
+    "@comice/dissolve": "../packages/dissolve/dist/index.js",
+    "@comice/distort": "../packages/distort/dist/index.js",
+    "@comice/color": "../packages/color/dist/index.js",
+    "@comice/mosaic": "../packages/mosaic/dist/index.js",
+    "@comice/ascii": "../packages/ascii/dist/index.js",
+    "@comice/aura": "../packages/aura/dist/index.js",
+    "@comice/particles": "../packages/particles/dist/index.js"
+  }
+}
+</script>
+
+<script type="module" src="./run.js"></script>
+
+</body>
+</html>

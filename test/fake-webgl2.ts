@@ -59,6 +59,32 @@ export function createFakeGL2(
 ): WebGL2RenderingContext {
   let shaderId = 0
   let objectId = 0
+  // Concatenated source of every shader compiled against this fake context
+  // — used by getAttribLocation() below to catch a real, browser-observed
+  // bug class this fake previously couldn't: a GLSL `in` attribute
+  // declared but never actually READ in a shader's main() (only ever
+  // referenced in its own `in vec2 a_x;` declaration line) is legal to
+  // optimize away entirely under the spec, and a real compiler may do
+  // exactly that — getAttribLocation() then returns -1, and the WebGL2
+  // spec makes enableVertexAttribArray(-1)/vertexAttribPointer(-1, ...)
+  // both throw INVALID_VALUE. This was caught for real against an actual
+  // browser (packages/particles/src/shader.ts's 'cloud' mode, where
+  // a_baseVertex is declared but unused — see that fix's own commit) and
+  // the previous version of this fake (getAttribLocation always
+  // returning 0) could never have caught it, since it tracked no shader
+  // source at all. Deliberately NOT a real GLSL parser — a whole-word
+  // regex match against the concatenated source, excluding each
+  // attribute's own `in vec2 a_x;`-style declaration line, is enough to
+  // catch "never read anywhere else" without the cost/fragility of
+  // actually parsing GLSL.
+  let allShaderSource = ''
+
+  function isAttributeReferencedOutsideItsDeclaration(name: string): boolean {
+    const declarationLine = new RegExp(`^\\s*in\\s+\\S+\\s+${name}\\s*;`, 'm')
+    const withoutDeclarations = allShaderSource.replace(declarationLine, '')
+    const wholeWordUse = new RegExp(`\\b${name}\\b`)
+    return wholeWordUse.test(withoutDeclarations)
+  }
 
   const gl = {
     // Constants plane.ts references. Values are arbitrary but distinct.
@@ -107,7 +133,9 @@ export function createFakeGL2(
     createShader(_type: number) {
       return { __id: `shader${objectId++}` } as unknown as WebGLShader
     },
-    shaderSource(_shader: WebGLShader, _source: string) {},
+    shaderSource(_shader: WebGLShader, source: string) {
+      allShaderSource += `\n${source}`
+    },
     compileShader(_shader: WebGLShader) {
       shaderId++
     },
@@ -141,18 +169,26 @@ export function createFakeGL2(
     bufferData(_target: number, _data: BufferSource, _usage: number) {},
     deleteBuffer(_buffer: WebGLBuffer | null) {},
 
-    getAttribLocation(_program: WebGLProgram, _name: string) {
+    getAttribLocation(_program: WebGLProgram, name: string) {
+      // A real GLSL compiler may optimize away an `in` attribute that's
+      // declared but never read anywhere else in the shader — see the
+      // allShaderSource comment above for the real bug this catches.
+      if (allShaderSource && !isAttributeReferencedOutsideItsDeclaration(name)) return -1
       return 0
     },
-    enableVertexAttribArray(_index: number) {},
+    enableVertexAttribArray(index: number) {
+      if (index === -1) throw new Error('WebGL: INVALID_VALUE: enableVertexAttribArray: index out of range (fake)')
+    },
     vertexAttribPointer(
-      _index: number,
+      index: number,
       _size: number,
       _type: number,
       _normalized: boolean,
       _stride: number,
       _offset: number,
-    ) {},
+    ) {
+      if (index === -1) throw new Error('WebGL: INVALID_VALUE: vertexAttribPointer: index out of range (fake)')
+    },
 
     getUniformLocation(_program: WebGLProgram, name: string) {
       return { __id: name } as unknown as WebGLUniformLocation

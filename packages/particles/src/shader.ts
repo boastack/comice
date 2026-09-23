@@ -204,8 +204,23 @@ export function compileParticlesProgram(gl: WebGL2RenderingContext, options: Par
   const baseVertexBuffer = gl.createBuffer()!
   gl.bindBuffer(gl.ARRAY_BUFFER, baseVertexBuffer)
   gl.bufferData(gl.ARRAY_BUFFER, baseVertices, gl.STATIC_DRAW)
-  gl.enableVertexAttribArray(aBaseVertex)
-  gl.vertexAttribPointer(aBaseVertex, 2, gl.FLOAT, false, 0, 0)
+  // a_baseVertex is declared in the shared vertex-shader header but only
+  // actually READ in the 'shatter' branch's main() — 'cloud' mode's own
+  // main() never references it (a single point needs no per-vertex
+  // offset). A spec-compliant GLSL compiler is free to optimize out an
+  // unused `in` variable entirely, which makes getAttribLocation() return
+  // -1 for 'cloud' specifically — confirmed against a real browser's own
+  // WebGL2 implementation (not just the fake-GL context this package's
+  // unit tests use, which never enforces this). enableVertexAttribArray/
+  // vertexAttribPointer both throw INVALID_VALUE on a -1 location, so
+  // this guards the same way a caller would guard any "may not exist"
+  // attribute — every other shader.ts in this repo never needs this
+  // guard because none of them have an attribute a real compiler could
+  // legally discard.
+  if (aBaseVertex !== -1) {
+    gl.enableVertexAttribArray(aBaseVertex)
+    gl.vertexAttribPointer(aBaseVertex, 2, gl.FLOAT, false, 0, 0)
+  }
   // No divisor on base geometry — every instance re-draws the SAME base
   // vertices (per-vertex, not per-instance).
 
