@@ -197,6 +197,60 @@ describe('comice() — .driver() with a plain Driver', () => {
     handle.destroy()
     expect(driver.teardownCalls).toBe(1)
   })
+
+  it('routes signal.pointer into instance.display.x/y — previously had no path to a plugin at all', () => {
+    const handle = comice(el) as ComiceHandle
+    const driver = fakeDriver()
+    handle.driver(driver)
+
+    driver.fire({ progress: 1, pointer: { x: 42, y: 17 } })
+
+    expect(handle.display.x).toBe(42)
+    expect(handle.display.y).toBe(17)
+  })
+
+  it('does not touch display.x/y when a signal carries no pointer field', () => {
+    const handle = comice(el) as ComiceHandle
+    const driver = fakeDriver()
+    handle.driver(driver)
+
+    driver.fire({ progress: 1, pointer: { x: 5, y: 9 } })
+    driver.fire({ progress: 1 }) // no pointer this time
+
+    // display.x/y stay at their last-set value rather than resetting —
+    // setDisplay() merges a partial Transform, it does not replace it.
+    expect(handle.display.x).toBe(5)
+    expect(handle.display.y).toBe(9)
+  })
+
+  it('display.scale/rotate stay at their Transform defaults — pointer routing only ever touches x/y', () => {
+    const handle = comice(el) as ComiceHandle
+    const driver = fakeDriver()
+    handle.driver(driver)
+
+    driver.fire({ progress: 1, pointer: { x: 5, y: 9 } })
+
+    expect(handle.display.scale).toBe(1)
+    expect(handle.display.rotate).toBe(0)
+  })
+
+  it('a plugin subscribed via instance.on(\'*\') observes the routed pointer position', () => {
+    const handle = comice(el) as ComiceHandle
+    const driver = fakeDriver()
+    handle.driver(driver)
+
+    let observedX: number | null = null
+    let observedY: number | null = null
+    handle.on('*', (snapshot) => {
+      observedX = snapshot.display.x
+      observedY = snapshot.display.y
+    })
+
+    driver.fire({ progress: 1, pointer: { x: 33, y: 8 } })
+
+    expect(observedX).toBe(33)
+    expect(observedY).toBe(8)
+  })
 })
 
 describe('comice() — .driver() with a NamedSignalDriver', () => {

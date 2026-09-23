@@ -127,6 +127,34 @@ function wrap(target: Element): ComiceHandle {
         } else if (signal.progress <= 0 && instance.state === 'leaving') {
           instance.transition('idle')
         }
+
+        // signal.pointer (DriverSignal's optional field, types.ts)
+        // previously had no path to a plugin at all — pointer() reports
+        // it, but a plain Driver never flows through .map() (that's
+        // NamedSignalDriver-only), so a field-based plugin (distort's
+        // bulge/lens/glass, spotlight's cursor-follow) had no way to read
+        // live pointer position through the driver abstraction at all.
+        // Routed here into instance.setDisplay(), which already exists
+        // for exactly this ("what is actually rendered this frame" per
+        // machine.ts's own rest-vs-display split — live pointer position
+        // is display-side data, never rest, so hovering one element's
+        // field can't leak into another's geometry the way machine.ts's
+        // header comment already guards against for rest). A plugin
+        // reads it via instance.on('*', (snapshot) => snapshot.display.x/y)
+        // or instance.display directly — no new API surface, just a
+        // previously-unrouted signal now reaching an existing channel.
+        //
+        // signal.velocity has NO equally clean existing slot — Transform
+        // has no velocity field, and forcing it into an unrelated field
+        // (scale, say) would collide with that field's real meaning for
+        // any plugin wanting both. Left unrouted deliberately rather than
+        // shoehorned in; a real fix (extending the public Transform type)
+        // is a bigger, more consequential decision than this pass should
+        // make unilaterally. distort's initial scope (bulge/lens/glass)
+        // doesn't need it — only a future 'smear' effect would.
+        if (signal.pointer) {
+          instance.setDisplay({ x: signal.pointer.x, y: signal.pointer.y })
+        }
       })
       driverTeardowns.push(teardown)
     }
