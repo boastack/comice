@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>@comice/persist — manual SPA handoff demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0c0c0c;
+    color: #eee;
+    padding: 24px;
+  }
+  h1 { font-size: 16px; margin: 0 0 6px; }
+  p { color: #999; max-width: 60ch; }
+  .route { display: none; }
+  .route.active { display: block; }
+  .listing {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 20px;
+  }
+  .card {
+    border: 1px solid #272727;
+    border-radius: 8px;
+    padding: 10px;
+    cursor: pointer;
+    background: #151515;
+  }
+  .card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 4px; display: block; }
+  .card p { margin: 8px 0 0; color: #ccc; font-size: 12px; }
+  .detail { margin-top: 20px; }
+  .detail img { width: 100%; max-width: 600px; aspect-ratio: 16/9; object-fit: cover; border-radius: 8px; display: block; }
+  button {
+    background: #1b1b1b;
+    border: 1px solid #333;
+    color: #eee;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font: inherit;
+  }
+  select { font: inherit; background: #1b1b1b; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 6px 10px; }
+  .controls { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<h1>@comice/persist — manual SPA handoff demo</h1>
+<p>
+  A real SPA is simulated here by two "route" &lt;div&gt;s in the SAME document —
+  clicking a thumbnail hides the listing route and shows the detail route, exactly
+  the DOM-patching an SPA router does. persist() is called on both routes' own
+  &lt;img&gt; elements with a matching `match` key; watch the thumbnail's real,
+  literal DOM node grow into the detail hero — not a copy, the same element.
+</p>
+
+<div class="controls">
+  <label>transition: <select id="transition">
+    <option value="shared">shared</option>
+    <option value="blend">blend</option>
+    <option value="curtain">curtain</option>
+    <option value="iris">iris</option>
+  </select></label>
+</div>
+
+<div id="route-listing" class="route active">
+  <div class="listing" id="listing"></div>
+</div>
+
+<div id="route-detail" class="route">
+  <button id="back">&larr; back to listing</button>
+  <div class="detail">
+    <img id="detail-hero" data-match="" />
+    <p id="detail-caption"></p>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "comice": "../../core/dist/index.js",
+    "comice/scheduler": "../../core/dist/scheduler.js",
+    "@comice/persist": "../dist/index.js"
+  }
+}
+</script>
+
+<script type="module">
+import { comice } from 'comice'
+import { persist } from '@comice/persist'
+
+const COLORS = ['#6a3fae', '#e8a33d', '#1f6f8b', '#2b7a4b', '#a33d5f', '#3d5fa3']
+
+function drawThumb(color) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 400
+  canvas.height = 300
+  const ctx = canvas.getContext('2d')
+  const grad = ctx.createLinearGradient(0, 0, 400, 300)
+  grad.addColorStop(0, color)
+  grad.addColorStop(1, '#0c0c0c')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, 400, 300)
+  return canvas.toDataURL('image/png')
+}
+
+const listing = document.getElementById('listing')
+const routeListing = document.getElementById('route-listing')
+const routeDetail = document.getElementById('route-detail')
+const detailHero = document.getElementById('detail-hero')
+const detailCaption = document.getElementById('detail-caption')
+const transitionSelect = document.getElementById('transition')
+const backButton = document.getElementById('back')
+
+let activePersistHandle = null
+
+COLORS.forEach((color, i) => {
+  const card = document.createElement('div')
+  card.className = 'card'
+  const img = document.createElement('img')
+  img.src = drawThumb(color)
+  img.dataset.match = `project-${i}`
+  const caption = document.createElement('p')
+  caption.textContent = `Project ${i + 1}`
+  card.appendChild(img)
+  card.appendChild(caption)
+  card.addEventListener('click', () => navigateToDetail(i, img.dataset.match, color))
+  listing.appendChild(card)
+})
+
+function navigateToDetail(index, match, color) {
+  // The "old route"'s own persist() call — registers its real <img> so
+  // the "new route" can claim it once mounted.
+  activePersistHandle?.destroy()
+  const thumbImg = listing.children[index].querySelector('img')
+  activePersistHandle = comice(thumbImg).use(
+    persist({ match, transition: transitionSelect.value, native: 'auto' })
+  )
+
+  // Simulates the SPA router unmounting the listing route and mounting
+  // the detail route — a real router would do this via its own
+  // reconciliation; here it's just toggling which <div> is visible.
+  routeListing.classList.remove('active')
+  routeDetail.classList.add('active')
+  detailHero.dataset.match = match
+  detailCaption.textContent = `Project ${index + 1} — detail view`
+
+  // Tear down the old instance the same moment the router would unmount
+  // this element (persist's own teardown() does NOT destroy the media —
+  // see packages/persist/src/index.ts's own header for why).
+  activePersistHandle.destroy()
+
+  // The "new route"'s own persist() call — claims the registered entry
+  // and performs the real handoff.
+  activePersistHandle = comice(detailHero).use(
+    persist({ match, transition: transitionSelect.value, native: 'auto' })
+  )
+}
+
+backButton.addEventListener('click', () => {
+  activePersistHandle?.destroy()
+  routeDetail.classList.remove('active')
+  routeListing.classList.add('active')
+})
+</script>
+
+</body>
+</html>

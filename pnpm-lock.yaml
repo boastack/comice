@@ -36,6 +36,18 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/ascii:
+    devDependencies:
+      comice:
+        specifier: workspace:*
+        version: link:../core
+
+  packages/aura:
+    devDependencies:
+      comice:
+        specifier: workspace:*
+        version: link:../core
+
   packages/color:
     devDependencies:
       comice:
@@ -56,7 +68,31 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/layout:
+    devDependencies:
+      comice:
+        specifier: workspace:*
+        version: link:../core
+
   packages/morph:
+    devDependencies:
+      comice:
+        specifier: workspace:*
+        version: link:../core
+
+  packages/mosaic:
+    devDependencies:
+      comice:
+        specifier: workspace:*
+        version: link:../core
+
+  packages/particles:
+    devDependencies:
+      comice:
+        specifier: workspace:*
+        version: link:../core
+
+  packages/persist:
     devDependencies:
       comice:
         specifier: workspace:*
@@ -81,6 +117,12 @@ importers:
         version: link:../core
 
   packages/spotlight:
+    devDependencies:
+      comice:
+        specifier: workspace:*
+        version: link:../core
+
+  packages/type:
     devDependencies:
       comice:
         specifier: workspace:*
