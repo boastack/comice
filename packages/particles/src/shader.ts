@@ -147,6 +147,13 @@ export type ParticlesProgram = {
 }
 
 const PROGRAM_CACHE = new WeakMap<WebGL2RenderingContext, Map<string, ParticlesProgram | null>>()
+// A real bug found running many particles() instances on one real page: two
+// instances compiling the same config share ONE cached program (and, for
+// particles specifically, its origin/target/color/baseVertex BUFFERS too —
+// they're part of the same cached ParticlesProgram object), so the first
+// instance to tear down must not delete any of it out from under a
+// still-live second instance holding the same reference.
+const REFCOUNTS = new WeakMap<WebGL2RenderingContext, Map<string, number>>()
 
 function cacheKey(options: ParticlesShaderOptions): string {
   return `${options.mode}:${options.fluid ?? false}`
@@ -158,9 +165,17 @@ export function compileParticlesProgram(gl: WebGL2RenderingContext, options: Par
     byConfig = new Map()
     PROGRAM_CACHE.set(gl, byConfig)
   }
+  let refcounts = REFCOUNTS.get(gl)
+  if (!refcounts) {
+    refcounts = new Map()
+    REFCOUNTS.set(gl, refcounts)
+  }
   const key = cacheKey(options)
   const cached = byConfig.get(key)
-  if (cached !== undefined) return cached
+  if (cached !== undefined) {
+    if (cached !== null) refcounts.set(key, (refcounts.get(key) ?? 0) + 1)
+    return cached
+  }
 
   const vertexSource = buildVertexShader(options)
   const vertexShader = compileShader(gl, gl.VERTEX_SHADER, vertexSource)
@@ -260,10 +275,25 @@ export function compileParticlesProgram(gl: WebGL2RenderingContext, options: Par
     baseVertexCount,
   }
   byConfig.set(key, result)
+  refcounts.set(key, 1) // this compile call is itself the first live reference
   return result
 }
 
 export function destroyParticlesProgram(gl: WebGL2RenderingContext, particlesProgram: ParticlesProgram): void {
+  const byConfig = PROGRAM_CACHE.get(gl)
+  const refcounts = REFCOUNTS.get(gl)
+  const key = byConfig ? [...byConfig.entries()].find(([, program]) => program === particlesProgram)?.[0] : undefined
+
+  if (key !== undefined && refcounts) {
+    const remaining = (refcounts.get(key) ?? 1) - 1
+    if (remaining > 0) {
+      refcounts.set(key, remaining)
+      return // other instances still hold this program (and its buffers) — do not delete it
+    }
+    refcounts.delete(key)
+    byConfig?.delete(key)
+  }
+
   gl.deleteProgram(particlesProgram.program)
   gl.deleteVertexArray(particlesProgram.vao)
   gl.deleteBuffer(particlesProgram.baseVertexBuffer)

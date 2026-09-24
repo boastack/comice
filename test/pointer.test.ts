@@ -95,8 +95,9 @@ describe('pointer driver', () => {
     flushOneFrame(16)
     onSignal.mockClear()
 
-    // Then explicitly leaves.
-    target.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }))
+    // Then moves out of bounds — the way a real browser reports leaving:
+    // the next move lands somewhere else (here, the body) outside the box.
+    document.body.dispatchEvent(makePointerEvent('pointermove', 400, 400))
     flushOneFrame(32)
 
     expect(onSignal).toHaveBeenCalledTimes(1)
@@ -106,6 +107,46 @@ describe('pointer driver', () => {
     onSignal.mockClear()
     flushOneFrame(48)
     expect(onSignal).not.toHaveBeenCalled()
+
+    detach()
+  })
+
+  it('the pointer leaving the window reports progress 0; leaving just the target does not', () => {
+    const driver = pointer({ radius: 0 })
+    const onSignal = mock()
+    const detach = driver.attach(target, onSignal)
+
+    target.dispatchEvent(makePointerEvent('pointermove', 10, 10))
+    flushOneFrame(16)
+    onSignal.mockClear()
+
+    target.dispatchEvent(new PointerEvent('pointerleave')) // not a window leave
+    flushOneFrame(32)
+    expect(onSignal.mock.calls[0][0].progress).toBe(1)
+
+    onSignal.mockClear()
+    document.documentElement.dispatchEvent(new PointerEvent('pointerleave'))
+    flushOneFrame(48)
+    expect(onSignal.mock.calls[0][0].progress).toBe(0)
+
+    detach()
+  })
+
+  it('a HIDDEN target still gets moves, including within radius OUTSIDE its box — real bug found on a real page', () => {
+    // A GL plugin hides its target, so real moves land on its parent or
+    // body, never on it. And `radius` reaches outside the element — the old
+    // on-target listener could never see those moves at all.
+    target.style.visibility = 'hidden'
+    const driver = pointer({ radius: 50, lag: 0 })
+    const onSignal = mock()
+    const detach = driver.attach(target, onSignal)
+
+    document.body.dispatchEvent(makePointerEvent('pointermove', 230, 50)) // 30px right of the box
+    flushOneFrame(16)
+
+    expect(onSignal).toHaveBeenCalled()
+    expect(onSignal.mock.calls[0][0].progress).toBe(1)
+    expect(onSignal.mock.calls[0][0].pointer).toEqual({ x: 230, y: 50 })
 
     detach()
   })

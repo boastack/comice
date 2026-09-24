@@ -247,6 +247,19 @@ export type MosaicProgram = {
 }
 
 const PROGRAM_CACHE = new WeakMap<WebGL2RenderingContext, Map<string, MosaicProgram | null>>()
+// A real bug found running many mosaic() instances on one real page (hover-
+// swapping fills on a grid of cards): two instances sharing the same
+// (gl, config) key correctly share ONE compiled program via PROGRAM_CACHE
+// above, but destroyMosaicProgram() used to delete that shared program
+// unconditionally the moment ANY ONE instance tore down — breaking every
+// other still-alive instance using it (a real, reproduced WebGL error:
+// "useProgram: attempt to use a deleted object"). REFCOUNTS tracks how
+// many live instances currently hold a reference to each cached entry;
+// the actual GL delete + cache eviction only happens once the count drops
+// to 0, so a shared program stays alive exactly as long as anyone needs
+// it, and a genuinely-unused config still gets cleaned up rather than
+// leaking forever.
+const REFCOUNTS = new WeakMap<WebGL2RenderingContext, Map<string, number>>()
 
 function cacheKey(options: MosaicShaderOptions): string {
   const { fill, cell = 12, paletteCount = 2, sourceCount = 0 } = options
@@ -259,9 +272,20 @@ export function compileMosaicProgram(gl: WebGL2RenderingContext, options: Mosaic
     byConfig = new Map()
     PROGRAM_CACHE.set(gl, byConfig)
   }
+  let refcounts = REFCOUNTS.get(gl)
+  if (!refcounts) {
+    refcounts = new Map()
+    REFCOUNTS.set(gl, refcounts)
+  }
   const key = cacheKey(options)
   const cached = byConfig.get(key)
-  if (cached !== undefined) return cached
+  if (cached !== undefined) {
+    // A null cache entry (a previously-failed compile) is cached too —
+    // never worth ref-counting, since there's no live GL object to share
+    // or eventually delete for that key.
+    if (cached !== null) refcounts.set(key, (refcounts.get(key) ?? 0) + 1)
+    return cached
+  }
 
   const fragmentSource = buildFragmentShader(options)
   const vertexShader = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER)
@@ -321,10 +345,37 @@ export function compileMosaicProgram(gl: WebGL2RenderingContext, options: Mosaic
     sourceCount: options.fill === 'images' ? Math.max(1, options.sourceCount ?? 0) : 0,
   }
   byConfig.set(key, result)
+  refcounts.set(key, 1) // this compile call is itself the first live reference
   return result
 }
 
+/**
+ * Releases one reference to `mosaicProgram`. The underlying GL program/VAO
+ * is only actually deleted (and its cache entry evicted, so a later
+ * compileMosaicProgram() call with the same config genuinely recompiles
+ * rather than returning a deleted object) once every instance sharing it
+ * has released its own reference — see REFCOUNTS's own comment above for
+ * the real bug this fixes. Safe to call more times than compile was
+ * called for a given config (a defensive floor at 0, never negative) —
+ * teardown() ordering across plugin instances isn't guaranteed to be
+ * perfectly 1:1 in every caller, and this must never double-delete or
+ * throw on the "already gone" case regardless.
+ */
 export function destroyMosaicProgram(gl: WebGL2RenderingContext, mosaicProgram: MosaicProgram): void {
+  const byConfig = PROGRAM_CACHE.get(gl)
+  const refcounts = REFCOUNTS.get(gl)
+  const key = byConfig ? [...byConfig.entries()].find(([, program]) => program === mosaicProgram)?.[0] : undefined
+
+  if (key !== undefined && refcounts) {
+    const remaining = (refcounts.get(key) ?? 1) - 1
+    if (remaining > 0) {
+      refcounts.set(key, remaining)
+      return // other instances still hold this program — do not delete it
+    }
+    refcounts.delete(key)
+    byConfig?.delete(key)
+  }
+
   gl.deleteProgram(mosaicProgram.program)
   gl.deleteVertexArray(mosaicProgram.vao)
 }

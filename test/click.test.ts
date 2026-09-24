@@ -74,6 +74,64 @@ describe('click driver', () => {
     targetB.remove()
   })
 
+  describe('hidden targets and overlays — real bug found on a real page', () => {
+    // A GL plugin hides its target (visibility: hidden), so a real click
+    // hit-tests straight through it and lands on its parent. The old
+    // listener on the target itself never fired at all.
+    function fixture() {
+      const parent = document.createElement('div')
+      const img = document.createElement('img')
+      const caption = document.createElement('p')
+      img.style.visibility = 'hidden'
+      parent.appendChild(img)
+      parent.appendChild(caption)
+      document.body.appendChild(parent)
+      Object.defineProperty(img, 'getBoundingClientRect', {
+        value: () => ({ left: 0, top: 0, width: 300, height: 200, right: 300, bottom: 200, x: 0, y: 0, toJSON() {} }),
+        configurable: true,
+      })
+      return { parent, img, caption }
+    }
+    const clickAt = (el: Element, clientX: number, clientY: number) =>
+      el.dispatchEvent(new MouseEvent('click', { clientX, clientY, bubbles: true }))
+
+    it('a click landing on the parent inside the hidden target\'s box counts', () => {
+      const { parent, img } = fixture()
+      const signals: number[] = []
+      const teardown = click().attach(img, (signal) => signals.push(signal.progress))
+
+      clickAt(parent, 150, 100)
+
+      expect(signals).toEqual([1])
+      teardown()
+      parent.remove()
+    })
+
+    it('a click on the parent OUTSIDE the target\'s box does not count', () => {
+      const { parent, img } = fixture()
+      const signals: number[] = []
+      const teardown = click().attach(img, (signal) => signals.push(signal.progress))
+
+      clickAt(parent, 400, 100)
+
+      expect(signals).toEqual([])
+      teardown()
+      parent.remove()
+    })
+
+    it('a click on an overlay drawn over the target (a caption) does not count', () => {
+      const { parent, img, caption } = fixture()
+      const signals: number[] = []
+      const teardown = click().attach(img, (signal) => signals.push(signal.progress))
+
+      clickAt(caption, 150, 100) // inside the image's box, but on the caption
+
+      expect(signals).toEqual([])
+      teardown()
+      parent.remove()
+    })
+  })
+
   it('teardown() removes the listener — a click after teardown reports nothing further', () => {
     const signals: number[] = []
     const teardown = click().attach(target, (signal) => signals.push(signal.progress))

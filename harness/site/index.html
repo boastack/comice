@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Studio Meridian — a real comice stress page</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    color-scheme: dark;
+    --aura-color: #6a3fae;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0a0a0a;
+    color: #eee;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    padding: 16px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: color-mix(in srgb, var(--aura-color) 25%, #0a0a0a);
+    border-bottom: 1px solid #222;
+    transition: background 0.4s ease;
+  }
+  header .logo { font-weight: 700; letter-spacing: -0.02em; }
+  header nav a { color: #ccc; text-decoration: none; margin-left: 24px; font-size: 13px; }
+
+  section { padding: 60px 32px; max-width: 1200px; margin: 0 auto; }
+  h2 { font-size: 22px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .lede { color: #999; max-width: 60ch; margin: 0 0 32px; }
+
+  /* Hero: distort + color (two GL-shader plugins, deliberately stacked) + spotlight (CSS) */
+  #hero-section { padding: 0; position: relative; height: 70vh; min-height: 480px; overflow: hidden; }
+  #hero-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #hero-caption { position: absolute; bottom: 40px; left: 32px; z-index: 5; }
+  #hero-caption h1 { font-size: 42px; margin: 0; letter-spacing: -0.03em; }
+  #hero-caption p { color: #ccc; margin: 6px 0 0; }
+
+  /* Project grid: rail (coverflow) + mosaic/ascii hover swap + seed placeholders */
+  .rail-track { display: flex; gap: 20px; padding: 20px 0; height: 280px; }
+  .rail-track > div { flex: 0 0 260px; width: 260px; }
+  .project-card { position: relative; cursor: pointer; }
+  .project-card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 8px; display: block; background: #151515; }
+  .project-card p { margin: 10px 0 0; font-size: 13px; color: #bbb; }
+
+  /* Before/after: dissolve scrubbed by scroll */
+  #compare-stage { position: relative; height: 420px; border-radius: 10px; overflow: hidden; background: #000; }
+
+  /* Detail route (persist target) */
+  #route-detail { display: none; }
+  #route-detail.active { display: block; }
+  #route-listing.hidden { display: none; }
+  #detail-hero { width: 100%; max-width: 900px; aspect-ratio: 16/9; object-fit: cover; border-radius: 10px; display: block; }
+  #back-to-listing { background: #1b1b1b; border: 1px solid #333; color: #eee; padding: 8px 14px; border-radius: 6px; cursor: pointer; font: inherit; margin-bottom: 16px; }
+
+  /* particles */
+  #particles-target { width: 100%; height: 360px; position: relative; }
+
+  /* type + layout */
+  #type-heading { font-size: 48px; font-weight: 700; letter-spacing: -0.02em; }
+  #layout-portrait { width: 260px; float: left; margin: 0 24px 12px 0; border-radius: 8px; }
+
+  footer { padding: 40px 32px; text-align: center; color: #666; font-size: 12px; border-top: 1px solid #222; }
+
+  #status-log {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 160px;
+    overflow-y: auto;
+    background: rgba(10,10,10,0.95);
+    border-top: 1px solid #333;
+    font: 11px/1.5 ui-monospace, monospace;
+    padding: 8px 16px;
+    z-index: 1000;
+    /* Real bug found running this page through Playwright: a fixed panel
+       tall enough to overlap page content (project-card grid, in this
+       case) at the bottom of the viewport swallows real pointer clicks
+       meant for whatever's underneath it, even though it's purely a
+       passive, read-only debug log with nothing on it to click. Every
+       child line inherits pointer-events: none too (not just the panel
+       itself) — re-enabling it on children would put the same click trap
+       right back, just one level down. */
+    pointer-events: none;
+  }
+  #status-log .ok { color: #4ade80; }
+  #status-log .fail { color: #f87171; }
+  #status-log .info { color: #999; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Studio Meridian</div>
+  <nav>
+    <a href="#route-listing">Work</a>
+    <a href="#compare">Process</a>
+    <a href="#about">About</a>
+  </nav>
+</header>
+
+<section id="hero-section">
+  <img id="hero-img" data-seed-ready="false" />
+  <div id="hero-caption">
+    <h1>We build things that move.</h1>
+    <p>A design studio working across brand, motion, and interactive media.</p>
+  </div>
+</section>
+
+<section id="route-listing">
+  <h2>Selected work</h2>
+  <p class="lede">Drag or scroll through the grid. Hover a card to see it rebuild itself live. Click one to open its detail page — the thumbnail itself becomes the detail hero, not a copy.</p>
+  <div id="rail-container">
+    <div class="rail-track" id="rail-track"></div>
+  </div>
+</section>
+
+<section id="compare">
+  <h2>Before / after</h2>
+  <p class="lede">Scroll through this section to scrub a noise-driven dissolve between two frames.</p>
+  <div id="compare-stage"></div>
+</section>
+
+<section id="route-detail">
+  <button id="back-to-listing">&larr; Back to work</button>
+  <img id="detail-hero" />
+  <h2 id="detail-title" style="margin-top:20px"></h2>
+  <p class="lede" id="detail-body">Full case study copy would live here — this page proves the persisted hero image survives the "navigation" from the grid, not that the rest of the layout does anything special.</p>
+</section>
+
+<section id="particles-section">
+  <h2>Dissolving into form</h2>
+  <p class="lede">Scroll to resolve a portrait into a scattered point cloud.</p>
+  <div id="particles-target"></div>
+</section>
+
+<section id="about">
+  <h2 id="type-heading">Studio Meridian</h2>
+  <img id="layout-portrait" />
+  <p class="lede">
+    Founded on the idea that media should react to the person looking at it, not just sit
+    on the page. This paragraph wraps around the portrait's own ellipse rather than sitting
+    in a rigid column — a real exercise of layout's shape-outside mechanism against actual
+    flowing text, not a single short line.  We work across identity, motion, and interactive
+    product design for clients who want their sites to feel alive rather than static. Every
+    project starts with the same question — what does this look like in motion, not just at
+    rest — and every deliverable is judged against that answer before anything ships.
+  </p>
+</section>
+
+<footer>Studio Meridian — a comice real-usage stress test, not a real company.</footer>
+
+<div id="status-log"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "comice": "../../packages/core/dist/index.js",
+    "comice/gl": "../../packages/core/dist/gl/index.js",
+    "comice/scheduler": "../../packages/core/dist/scheduler.js",
+    "comice/drivers": "../../packages/core/dist/drivers/index.js",
+    "@comice/distort": "../../packages/distort/dist/index.js",
+    "@comice/color": "../../packages/color/dist/index.js",
+    "@comice/spotlight": "../../packages/spotlight/dist/index.js",
+    "@comice/rail": "../../packages/rail/dist/index.js",
+    "@comice/mosaic": "../../packages/mosaic/dist/index.js",
+    "@comice/ascii": "../../packages/ascii/dist/index.js",
+    "@comice/seed": "../../packages/seed/dist/index.js",
+    "@comice/dissolve": "../../packages/dissolve/dist/index.js",
+    "@comice/persist": "../../packages/persist/dist/index.js",
+    "@comice/particles": "../../packages/particles/dist/index.js",
+    "@comice/type": "../../packages/type/dist/index.js",
+    "@comice/layout": "../../packages/layout/dist/index.js",
+    "@comice/aura": "../../packages/aura/dist/index.js"
+  }
+}
+</script>
+<script type="module" src="./site.js"></script>
+
+</body>
+</html>

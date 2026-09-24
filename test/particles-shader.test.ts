@@ -118,6 +118,81 @@ describe('destroyParticlesProgram', () => {
     expect(() => destroyParticlesProgram(context.gl, program)).not.toThrow()
     canvas.remove()
   })
+
+  it('a program shared by two instances survives the FIRST destroy — real bug found running many particles() instances on one page', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+
+    const instanceA = compileParticlesProgram(context.gl, { mode: 'cloud', fluid: true })!
+    const instanceB = compileParticlesProgram(context.gl, { mode: 'cloud', fluid: true })!
+    expect(instanceA).toBe(instanceB) // same cached object, the whole point of the cache
+
+    destroyParticlesProgram(context.gl, instanceA) // instance A tears down first
+
+    // instanceB's own reference must still be usable — recompiling the
+    // SAME config while B is still alive must return B's own object
+    // unchanged (not a new one), proving the cache entry was never
+    // evicted out from under the still-live reference.
+    const stillCached = compileParticlesProgram(context.gl, { mode: 'cloud', fluid: true })
+    expect(stillCached).toBe(instanceB)
+
+    canvas.remove()
+  })
+
+  it('the underlying cache entry IS evicted once every reference has been released — a later compile genuinely recompiles', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+
+    const instanceA = compileParticlesProgram(context.gl, { mode: 'shatter' })!
+    const instanceB = compileParticlesProgram(context.gl, { mode: 'shatter' })!
+
+    destroyParticlesProgram(context.gl, instanceA)
+    destroyParticlesProgram(context.gl, instanceB) // last reference released
+
+    const recompiled = compileParticlesProgram(context.gl, { mode: 'shatter' })!
+    // A genuinely NEW object — proves the stale entry was actually
+    // evicted from the cache, not left dangling for a future compile to
+    // incorrectly reuse.
+    expect(recompiled).not.toBe(instanceA)
+    expect(recompiled).not.toBe(instanceB)
+
+    canvas.remove()
+  })
+
+  it('destroying more times than compiled for a config does not throw (defensive floor at 0)', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+    const program = compileParticlesProgram(context.gl, { mode: 'cloud' })!
+    destroyParticlesProgram(context.gl, program)
+    expect(() => destroyParticlesProgram(context.gl, program)).not.toThrow()
+    canvas.remove()
+  })
+
+  it('does not throw for a program that was never compiled through this cache at all', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+    const foreignProgram = {
+      program: {} as WebGLProgram,
+      vao: {} as WebGLVertexArrayObject,
+      baseVertexBuffer: {} as WebGLBuffer,
+      originBuffer: {} as WebGLBuffer,
+      targetBuffer: {} as WebGLBuffer,
+      colorBuffer: {} as WebGLBuffer,
+      uProgress: null,
+      uPointSize: null,
+      uNoiseAmount: null,
+      uTime: null,
+      uResolution: null,
+      mode: 'cloud' as const,
+      baseVertexCount: 1,
+    }
+    expect(() => destroyParticlesProgram(context.gl, foreignProgram)).not.toThrow()
+    canvas.remove()
+  })
 })
 
 describe('uploadParticleBuffers', () => {

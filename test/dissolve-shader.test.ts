@@ -109,6 +109,73 @@ describe('destroyDissolveProgram', () => {
     expect(() => destroyDissolveProgram(context.gl, program)).not.toThrow()
     canvas.remove()
   })
+
+  it('a program shared by two instances survives the FIRST destroy — real bug found running many dissolve() instances on one page', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+
+    const instanceA = compileDissolveProgram(context.gl, { transition: 'noise' })!
+    const instanceB = compileDissolveProgram(context.gl, { transition: 'noise' })!
+    expect(instanceA).toBe(instanceB) // same cached object, the whole point of the cache
+
+    destroyDissolveProgram(context.gl, instanceA) // instance A tears down first
+
+    // instanceB's own reference must still be usable — recompiling the
+    // SAME config while B is still alive must return B's own object
+    // unchanged (not a new one), proving the cache entry was never
+    // evicted out from under the still-live reference.
+    const stillCached = compileDissolveProgram(context.gl, { transition: 'noise' })
+    expect(stillCached).toBe(instanceB)
+
+    canvas.remove()
+  })
+
+  it('the underlying cache entry IS evicted once every reference has been released — a later compile genuinely recompiles', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+
+    const instanceA = compileDissolveProgram(context.gl, { transition: 'liquid' })!
+    const instanceB = compileDissolveProgram(context.gl, { transition: 'liquid' })!
+
+    destroyDissolveProgram(context.gl, instanceA)
+    destroyDissolveProgram(context.gl, instanceB) // last reference released
+
+    const recompiled = compileDissolveProgram(context.gl, { transition: 'liquid' })!
+    // A genuinely NEW object — proves the stale entry was actually
+    // evicted from the cache, not left dangling for a future compile to
+    // incorrectly reuse.
+    expect(recompiled).not.toBe(instanceA)
+    expect(recompiled).not.toBe(instanceB)
+
+    canvas.remove()
+  })
+
+  it('destroying more times than compiled for a config does not throw (defensive floor at 0)', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+    const program = compileDissolveProgram(context.gl, { transition: 'crossfade' })!
+    destroyDissolveProgram(context.gl, program)
+    expect(() => destroyDissolveProgram(context.gl, program)).not.toThrow()
+    canvas.remove()
+  })
+
+  it('does not throw for a program that was never compiled through this cache at all', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+    const foreignProgram = {
+      program: {} as WebGLProgram,
+      vao: {} as WebGLVertexArrayObject,
+      uProgress: null,
+      uFrom: null,
+      uTo: null,
+    }
+    expect(() => destroyDissolveProgram(context.gl, foreignProgram)).not.toThrow()
+    canvas.remove()
+  })
 })
 
 describe('drawDissolve', () => {

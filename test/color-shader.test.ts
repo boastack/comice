@@ -141,6 +141,78 @@ describe('destroyColorProgram', () => {
     expect(() => destroyColorProgram(context.gl, program)).not.toThrow()
     canvas.remove()
   })
+
+  it('a program shared by two instances survives the FIRST destroy — real bug found running many color() instances on one page', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+
+    const instanceA = compileColorProgram(context.gl, { effects: ['duotone', 'grain'] })!
+    const instanceB = compileColorProgram(context.gl, { effects: ['duotone', 'grain'] })!
+    expect(instanceA).toBe(instanceB) // same cached object, the whole point of the cache
+
+    destroyColorProgram(context.gl, instanceA) // instance A tears down first
+
+    // instanceB's own reference must still be usable — recompiling the
+    // SAME config while B is still alive must return B's own object
+    // unchanged (not a new one), proving the cache entry was never
+    // evicted out from under the still-live reference.
+    const stillCached = compileColorProgram(context.gl, { effects: ['duotone', 'grain'] })
+    expect(stillCached).toBe(instanceB)
+
+    canvas.remove()
+  })
+
+  it('the underlying cache entry IS evicted once every reference has been released — a later compile genuinely recompiles', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+
+    const instanceA = compileColorProgram(context.gl, { effects: ['bloom'] })!
+    const instanceB = compileColorProgram(context.gl, { effects: ['bloom'] })!
+
+    destroyColorProgram(context.gl, instanceA)
+    destroyColorProgram(context.gl, instanceB) // last reference released
+
+    const recompiled = compileColorProgram(context.gl, { effects: ['bloom'] })!
+    // A genuinely NEW object — proves the stale entry was actually
+    // evicted from the cache, not left dangling for a future compile to
+    // incorrectly reuse.
+    expect(recompiled).not.toBe(instanceA)
+    expect(recompiled).not.toBe(instanceB)
+
+    canvas.remove()
+  })
+
+  it('destroying more times than compiled for a config does not throw (defensive floor at 0)', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+    const program = compileColorProgram(context.gl, { effects: [] })!
+    destroyColorProgram(context.gl, program)
+    expect(() => destroyColorProgram(context.gl, program)).not.toThrow()
+    canvas.remove()
+  })
+
+  it('does not throw for a program that was never compiled through this cache at all', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+    const foreignProgram = {
+      program: {} as WebGLProgram,
+      vao: {} as WebGLVertexArrayObject,
+      uMedia: null,
+      uLut: null,
+      uResolution: null,
+      uBloomThreshold: null,
+      uBloomIntensity: null,
+      uAberrationAmount: null,
+      uGrainAmount: null,
+      uGrainSeed: null,
+    }
+    expect(() => destroyColorProgram(context.gl, foreignProgram)).not.toThrow()
+    canvas.remove()
+  })
 })
 
 describe('drawColor', () => {

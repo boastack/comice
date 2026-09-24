@@ -29,6 +29,7 @@
 
 import { getSharedScheduler } from '../scheduler.js'
 import type { Driver, DriverSignal } from '../types.js'
+import { isWindowLeave, listenOnDocument } from './hit.js'
 
 export type PointerOptions = {
   /** Influence radius in px. Signal only reports progress: 1 within this distance of the element's bounds. Default 160. */
@@ -79,8 +80,8 @@ export function pointer(options: PointerOptions = {}): Driver {
         lastY = y
       }
 
-      function onLeaveWindow(): void {
-        inside = false
+      function onLeaveWindow(event: PointerEvent): void {
+        if (isWindowLeave(target, event)) inside = false
       }
 
       function tick(deltaMs: number): void {
@@ -113,8 +114,14 @@ export function pointer(options: PointerOptions = {}): Driver {
         }
       }
 
-      target.addEventListener('pointermove', onMove as EventListener)
-      target.addEventListener('pointerleave', onLeaveWindow)
+      // On the document, not the target: the target is usually a media
+      // element a GL plugin has hidden (see hit.ts), and `radius` reaches
+      // OUTSIDE the element's box anyway — a listener on the target only
+      // ever saw moves inside it, so the outer radius never worked either.
+      // Leaving the target is detected by the next move falling out of
+      // radius; only leaving the window needs its own event.
+      const removeMove = listenOnDocument(target, 'pointermove', onMove)
+      const removeLeave = listenOnDocument(target, 'pointerleave', onLeaveWindow)
       const unregisterFromScheduler = getSharedScheduler().add(
         (deltaMs) => tick(deltaMs),
         () => !destroyed,
@@ -122,8 +129,8 @@ export function pointer(options: PointerOptions = {}): Driver {
 
       return () => {
         destroyed = true
-        target.removeEventListener('pointermove', onMove as EventListener)
-        target.removeEventListener('pointerleave', onLeaveWindow)
+        removeMove()
+        removeLeave()
         unregisterFromScheduler()
       }
     },

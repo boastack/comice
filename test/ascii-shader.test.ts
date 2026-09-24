@@ -107,6 +107,74 @@ describe('destroyAsciiProgram', () => {
     expect(() => destroyAsciiProgram(context.gl, program)).not.toThrow()
     canvas.remove()
   })
+
+  it('a program shared by two instances survives the FIRST destroy — real bug found running many ascii() instances on one page', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+
+    const instanceA = compileAsciiProgram(context.gl, { glyphCount: 12 })!
+    const instanceB = compileAsciiProgram(context.gl, { glyphCount: 12 })!
+    expect(instanceA).toBe(instanceB) // same cached object, the whole point of the cache
+
+    destroyAsciiProgram(context.gl, instanceA) // instance A tears down first
+
+    // instanceB's own reference must still be usable — recompiling the
+    // SAME glyphCount while B is still alive must return B's own object
+    // unchanged (not a new one), proving the cache entry was never
+    // evicted out from under the still-live reference.
+    const stillCached = compileAsciiProgram(context.gl, { glyphCount: 12 })
+    expect(stillCached).toBe(instanceB)
+
+    canvas.remove()
+  })
+
+  it('the underlying cache entry IS evicted once every reference has been released — a later compile genuinely recompiles', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+
+    const instanceA = compileAsciiProgram(context.gl, { glyphCount: 8 })!
+    const instanceB = compileAsciiProgram(context.gl, { glyphCount: 8 })!
+
+    destroyAsciiProgram(context.gl, instanceA)
+    destroyAsciiProgram(context.gl, instanceB) // last reference released
+
+    const recompiled = compileAsciiProgram(context.gl, { glyphCount: 8 })!
+    // A genuinely NEW object — proves the stale entry was actually
+    // evicted from the cache, not left dangling for a future compile to
+    // incorrectly reuse.
+    expect(recompiled).not.toBe(instanceA)
+    expect(recompiled).not.toBe(instanceB)
+
+    canvas.remove()
+  })
+
+  it('destroying more times than compiled for a glyphCount does not throw (defensive floor at 0)', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+    const program = compileAsciiProgram(context.gl, { glyphCount: 16 })!
+    destroyAsciiProgram(context.gl, program)
+    expect(() => destroyAsciiProgram(context.gl, program)).not.toThrow()
+    canvas.remove()
+  })
+
+  it('does not throw for a program that was never compiled through this cache at all', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+    const foreignProgram = {
+      program: {} as WebGLProgram,
+      vao: {} as WebGLVertexArrayObject,
+      uMedia: null,
+      uAtlas: null,
+      uResolution: null,
+      uCell: null,
+    }
+    expect(() => destroyAsciiProgram(context.gl, foreignProgram)).not.toThrow()
+    canvas.remove()
+  })
 })
 
 describe('drawAscii', () => {

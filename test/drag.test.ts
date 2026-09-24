@@ -67,6 +67,44 @@ describe('drag driver', () => {
     cb?.(timestamp)
   }
 
+  it('a HIDDEN target still starts a drag from a press inside its box, and keeps tracking outside it — real bug found on a real page', () => {
+    // A GL plugin hides its target, so the real pointerdown lands on the
+    // body, and moves past the target's edge land on the body too.
+    target.style.visibility = 'hidden'
+    const signals: number[] = []
+    const detach = drag({ inertia: 0 }).attach(target, (signal) => signals.push(signal.progress))
+
+    document.body.dispatchEvent(makePointerEvent('pointerdown', 50, 50, 1, 0))
+    document.body.dispatchEvent(makePointerEvent('pointermove', 350, 50, 1, 16)) // far outside the box
+
+    expect(signals.at(-1)).toBe(1) // dragged the full width and clamped
+    detach()
+  })
+
+  it('a press outside the target\'s box does not start a drag', () => {
+    const signals: number[] = []
+    const detach = drag().attach(target, (signal) => signals.push(signal.progress))
+
+    document.body.dispatchEvent(makePointerEvent('pointerdown', 500, 500, 1, 0))
+    document.body.dispatchEvent(makePointerEvent('pointermove', 600, 500, 1, 16))
+
+    expect(signals).toEqual([])
+    detach()
+  })
+
+  it('never captures the pointer (capture retargets the follow-up click away from content inside)', () => {
+    let captured = false
+    target.setPointerCapture = () => {
+      captured = true
+    }
+    const detach = drag().attach(target, () => {})
+
+    target.dispatchEvent(makePointerEvent('pointerdown', 50, 50, 1, 0))
+
+    expect(captured).toBe(false)
+    detach()
+  })
+
   it('exposes the Driver contract: name + attach()', () => {
     const driver = drag()
     expect(driver.name).toBe('drag')

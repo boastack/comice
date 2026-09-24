@@ -77,8 +77,12 @@ describe('layout — mode: wrap', () => {
     document.body.appendChild(img)
     const handle = comice(img) as ComiceHandle
     handle.use(layout({ mode: 'wrap' }))
-    expect(img.style.shapeOutside).toContain('ellipse(')
-    expect(img.style.clipPath).toContain('ellipse(')
+    // Exact value, not toContain('ellipse('): happy-dom accepts any string
+    // here, so a substring check passed while real Chromium rejected the old
+    // single-radius `ellipse(closest-side)` outright (CSS.supports -> false)
+    // and silently dropped both properties. Two radii is the valid form.
+    expect(img.style.shapeOutside).toBe('ellipse(closest-side closest-side)')
+    expect(img.style.clipPath).toBe('ellipse(closest-side closest-side)')
     img.remove()
   })
 

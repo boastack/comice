@@ -170,6 +170,12 @@ export type DistortProgram = {
 }
 
 const PROGRAM_CACHE = new WeakMap<WebGL2RenderingContext, Map<string, DistortProgram | null>>()
+// A real bug found running many distort() instances on one real page
+// (including the hero's own distort()+color() stack, plus other distort()
+// instances elsewhere): two instances compiling the same config share ONE
+// cached program, so the first instance to tear down must not delete it
+// out from under a still-live second instance holding the same reference.
+const REFCOUNTS = new WeakMap<WebGL2RenderingContext, Map<string, number>>()
 
 function cacheKey(options: DistortShaderOptions): string {
   return `${options.effect}:${options.falloff ?? 'smooth'}`
@@ -181,9 +187,17 @@ export function compileDistortProgram(gl: WebGL2RenderingContext, options: Disto
     byConfig = new Map()
     PROGRAM_CACHE.set(gl, byConfig)
   }
+  let refcounts = REFCOUNTS.get(gl)
+  if (!refcounts) {
+    refcounts = new Map()
+    REFCOUNTS.set(gl, refcounts)
+  }
   const key = cacheKey(options)
   const cached = byConfig.get(key)
-  if (cached !== undefined) return cached
+  if (cached !== undefined) {
+    if (cached !== null) refcounts.set(key, (refcounts.get(key) ?? 0) + 1)
+    return cached
+  }
 
   const fragmentSource = buildFragmentShader(options)
   const vertexShader = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER)
@@ -245,10 +259,25 @@ export function compileDistortProgram(gl: WebGL2RenderingContext, options: Disto
     uMedia: gl.getUniformLocation(program, 'u_media'),
   }
   byConfig.set(key, result)
+  refcounts.set(key, 1) // this compile call is itself the first live reference
   return result
 }
 
 export function destroyDistortProgram(gl: WebGL2RenderingContext, distortProgram: DistortProgram): void {
+  const byConfig = PROGRAM_CACHE.get(gl)
+  const refcounts = REFCOUNTS.get(gl)
+  const key = byConfig ? [...byConfig.entries()].find(([, program]) => program === distortProgram)?.[0] : undefined
+
+  if (key !== undefined && refcounts) {
+    const remaining = (refcounts.get(key) ?? 1) - 1
+    if (remaining > 0) {
+      refcounts.set(key, remaining)
+      return // other instances still hold this program — do not delete it
+    }
+    refcounts.delete(key)
+    byConfig?.delete(key)
+  }
+
   gl.deleteProgram(distortProgram.program)
   gl.deleteVertexArray(distortProgram.vao)
 }

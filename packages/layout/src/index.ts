@@ -72,8 +72,16 @@ function isUploadableSource(el: Element): el is Uploadable {
   return el instanceof HTMLImageElement || el instanceof HTMLVideoElement
 }
 
+// Two radii, not one. `ellipse(closest-side)` (a single radius) is not valid
+// in Chromium's `ellipse()` grammar for either shape-outside or clip-path —
+// CSS.supports() returns false for it, so assigning it through `el.style`
+// is silently dropped and the text wraps a plain rectangle instead. A real
+// bug found running layout() on harness/site/: happy-dom accepts any
+// string, so the unit test passed while the real browser ignored it.
+const ELLIPSE = 'ellipse(closest-side closest-side)'
+
 function buildShapeOutside(shape: LayoutShapeKind, margin: number): string {
-  if (shape === 'ellipse') return `ellipse(closest-side)`
+  if (shape === 'ellipse') return ELLIPSE
   return `inset(-${margin}px)`
 }
 
@@ -96,7 +104,7 @@ export function layout(options: LayoutOptions): ComicePlugin {
     mediaEl.style.shapeMargin = `${margin}px`
     mediaEl.style.shapeOutside = buildShapeOutside(shape, margin)
     if (shape === 'ellipse') {
-      mediaEl.style.clipPath = 'ellipse(closest-side)'
+      mediaEl.style.clipPath = ELLIPSE
     }
   }
 

@@ -13,6 +13,7 @@
  */
 
 import type { Driver } from '../types.js'
+import { eventReachesTarget, listenOnDocument } from './hit.js'
 
 export type ClickOptions = {
   /** When true, each click alternates progress between 1 and 0 instead of
@@ -29,7 +30,8 @@ export function click(options: ClickOptions = {}): Driver {
     attach(target, onSignal) {
       let toggledOn = false
 
-      function onClick(): void {
+      function onClick(event: MouseEvent): void {
+        if (!eventReachesTarget(target, event)) return
         if (!toggle) {
           onSignal({ progress: 1 })
           return
@@ -38,11 +40,9 @@ export function click(options: ClickOptions = {}): Driver {
         onSignal({ progress: toggledOn ? 1 : 0 })
       }
 
-      target.addEventListener('click', onClick)
-
-      return () => {
-        target.removeEventListener('click', onClick)
-      }
+      // On the document, not the target: a GL plugin's hidden target never
+      // receives clicks (see hit.ts).
+      return listenOnDocument(target, 'click', onClick)
     },
   }
 }

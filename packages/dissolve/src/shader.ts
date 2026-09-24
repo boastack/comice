@@ -175,6 +175,11 @@ export type DissolveProgram = {
  * single program per context.
  */
 const PROGRAM_CACHE = new WeakMap<WebGL2RenderingContext, Map<string, DissolveProgram | null>>()
+// A real bug found running many dissolve() instances on one real page: two
+// instances compiling the same config share ONE cached program, so the
+// first instance to tear down must not delete it out from under a still-live
+// second instance holding the same reference.
+const REFCOUNTS = new WeakMap<WebGL2RenderingContext, Map<string, number>>()
 
 function cacheKey(options: DissolveShaderOptions): string {
   const { transition, noise } = options
@@ -187,9 +192,17 @@ export function compileDissolveProgram(gl: WebGL2RenderingContext, options: Diss
     byConfig = new Map()
     PROGRAM_CACHE.set(gl, byConfig)
   }
+  let refcounts = REFCOUNTS.get(gl)
+  if (!refcounts) {
+    refcounts = new Map()
+    REFCOUNTS.set(gl, refcounts)
+  }
   const key = cacheKey(options)
   const cached = byConfig.get(key)
-  if (cached !== undefined) return cached
+  if (cached !== undefined) {
+    if (cached !== null) refcounts.set(key, (refcounts.get(key) ?? 0) + 1)
+    return cached
+  }
 
   const fragmentSource = buildFragmentShader(options)
   const vertexShader = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER)
@@ -247,10 +260,25 @@ export function compileDissolveProgram(gl: WebGL2RenderingContext, options: Diss
     uTo: gl.getUniformLocation(program, 'u_to'),
   }
   byConfig.set(key, result)
+  refcounts.set(key, 1) // this compile call is itself the first live reference
   return result
 }
 
 export function destroyDissolveProgram(gl: WebGL2RenderingContext, dissolveProgram: DissolveProgram): void {
+  const byConfig = PROGRAM_CACHE.get(gl)
+  const refcounts = REFCOUNTS.get(gl)
+  const key = byConfig ? [...byConfig.entries()].find(([, program]) => program === dissolveProgram)?.[0] : undefined
+
+  if (key !== undefined && refcounts) {
+    const remaining = (refcounts.get(key) ?? 1) - 1
+    if (remaining > 0) {
+      refcounts.set(key, remaining)
+      return // other instances still hold this program — do not delete it
+    }
+    refcounts.delete(key)
+    byConfig?.delete(key)
+  }
+
   gl.deleteProgram(dissolveProgram.program)
   gl.deleteVertexArray(dissolveProgram.vao)
 }

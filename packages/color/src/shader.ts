@@ -294,6 +294,12 @@ export type ColorProgram = {
 // distort's own program cache: two color() instances on one page
 // legitimately want different compiled effect stacks.
 const PROGRAM_CACHE = new WeakMap<WebGL2RenderingContext, Map<string, ColorProgram | null>>()
+// A real bug found running many color() instances on one real page
+// (including the hero's own distort()+color() stack): two instances
+// compiling the same config share ONE cached program, so the first
+// instance to tear down must not delete it out from under a still-live
+// second instance holding the same reference.
+const REFCOUNTS = new WeakMap<WebGL2RenderingContext, Map<string, number>>()
 
 function cacheKey(options: ColorShaderOptions): string {
   const { effects, interpolate = 'oklch', lut } = options
@@ -306,9 +312,17 @@ export function compileColorProgram(gl: WebGL2RenderingContext, options: ColorSh
     byConfig = new Map()
     PROGRAM_CACHE.set(gl, byConfig)
   }
+  let refcounts = REFCOUNTS.get(gl)
+  if (!refcounts) {
+    refcounts = new Map()
+    REFCOUNTS.set(gl, refcounts)
+  }
   const key = cacheKey(options)
   const cached = byConfig.get(key)
-  if (cached !== undefined) return cached
+  if (cached !== undefined) {
+    if (cached !== null) refcounts.set(key, (refcounts.get(key) ?? 0) + 1)
+    return cached
+  }
 
   const fragmentSource = buildFragmentShader(options)
   const vertexShader = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER)
@@ -371,10 +385,25 @@ export function compileColorProgram(gl: WebGL2RenderingContext, options: ColorSh
     uGrainSeed: gl.getUniformLocation(program, 'u_grainSeed'),
   }
   byConfig.set(key, result)
+  refcounts.set(key, 1) // this compile call is itself the first live reference
   return result
 }
 
 export function destroyColorProgram(gl: WebGL2RenderingContext, colorProgram: ColorProgram): void {
+  const byConfig = PROGRAM_CACHE.get(gl)
+  const refcounts = REFCOUNTS.get(gl)
+  const key = byConfig ? [...byConfig.entries()].find(([, program]) => program === colorProgram)?.[0] : undefined
+
+  if (key !== undefined && refcounts) {
+    const remaining = (refcounts.get(key) ?? 1) - 1
+    if (remaining > 0) {
+      refcounts.set(key, remaining)
+      return // other instances still hold this program — do not delete it
+    }
+    refcounts.delete(key)
+    byConfig?.delete(key)
+  }
+
   gl.deleteProgram(colorProgram.program)
   gl.deleteVertexArray(colorProgram.vao)
 }

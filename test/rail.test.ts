@@ -93,6 +93,80 @@ describe.each(['canvas', 'strip', 'compare', 'stack', 'marquee', 'arc', 'coverfl
   })
 })
 
+describe('rail — DOM hit-testing stacking-context fix-up', () => {
+  // Real bug found running rail against a real page (see harness/site/):
+  // items with a negative z-index (stack/arc/coverflow's own depth
+  // ordering) rendered/hit-tested BEHIND their own parent once the parent
+  // had `position: relative`, unless the parent itself is given a
+  // stacking context — and items left in normal flow meant translateX()
+  // moved painted pixels but not the hit-testable box. Both are exercised
+  // here structurally: happy-dom has no real hit-testing engine, so these
+  // assert on the DOM/style state the real-browser fix depends on, not on
+  // elementFromPoint() itself.
+  afterEach(() => getSharedScheduler().stop())
+
+  it('gives a static target `position: relative` so it establishes a stacking context for its items', () => {
+    const { container } = makeCollection()
+    container.style.position = 'static'
+    const handle = comice(container) as ComiceHandle
+    handle.use(rail({ mode: 'coverflow' }))
+    expect(container.style.position).toBe('relative')
+    container.remove()
+  })
+
+  it('does not touch a target that already has a non-static position', () => {
+    const { container } = makeCollection()
+    container.style.position = 'absolute'
+    const handle = comice(container) as ComiceHandle
+    handle.use(rail({ mode: 'coverflow' }))
+    expect(container.style.position).toBe('absolute')
+    container.remove()
+  })
+
+  it('reverts the target position fix-up on teardown, but leaves a caller-set position alone', () => {
+    const { container: autoContainer } = makeCollection()
+    autoContainer.style.position = 'static'
+    const autoHandle = comice(autoContainer) as ComiceHandle
+    autoHandle.use(rail({ mode: 'stack' }))
+    expect(autoContainer.style.position).toBe('relative')
+    autoHandle.destroy()
+    expect(autoContainer.style.position).toBe('')
+    autoContainer.remove()
+
+    const { container: manualContainer } = makeCollection()
+    manualContainer.style.position = 'relative'
+    const manualHandle = comice(manualContainer) as ComiceHandle
+    manualHandle.use(rail({ mode: 'stack' }))
+    manualHandle.destroy()
+    // rail never set this itself, so teardown must not clear it either.
+    expect(manualContainer.style.position).toBe('relative')
+    manualContainer.remove()
+  })
+
+  it('every item owns position: absolute / top / left, independent of the caller\'s own layout CSS', () => {
+    const { container, items } = makeCollection()
+    const handle = comice(container) as ComiceHandle
+    handle.use(rail({ mode: 'coverflow' }))
+    items.forEach((el) => {
+      expect(el.style.position).toBe('absolute')
+      expect(el.style.top).toBe('0px')
+      expect(el.style.left).toBe('0px')
+    })
+    container.remove()
+  })
+
+  it('every item\'s on-DOM z-index is offset to stay non-negative, even though physics.ts\'s own z can go negative', () => {
+    const { container, items } = makeCollection()
+    const handle = comice(container) as ComiceHandle
+    handle.use(rail({ mode: 'coverflow' }))
+    items.forEach((el) => {
+      expect(el.style.zIndex).not.toBe('')
+      expect(Number(el.style.zIndex)).toBeGreaterThanOrEqual(0)
+    })
+    container.remove()
+  })
+})
+
 describe('rail — drag interaction', () => {
   afterEach(() => getSharedScheduler().stop())
 
@@ -194,9 +268,12 @@ describe('rail — drag interaction', () => {
     handle.use(rail({ mode: 'strip', snap: true }))
 
     container.dispatchEvent(makePointerEvent('pointerdown', 0, 1, 0))
-    // No pointermove -> zero velocity, but a real timestamp gap so dt > 0
-    // is exercised too (endDrag's own branch is independent of dt).
-    container.dispatchEvent(makePointerEvent('pointerup', 0, 1, 0))
+    // Past the capture deadzone, so this counts as a real drag (not the
+    // click short-circuit — see the dedicated 'a plain click' test below),
+    // then held still so velocity decays to zero before release.
+    container.dispatchEvent(makePointerEvent('pointermove', -40, 1, 16))
+    container.dispatchEvent(makePointerEvent('pointermove', -40, 1, 200))
+    container.dispatchEvent(makePointerEvent('pointerup', -40, 1, 216))
 
     expect(() => handle.destroy()).not.toThrow()
     container.remove()
@@ -208,8 +285,35 @@ describe('rail — drag interaction', () => {
     handle.use(rail({ mode: 'strip', snap: false }))
 
     container.dispatchEvent(makePointerEvent('pointerdown', 0, 1, 0))
-    // No pointermove at all -> zero velocity on release.
-    container.dispatchEvent(makePointerEvent('pointerup', 0, 1, 0))
+    container.dispatchEvent(makePointerEvent('pointermove', -40, 1, 16))
+    container.dispatchEvent(makePointerEvent('pointermove', -40, 1, 200))
+    container.dispatchEvent(makePointerEvent('pointerup', -40, 1, 216))
+
+    expect(() => handle.destroy()).not.toThrow()
+    container.remove()
+  })
+
+  it('a plain click (pointerdown/pointerup with no real movement) never captures the pointer or changes state — real bug found running rail against a real page with clickable item content', () => {
+    // Before this fix, EVERY pointerdown captured the pointer immediately,
+    // which retargets the browser's own synthesized `click` event to
+    // `target` itself per the Pointer Events spec — a click on a nested
+    // card never reached the card's own listener at all. Capture (and the
+    // 'dragging' state transition) must now be deferred until real
+    // movement past CAPTURE_THRESHOLD_PX is observed.
+    const { container, items } = makeCollection()
+    const handle = comice(container) as ComiceHandle
+    const plugin = rail({ mode: 'strip', snap: true })
+    handle.use(plugin)
+
+    const beforeTransform = items[0]!.style.transform
+
+    container.dispatchEvent(makePointerEvent('pointerdown', 0, 1, 0))
+    container.dispatchEvent(makePointerEvent('pointerup', 0, 1, 0)) // no pointermove at all
+
+    // No drag was ever registered as having happened — item transforms
+    // are untouched (render() is only re-invoked by onPointerMove/
+    // settleAt, neither of which this sequence should reach).
+    expect(items[0]!.style.transform).toBe(beforeTransform)
 
     expect(() => handle.destroy()).not.toThrow()
     container.remove()
@@ -361,6 +465,11 @@ describe('rail — teardown', () => {
     expect(container.querySelector('[aria-live="polite"]')).toBeNull()
     items.forEach((el) => {
       expect(el.style.transform).toBe('')
+      expect(el.style.position).toBe('')
+      expect(el.style.top).toBe('')
+      expect(el.style.left).toBe('')
+      expect(el.style.opacity).toBe('')
+      expect(el.style.zIndex).toBe('')
       expect(el.hasAttribute('tabindex')).toBe(false)
     })
   })

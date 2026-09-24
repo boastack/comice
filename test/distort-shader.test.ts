@@ -120,6 +120,77 @@ describe('destroyDistortProgram', () => {
     expect(() => destroyDistortProgram(context.gl, program)).not.toThrow()
     canvas.remove()
   })
+
+  it('a program shared by two instances survives the FIRST destroy — real bug found running many distort() instances on one page', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+
+    const instanceA = compileDistortProgram(context.gl, { effect: 'lens', falloff: 'linear' })!
+    const instanceB = compileDistortProgram(context.gl, { effect: 'lens', falloff: 'linear' })!
+    expect(instanceA).toBe(instanceB) // same cached object, the whole point of the cache
+
+    destroyDistortProgram(context.gl, instanceA) // instance A tears down first
+
+    // instanceB's own reference must still be usable — recompiling the
+    // SAME config while B is still alive must return B's own object
+    // unchanged (not a new one), proving the cache entry was never
+    // evicted out from under the still-live reference.
+    const stillCached = compileDistortProgram(context.gl, { effect: 'lens', falloff: 'linear' })
+    expect(stillCached).toBe(instanceB)
+
+    canvas.remove()
+  })
+
+  it('the underlying cache entry IS evicted once every reference has been released — a later compile genuinely recompiles', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+
+    const instanceA = compileDistortProgram(context.gl, { effect: 'bulge' })!
+    const instanceB = compileDistortProgram(context.gl, { effect: 'bulge' })!
+
+    destroyDistortProgram(context.gl, instanceA)
+    destroyDistortProgram(context.gl, instanceB) // last reference released
+
+    const recompiled = compileDistortProgram(context.gl, { effect: 'bulge' })!
+    // A genuinely NEW object — proves the stale entry was actually
+    // evicted from the cache, not left dangling for a future compile to
+    // incorrectly reuse.
+    expect(recompiled).not.toBe(instanceA)
+    expect(recompiled).not.toBe(instanceB)
+
+    canvas.remove()
+  })
+
+  it('destroying more times than compiled for a config does not throw (defensive floor at 0)', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+    const program = compileDistortProgram(context.gl, { effect: 'bulge' })!
+    destroyDistortProgram(context.gl, program)
+    expect(() => destroyDistortProgram(context.gl, program)).not.toThrow()
+    canvas.remove()
+  })
+
+  it('does not throw for a program that was never compiled through this cache at all', () => {
+    const canvas = document.createElement('canvas')
+    document.body.appendChild(canvas)
+    const context = createFakeGLContext(canvas)
+    const foreignProgram = {
+      program: {} as WebGLProgram,
+      vao: {} as WebGLVertexArrayObject,
+      uResolution: null,
+      uPointer: null,
+      uPointerActive: null,
+      uRadius: null,
+      uStrength: null,
+      uRefraction: null,
+      uMedia: null,
+    }
+    expect(() => destroyDistortProgram(context.gl, foreignProgram)).not.toThrow()
+    canvas.remove()
+  })
 })
 
 describe('drawDistort', () => {

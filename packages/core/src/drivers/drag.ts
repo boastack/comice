@@ -22,6 +22,7 @@
 
 import { getSharedScheduler } from '../scheduler.js'
 import type { Driver } from '../types.js'
+import { eventReachesTarget, listenOnDocument } from './hit.js'
 
 export type DragOptions = {
   /** Which axis progress is measured along. Default 'x'. */
@@ -95,6 +96,7 @@ export function drag(options: DragOptions = {}): Driver {
         // while already dragging is ignored rather than fighting the
         // first for control of progress.
         if (dragging) return
+        if (!eventReachesTarget(target, event)) return
         dragging = true
         stopInertia()
         pointerId = event.pointerId
@@ -103,7 +105,11 @@ export function drag(options: DragOptions = {}): Driver {
         startProgress = progress
         velocity = 0
         lastMoveTimestamp = 0
-        target.setPointerCapture?.(event.pointerId)
+        // No setPointerCapture: moves and the release are already tracked
+        // on the document, so the drag keeps following the pointer outside
+        // the target without it — and capture retargets the browser's own
+        // follow-up `click` to the capturing element, the same bug found and
+        // fixed in @comice/rail (clicks on content inside never arrived).
       }
 
       function onPointerMove(event: PointerEvent): void {
@@ -129,23 +135,23 @@ export function drag(options: DragOptions = {}): Driver {
         if (!dragging || event.pointerId !== pointerId) return
         dragging = false
         pointerId = null
-        target.releasePointerCapture?.(event.pointerId)
         if (Math.abs(velocity) >= INERTIA_SETTLE_THRESHOLD) {
           startInertia()
         }
       }
 
-      target.addEventListener('pointerdown', onPointerDown as EventListener)
-      target.addEventListener('pointermove', onPointerMove as EventListener)
-      target.addEventListener('pointerup', endDrag as EventListener)
-      target.addEventListener('pointercancel', endDrag as EventListener)
+      // On the document (see hit.ts): the target may be hidden by a GL
+      // plugin, and a drag has to keep tracking once it leaves the target.
+      const removers = [
+        listenOnDocument(target, 'pointerdown', onPointerDown),
+        listenOnDocument(target, 'pointermove', onPointerMove),
+        listenOnDocument(target, 'pointerup', endDrag),
+        listenOnDocument(target, 'pointercancel', endDrag),
+      ]
 
       return () => {
         stopInertia()
-        target.removeEventListener('pointerdown', onPointerDown as EventListener)
-        target.removeEventListener('pointermove', onPointerMove as EventListener)
-        target.removeEventListener('pointerup', endDrag as EventListener)
-        target.removeEventListener('pointercancel', endDrag as EventListener)
+        removers.forEach((remove) => remove())
       }
     },
   }

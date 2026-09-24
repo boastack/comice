@@ -119,6 +119,11 @@ export type AsciiProgram = {
 }
 
 const PROGRAM_CACHE = new WeakMap<WebGL2RenderingContext, Map<number, AsciiProgram | null>>()
+// A real bug found running many ascii() instances on one real page (hover
+// swapping ascii()/mosaic() across grid cards): two instances compiling the
+// same glyphCount share ONE cached program, so the first instance to tear
+// down must not delete it out from under the still-live second instance.
+const REFCOUNTS = new WeakMap<WebGL2RenderingContext, Map<number, number>>()
 
 export function compileAsciiProgram(gl: WebGL2RenderingContext, options: AsciiShaderOptions): AsciiProgram | null {
   let byGlyphCount = PROGRAM_CACHE.get(gl)
@@ -126,9 +131,17 @@ export function compileAsciiProgram(gl: WebGL2RenderingContext, options: AsciiSh
     byGlyphCount = new Map()
     PROGRAM_CACHE.set(gl, byGlyphCount)
   }
+  let refcounts = REFCOUNTS.get(gl)
+  if (!refcounts) {
+    refcounts = new Map()
+    REFCOUNTS.set(gl, refcounts)
+  }
   const key = Math.max(1, options.glyphCount)
   const cached = byGlyphCount.get(key)
-  if (cached !== undefined) return cached
+  if (cached !== undefined) {
+    if (cached !== null) refcounts.set(key, (refcounts.get(key) ?? 0) + 1)
+    return cached
+  }
 
   const fragmentSource = buildFragmentShader(options)
   const vertexShader = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER)
@@ -187,10 +200,25 @@ export function compileAsciiProgram(gl: WebGL2RenderingContext, options: AsciiSh
     uCell: gl.getUniformLocation(program, 'u_cell'),
   }
   byGlyphCount.set(key, result)
+  refcounts.set(key, 1) // this compile call is itself the first live reference
   return result
 }
 
 export function destroyAsciiProgram(gl: WebGL2RenderingContext, asciiProgram: AsciiProgram): void {
+  const byGlyphCount = PROGRAM_CACHE.get(gl)
+  const refcounts = REFCOUNTS.get(gl)
+  const key = byGlyphCount ? [...byGlyphCount.entries()].find(([, program]) => program === asciiProgram)?.[0] : undefined
+
+  if (key !== undefined && refcounts) {
+    const remaining = (refcounts.get(key) ?? 1) - 1
+    if (remaining > 0) {
+      refcounts.set(key, remaining)
+      return // other instances still hold this program — do not delete it
+    }
+    refcounts.delete(key)
+    byGlyphCount?.delete(key)
+  }
+
   gl.deleteProgram(asciiProgram.program)
   gl.deleteVertexArray(asciiProgram.vao)
 }

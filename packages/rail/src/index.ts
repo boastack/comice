@@ -60,6 +60,20 @@ export type RailOptions = {
 
 const AXIS_PX_PER_ITEM = 320 // matches spec's carousel-scale examples; a caller with different item sizing overrides via CSS, this only sets the drag-distance-per-item feel
 
+// A real bug found running rail against a real page with clickable item
+// content (see harness/site/): capturing the pointer on EVERY pointerdown,
+// including a plain stationary click, retargets the browser's own
+// synthesized `click` event to `target` itself per the Pointer Events spec
+// — it never reaches a clicked child (a project card's own click listener)
+// at all, since a captured pointer's events (click included) fire on the
+// capturing element regardless of what's visually under the cursor. Real
+// drag gestures still need capture (so a fast drag that leaves the rail's
+// own bounds keeps tracking), but a plain click must not trigger it. This
+// threshold — capture only once the pointer has actually moved past a
+// small deadzone — is the same "distinguish a click from a drag" pattern
+// browsers themselves use for native draggable elements.
+const CAPTURE_THRESHOLD_PX = 6
+
 /** Visually hidden but still announced — the standard sr-only pattern,
  *  never display:none (which pulls it out of the accessibility tree
  *  entirely, defeating the whole point of a live region). */
@@ -80,6 +94,7 @@ export function rail(options: RailOptions): ComicePlugin {
   let liveRegion: HTMLElement | null = null
   let unregisterInertia: (() => void) | null = null
   let destroyed = false
+  let targetPositionWasSetByThisPlugin = false
 
   let railState: RailState = 'settled'
   let position = 0 // continuous item-index-space position
@@ -91,6 +106,7 @@ export function rail(options: RailOptions): ComicePlugin {
   let dragStartClientX = 0
   let dragStartPosition = 0
   let lastMoveTimestamp = 0
+  let hasCaptured = false // true once movement has passed CAPTURE_THRESHOLD_PX and setPointerCapture was actually called
 
   function itemCount(): number {
     return itemEls.length
@@ -119,9 +135,42 @@ export function rail(options: RailOptions): ComicePlugin {
     itemEls.forEach((el, i) => {
       const t: ItemTransform = computeItemTransform(mode, i, position, itemCount())
       const px = t.offset * AXIS_PX_PER_ITEM
+      // position: absolute is what actually makes translateX() a free
+      // repositioning rather than an offset layered on top of whatever
+      // normal-flow position the caller's own CSS already gave this
+      // item (flex/grid/block) — a real bug found running this against
+      // a real page: with items left in normal flow, translateX() moves
+      // the PAINTED pixels but never the item's own hit-testable box, so
+      // clicking/hovering where an item visually renders can miss it
+      // entirely and hit a sibling or the container instead. Owned here,
+      // not left as an undocumented "the caller must know to do this"
+      // requirement — matches every other plugin in this repo owning
+      // the CSS it actually depends on rather than relying on caller
+      // convention (see setup()'s own position:relative fix-up on
+      // `target`, right above, for the matching stacking-context half
+      // of this same class of bug).
+      el.style.position = 'absolute'
+      el.style.top = '0'
+      el.style.left = '0'
       el.style.transform = `translateX(${px}px) scale(${t.scale}) rotate(${t.rotate}deg)`
       el.style.opacity = `${t.opacity}`
-      el.style.zIndex = `${Math.round(t.z)}`
+      // physics.ts's own z values (stack/arc/coverflow) are relative
+      // depth, some genuinely negative (the active item at 0, others
+      // receding to -1, -2, ...) — correct as RELATIVE ordering, but a
+      // second real bug found running this against a real page: a
+      // negative z-index child of a `position: relative` (or `absolute`/
+      // `fixed`) parent renders and HIT-TESTS behind that parent's own
+      // box, even with a fully transparent background — confirmed
+      // against a real browser with a minimal repro, not assumed. Every
+      // item behind position 0 was therefore genuinely unclickable/
+      // unhoverable once `target` itself became a positioning root
+      // (this file's own fix, right above). Offsetting by itemCount()
+      // guarantees the on-DOM z-index is never negative (the most any
+      // single item's |delta| can be is itemCount() - 1) while leaving
+      // physics.ts's own return values, and every one of its own tests,
+      // completely unchanged — this is a render-time-only translation
+      // from "relative depth" to "a real, non-negative CSS z-index."
+      el.style.zIndex = `${Math.round(t.z) + itemCount()}`
     })
     announceIfChanged()
   }
@@ -170,19 +219,30 @@ export function rail(options: RailOptions): ComicePlugin {
   function onPointerDown(event: PointerEvent): void {
     if (dragging || itemCount() === 0) return
     dragging = true
+    hasCaptured = false
     stopInertia()
-    setState('dragging')
+    // NOT setState('dragging') yet — a plain click never moves past
+    // CAPTURE_THRESHOLD_PX, and switching railState (which items'
+    // rendering/announcements key off) for what turns out to be a click,
+    // not a drag, would be an observable behavior change for a no-op
+    // gesture. State flips to 'dragging' in onPointerMove, the same place
+    // capture itself is now deferred to.
     pointerId = event.pointerId
     dragStartClientX = clientX(event)
     dragStartPosition = position
     lastMoveTimestamp = 0
     velocity = 0
-    target?.setPointerCapture?.(event.pointerId)
   }
 
   function onPointerMove(event: PointerEvent): void {
     if (!dragging || event.pointerId !== pointerId) return
     const x = clientX(event)
+    if (!hasCaptured) {
+      if (Math.abs(x - dragStartClientX) < CAPTURE_THRESHOLD_PX) return
+      hasCaptured = true
+      setState('dragging')
+      target?.setPointerCapture?.(event.pointerId)
+    }
     const deltaItems = -(x - dragStartClientX) / AXIS_PX_PER_ITEM
     const now = event.timeStamp
     const dt = lastMoveTimestamp ? now - lastMoveTimestamp : 16.67
@@ -198,6 +258,8 @@ export function rail(options: RailOptions): ComicePlugin {
     if (!dragging || event.pointerId !== pointerId) return
     dragging = false
     pointerId = null
+    if (!hasCaptured) return // never moved past the deadzone — this was a click, not a drag; nothing to settle/decay
+    hasCaptured = false
     target?.releasePointerCapture?.(event.pointerId)
     // Same threshold physics.ts's own decayVelocity() snaps to — a
     // released velocity below this would settle on the very first
@@ -242,6 +304,28 @@ export function rail(options: RailOptions): ComicePlugin {
       }
       target = rawTarget
 
+      // Every non-`strip`/`marquee` mode assigns items a NEGATIVE z-index
+      // (physics.ts's own `z: -Math.abs(d)`, the depth-ordering stack/arc/
+      // coverflow all use) — a real bug found running this against a real
+      // page (see ROADMAP.md's own T9 gap note): without `target` itself
+      // establishing a stacking context, those negative-z items paint (and
+      // hit-test) BEHIND whatever else is in the page's own stacking
+      // order at that point, not just behind `target`'s own background —
+      // on a real page, that can mean literally unclickable/unhoverable
+      // items despite being visually on top. `position: relative` (or
+      // `absolute`/`fixed`) plus this element's own implicit `z-index: 0`
+      // once it has a position value is what actually traps its
+      // children's negative z-index values inside its own paint order,
+      // matching the identical "make the ancestor a real positioning
+      // root" fix-up every other plugin's own canvas-overlay insertion
+      // already applies to ITS parent — this one applies to `target`
+      // itself instead, since rail's own items are the ones carrying
+      // z-index, not a sibling canvas.
+      if (getComputedStyle(target).position === 'static') {
+        target.style.position = 'relative'
+        targetPositionWasSetByThisPlugin = true
+      }
+
       itemEls = itemsSelector
         ? Array.from(target.querySelectorAll<HTMLElement>(itemsSelector))
         : Array.from(target.children).filter((el): el is HTMLElement => el instanceof HTMLElement)
@@ -279,11 +363,18 @@ export function rail(options: RailOptions): ComicePlugin {
         target.removeEventListener('pointercancel', endDrag as EventListener)
       }
       itemEls.forEach((el) => {
+        el.style.position = ''
+        el.style.top = ''
+        el.style.left = ''
         el.style.transform = ''
         el.style.opacity = ''
         el.style.zIndex = ''
         el.removeAttribute('tabindex')
       })
+      if (target && targetPositionWasSetByThisPlugin) {
+        target.style.position = ''
+        targetPositionWasSetByThisPlugin = false
+      }
       liveRegion?.remove()
       target = null
       itemEls = []
