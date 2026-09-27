@@ -261,6 +261,65 @@ describe('distort — with a real WebGL2 context (faked)', () => {
       expect(() => driver.emit({ state: 'idle', progress: 0, pointer: { x: 0.1, y: 0.1 } })).not.toThrow()
     })
 
+    // The routing tests above pass normalized-looking values through a fake
+    // driver — but the REAL pointer() driver emits CSS px from the target's
+    // top-left (y down), and distort used to hand those px straight to a
+    // shader expecting -1..1 (y up): the bulge sat hundreds of units
+    // off-image and never showed in a real browser. These assert on what
+    // actually reaches the u_pointer uniform.
+    function captureUPointer(): Array<[number, number]> {
+      const calls: Array<[number, number]> = []
+      ;(HTMLCanvasElement.prototype as any).getContext = function (type: string) {
+        if (type !== 'webgl2') return originalGetContext.call(this, type)
+        const gl = createFakeGL2()
+        const uniform2f = gl.uniform2f.bind(gl)
+        gl.uniform2f = (loc: WebGLUniformLocation | null, x: number, y: number) => {
+          if ((loc as unknown as { __id: string } | null)?.__id === 'u_pointer') calls.push([x, y])
+          uniform2f(loc, x, y)
+        }
+        return gl
+      }
+      return calls
+    }
+    function setRect(el: Element, width: number, height: number): void {
+      Object.defineProperty(el, 'getBoundingClientRect', {
+        value: () => ({ left: 0, top: 0, width, height, right: width, bottom: height, x: 0, y: 0, toJSON() {} }),
+        configurable: true,
+      })
+    }
+
+    it('converts pointer() px (y down) into the shader\'s -1..1 space (y up)', () => {
+      const calls = captureUPointer()
+      setRect(img, 400, 200)
+      const driver = fakeDriver()
+      handle = comice(img) as ComiceHandle
+      handle.use(distort({ effect: 'bulge' }))
+      handle.driver(driver)
+
+      driver.emit({ progress: 1, pointer: { x: 300, y: 50 } }) // 3/4 across, 1/4 down
+
+      const [x, y] = calls.at(-1)!
+      expect(x).toBeCloseTo(0.5)
+      expect(y).toBeCloseTo(0.5) // 1/4 down from the top is +0.5 in y-up space
+
+      driver.emit({ progress: 1, pointer: { x: 0, y: 200 } }) // bottom-left corner
+      expect(calls.at(-1)![0]).toBeCloseTo(-1)
+      expect(calls.at(-1)![1]).toBeCloseTo(-1)
+    })
+
+    it('a zero-size target maps the pointer to the centre instead of dividing by zero', () => {
+      const calls = captureUPointer()
+      setRect(img, 0, 0)
+      const driver = fakeDriver()
+      handle = comice(img) as ComiceHandle
+      handle.use(distort({ effect: 'bulge' }))
+      handle.driver(driver)
+
+      driver.emit({ progress: 1, pointer: { x: 10, y: 10 } })
+
+      expect(calls.at(-1)).toEqual([0, 0])
+    })
+
     it('a signal with no pointer field leaves display.x/y unchanged (partial merge)', () => {
       const driver = fakeDriver()
       handle = comice(img) as ComiceHandle

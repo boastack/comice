@@ -163,8 +163,14 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
       // pointer()'s own progress signal (1 inside radius, 0 outside) is
       // what pointerActive reads, not a separate hit-test of its own.
       unsubscribe = instance.on('*', (snapshot) => {
-        pointerX = snapshot.display.x
-        pointerY = snapshot.display.y
+        // pointer() reports CSS px from the target's top-left, y down; the
+        // shader's u_pointer is -1..1 in the quad's own space, y UP (uv
+        // v=0 is the bottom). Passing px straight through put the field
+        // hundreds of units off-image, so the bulge never showed — hidden
+        // until pointer() could deliver events at all.
+        const rect = target!.getBoundingClientRect()
+        pointerX = rect.width > 0 ? (snapshot.display.x / rect.width) * 2 - 1 : 0
+        pointerY = rect.height > 0 ? 1 - (snapshot.display.y / rect.height) * 2 : 0
         pointerActive = snapshot.state === 'active' || snapshot.state === 'entering'
         renderFrame()
       })

@@ -82,17 +82,28 @@ function buildFragmentShader(options: DistortShaderOptions): string {
   // bulge: pushes samples radially outward from the pointer, strongest
   // at the center, fading to none at the field's edge — the classic
   // "poke a soft surface" distortion.
-  vec2 toPointer = uv - u_pointer * 0.5 + 0.5;
+  //
+  // toPointer is this pixel minus the pointer's position IN UV SPACE —
+  // parenthesized. Unparenthesized, \`uv - u_pointer * 0.5 + 0.5\` ADDS 0.5
+  // instead of subtracting it, which put the field's centre at
+  // uv - (0.5, 0.5) relative to the real pointer: entirely off-image, so
+  // no pixel was ever close enough to move. Same fix in lens and glass.
+  vec2 toPointer = uv - (u_pointer * 0.5 + 0.5);
   float d = length(toPointer * vec2(aspect, 1.0)) / (u_radius);
   float field = (${fieldExpr}) * u_strength * u_pointerActive;
   vec2 dir = normalize(toPointer * vec2(aspect, 1.0) + 0.00001);
-  vec2 offset = -dir * field * 0.12;
+  // Ramp the push in from zero over the inner third of the radius. A unit
+  // direction times full field strength is discontinuous AT the pointer
+  // (the direction flips from one side to the other), which tore a pinched
+  // black hole into the image exactly under the cursor.
+  float ramp = smoothstep(0.0, 0.35, d);
+  vec2 offset = -dir * field * ramp * 0.12;
   outColor = texture(u_media, clamp(uv + offset, 0.0, 1.0));`
       : effect === 'lens'
         ? `
   // lens: samples pull INWARD toward the pointer (the opposite sign of
   // bulge's push), reading as local magnification rather than a poke.
-  vec2 toPointer = uv - u_pointer * 0.5 + 0.5;
+  vec2 toPointer = uv - (u_pointer * 0.5 + 0.5);
   float d = length(toPointer * vec2(aspect, 1.0)) / (u_radius);
   float field = (${fieldExpr}) * u_strength * u_pointerActive;
   vec2 offset = toPointer * field * 0.5;
@@ -109,7 +120,7 @@ function buildFragmentShader(options: DistortShaderOptions): string {
   // 'd' (distance from the pointer) stands in for 'time' here so the
   // refraction pattern is spatially stable under a static cursor rather
   // than a flat, unvarying offset (what a constant time input would give).
-  vec2 toPointer = uv - u_pointer * 0.5 + 0.5;
+  vec2 toPointer = uv - (u_pointer * 0.5 + 0.5);
   float d = length(toPointer * vec2(aspect, 1.0)) / (u_radius);
   float field = (${fieldExpr}) * u_strength * u_pointerActive;
   vec2 refraction = displacementOffset(uv, d, field * (0.03 + u_refraction * 0.05));

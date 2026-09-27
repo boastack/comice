@@ -79,6 +79,15 @@ export function createFakeGL2(
   // actually parsing GLSL.
   let allShaderSource = ''
 
+  // UNPACK_FLIP_Y_WEBGL is sticky context state, and every media/mask
+  // upload must happen with it ON (and leave it OFF after) — the real bug
+  // being guarded: without it every GL plugin drew media upside down, which
+  // a fake that ignores pixelStorei could never have shown. __uploadFlips
+  // records the flag's value at the moment of each texImage2D, and
+  // __flipY its current value, so a test can assert both.
+  let flipY = false
+  const uploadFlips: boolean[] = []
+
   function isAttributeReferencedOutsideItsDeclaration(name: string): boolean {
     const declarationLine = new RegExp(`^\\s*in\\s+\\S+\\s+${name}\\s*;`, 'm')
     const withoutDeclarations = allShaderSource.replace(declarationLine, '')
@@ -117,6 +126,12 @@ export function createFakeGL2(
     RED: 27,
     RGBA8: 28,
     UNPACK_ALIGNMENT: 29,
+    UNPACK_FLIP_Y_WEBGL: 30,
+
+    get __flipY() {
+      return flipY
+    },
+    __uploadFlips: uploadFlips,
 
     // residency.ts only ever queries MAX_TEXTURE_IMAGE_UNITS through this
     // fake — no branch for other pnames, since nothing in this package
@@ -128,7 +143,9 @@ export function createFakeGL2(
       return options.maxTextureUnits ?? 16
     },
     viewport(_x: number, _y: number, _width: number, _height: number) {},
-    pixelStorei(_pname: number, _param: number) {},
+    pixelStorei(pname: number, param: number | boolean) {
+      if (pname === 30) flipY = !!param
+    },
 
     createShader(_type: number) {
       return { __id: `shader${objectId++}` } as unknown as WebGLShader
@@ -205,6 +222,7 @@ export function createFakeGL2(
     bindTexture(_target: number, _texture: WebGLTexture | null) {},
     texParameteri(_target: number, _pname: number, _param: number) {},
     texImage2D(..._args: unknown[]) {
+      uploadFlips.push(flipY)
       if (options.failTexImage) throw new Error('tainted canvas (fake)')
     },
 

@@ -1,8 +1,14 @@
 /**
  * comice/core/drivers/pointer
  * ─────────────────────────────────────────────────────────────────────────────
- * Section 04: { radius, lag }. Raw pointer position and velocity, normalised
- * against the element's bounds.
+ * Section 04: { radius, lag }. Raw pointer position and velocity, relative
+ * to the element's bounds: `pointer` is in CSS px from the element's
+ * top-left corner (x right, y DOWN — DOM convention, and it can fall
+ * outside 0..width/height within `radius`), `velocity` in px/s. A GL
+ * consumer converts to its own space itself (see distort's index.ts).
+ * This header previously said "normalised", which the code never did —
+ * distort's shader was written against that description and received
+ * pixels, so its field sat far off-image and never showed.
  *
  * Unlike hover, this driver never leaves the 'idle' <-> 'entering' binary —
  * it reports continuous position and velocity every frame the pointer is

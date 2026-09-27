@@ -224,6 +224,14 @@ export function createPlane(context: GLContext | null, source: PlaneSource): Pla
     if (destroyed || !texture) return
     if (!isUploadableNow(source)) return
     configureTexture()
+    // Flip on upload. A DOM image's first row is its TOP, but every shader
+    // in this repo samples with the full-screen quad's v_uv, whose v=0 is
+    // the BOTTOM of the canvas (clip-space y=-1). Without this, every GL
+    // plugin (distort, color, mosaic, ascii, dissolve, morph) drew media
+    // upside down — found on harness/site/ with an asymmetric test image;
+    // the demo's symmetric gradients and the fake-GL unit tests hid it.
+    // Reset right after so no other upload on this shared context inherits it.
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true)
     try {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source)
       hasUploadedOnce = true
@@ -232,6 +240,8 @@ export function createPlane(context: GLContext | null, source: PlaneSource): Pla
       // texImage2D throws — degrade, never disappear: the plane simply
       // never gets a texture, same as the no-WebGL2 path above, rather
       // than crashing the instance that owns it.
+    } finally {
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
     }
   }
 

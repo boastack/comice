@@ -111,6 +111,43 @@ describe('compileDistortProgram', () => {
   })
 })
 
+describe('fragment shader field math — real bugs found in a real browser', () => {
+  // The fake GL context can't rasterize, so these pin the GLSL source
+  // itself. Found on harness/site/: with correct uniforms reaching the
+  // shader, stripes behind the pointer still never bent.
+  function fragmentSourceFor(effect: 'bulge' | 'lens' | 'glass'): string {
+    const canvas = document.createElement('canvas')
+    const context = createFakeGLContext(canvas)
+    const sources: string[] = []
+    const shaderSource = context.gl.shaderSource.bind(context.gl)
+    context.gl.shaderSource = (shader: WebGLShader, source: string) => {
+      sources.push(source)
+      shaderSource(shader, source)
+    }
+    // A distinct falloff per call so the per-config program cache can't
+    // hand back an earlier compile and skip shaderSource() entirely.
+    compileDistortProgram(context.gl, { effect, falloff: 'exp' })
+    return sources.find((s) => s.includes('u_pointer')) ?? ''
+  }
+
+  it.each(['bulge', 'lens', 'glass'] as const)('%s measures from the pointer\'s uv position (parenthesized), not uv + 0.5', (effect) => {
+    // `uv - u_pointer * 0.5 + 0.5` ADDS 0.5: the field centre landed at
+    // uv - (0.5, 0.5) relative to the pointer, entirely off-image.
+    const source = fragmentSourceFor(effect)
+    expect(source).toContain('vec2 toPointer = uv - (u_pointer * 0.5 + 0.5);')
+    // Assignment form only: bulge's explanatory GLSL comment quotes the old expression.
+    expect(source).not.toContain('= uv - u_pointer * 0.5 + 0.5')
+  })
+
+  it('bulge ramps its push in from zero at the pointer (no tear under the cursor)', () => {
+    // A unit direction times full field strength is discontinuous exactly
+    // at the pointer and tore a pinched black hole into the image there.
+    const source = fragmentSourceFor('bulge')
+    expect(source).toContain('float ramp = smoothstep(0.0, 0.35, d);')
+    expect(source).toContain('-dir * field * ramp')
+  })
+})
+
 describe('destroyDistortProgram', () => {
   it('does not throw', () => {
     const canvas = document.createElement('canvas')

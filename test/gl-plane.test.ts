@@ -70,6 +70,27 @@ describe('createPlane — image source, real context', () => {
     expect(() => context.destroy()).not.toThrow()
   })
 
+  it('uploads with UNPACK_FLIP_Y_WEBGL on, and leaves it off afterward — real bug: media rendered upside down', () => {
+    // A DOM image's first row is its top; every shader samples with the
+    // quad's v_uv, whose v=0 is the canvas BOTTOM. Uploading unflipped drew
+    // every GL plugin's media upside down (seen in Chromium on harness/site/).
+    img = readyImage()
+    document.body.appendChild(img)
+    const context = createFakeGLContext(canvas)
+    createPlane(context, img)
+    const gl = context.gl as unknown as { __uploadFlips: boolean[]; __flipY: boolean }
+    expect(gl.__uploadFlips).toEqual([true])
+    expect(gl.__flipY).toBe(false) // reset, so no other upload on the shared context inherits it
+  })
+
+  it('resets UNPACK_FLIP_Y_WEBGL even when the upload throws (tainted canvas)', () => {
+    img = readyImage()
+    document.body.appendChild(img)
+    const context = createFakeGLContext(canvas, { failTexImage: true })
+    createPlane(context, img)
+    expect((context.gl as unknown as { __flipY: boolean }).__flipY).toBe(false)
+  })
+
   it('texture stays null until the image becomes ready', async () => {
     img = notReadyImage()
     document.body.appendChild(img)

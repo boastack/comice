@@ -125,6 +125,15 @@ describe('createRasterizedMask — with a real 2D context (faked)', () => {
     }
   })
 
+  it('uploads the raster flipped (matching plane.ts) and resets the flag — or a mask lands upside down relative to its media', () => {
+    const context = createFakeGLContext(canvas)
+    const mask = createRasterizedMask(context)
+    mask.rasterize({ type: 'shape', path: 'M0 0L1 1Z' }, 200, 150)
+    const gl = context.gl as unknown as { __uploadFlips: boolean[]; __flipY: boolean }
+    expect(gl.__uploadFlips.at(-1)).toBe(true) // the raster upload (earlier entries are empty-storage allocation)
+    expect(gl.__flipY).toBe(false)
+  })
+
   it('accepts a pre-built Path2D as well as a path string', () => {
     const context = createFakeGLContext(canvas)
     const mask = createRasterizedMask(context)
@@ -215,6 +224,10 @@ describe('createRasterizedMask — rasterize({ sdf: true })', () => {
 
     expect(mask.field).not.toBeNull()
     expect(mask.field?.kind).toBe('texture')
+    // The SDF bytes come from getImageData top-down, so they need the same flip.
+    const gl = context.gl as unknown as { __uploadFlips: boolean[]; __flipY: boolean }
+    expect(gl.__uploadFlips.at(-1)).toBe(true)
+    expect(gl.__flipY).toBe(false)
   })
 
   it('calls getImageData() to read back the rasterized pixels for the bake (unlike the coverage path, which never reads pixels back)', () => {

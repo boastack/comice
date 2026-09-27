@@ -368,12 +368,20 @@ export function createRasterizedMask(context: GLContext | null): RasterizedMask 
 
     gl.bindTexture(gl.TEXTURE_2D, target.texture)
 
+    // Flipped on upload for the same reason plane.ts flips media: the
+    // raster's first row is its TOP, the quad's v=0 is the BOTTOM. Both
+    // paths below (canvas source and raw SDF bytes, whose rows come from
+    // getImageData top-down) need it, and mask and media must agree or a
+    // morph mask lands upside down relative to the image it cuts.
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true)
+
     if (!sdf) {
       // texImage2D from a <canvas> source reads its alpha into every
       // requested channel per the WebGL spec's format conversion — RED
       // here pulls the canvas's own alpha channel in as the mask's one
       // channel, since the raster above is drawn as opaque-white-on-transparent.
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, gl.RED, gl.UNSIGNED_BYTE, raster)
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
       return
     }
 
@@ -394,6 +402,7 @@ export function createRasterizedMask(context: GLContext | null): RasterizedMask 
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, width, height, 0, gl.RED, gl.UNSIGNED_BYTE, encoded)
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4) // restore the default for whatever the next upload assumes
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
   }
 
   return {
