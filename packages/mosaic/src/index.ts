@@ -26,7 +26,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
-import { createGLContext, createPlane, getResidencyPool, type GLContext, type Plane } from 'comice/gl'
+import { createGLContext, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type Plane } from 'comice/gl'
 import { getSharedScheduler } from 'comice/scheduler'
 import { compileMosaicProgram, destroyMosaicProgram, drawMosaic, type MosaicFill, type MosaicProgram } from './shader.js'
 
@@ -73,7 +73,7 @@ export function mosaic(options: MosaicOptions): ComicePlugin {
   let mosaicProgram: MosaicProgram | null = null
   let unregisterFromScheduler: (() => void) | null = null
   let resizeObserver: ResizeObserver | null = null
-  let originalVisibility = ''
+  let mount: CanvasMount | null = null
   let destroyed = false
   let cellSize = cell
 
@@ -101,19 +101,12 @@ export function mosaic(options: MosaicOptions): ComicePlugin {
       }
       target = rawTarget
 
-      originalVisibility = target.style.visibility
-      target.style.visibility = 'hidden'
-
-      const parent = target.parentElement
-      if (parent && getComputedStyle(parent).position === 'static') {
-        parent.style.position = 'relative'
-      }
+      // No WebGL2: nothing mounted, original media untouched. See
+      // mountCanvas() for sizing, hiding/restoring, and the one-GL-effect-
+      // per-element rule.
       glContext = createGLContext(target)
       if (glContext) {
-        target.insertAdjacentElement('afterend', glContext.canvas)
-      }
-      if (!glContext) {
-        target.style.visibility = originalVisibility
+        mount = mountCanvas(glContext, target, { owner: 'mosaic', hideTarget: true })
       }
 
       plane = createPlane(glContext, target)
@@ -126,6 +119,9 @@ export function mosaic(options: MosaicOptions): ComicePlugin {
           paletteCount: paletteCount(palette),
           sourceCount: sources.length,
         })
+        // A failed compile would otherwise leave the media hidden behind an
+        // empty canvas; show the original instead.
+        if (!mosaicProgram) mount?.release()
       }
 
       resizeObserver = new ResizeObserver(() => renderFrame())
@@ -146,8 +142,8 @@ export function mosaic(options: MosaicOptions): ComicePlugin {
       if (glContext && mosaicProgram) destroyMosaicProgram(glContext.gl, mosaicProgram)
       plane?.destroy()
       sourcePlanes.forEach((p) => p.destroy())
-      glContext?.canvas.remove()
-      if (target) target.style.visibility = originalVisibility
+      mount?.release()
+      mount = null
       target = null
       glContext = null
       plane = null

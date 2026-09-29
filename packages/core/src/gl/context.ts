@@ -30,7 +30,8 @@ export type GLContext = {
   /**
    * Resizes the canvas's backing store (`canvas.width`/`height`, the
    * actual pixel buffer WebGL renders into — distinct from its CSS
-   * width/height, which are already 100%/100% of `root`) to match the
+   * width/height, which mountCanvas() keeps equal to its target's own
+   * box, re-synced here first) to match the
    * canvas's current CSS box times the §13 DPR cap (see
    * gl/residency.ts's `effectiveDPR()` — capped at 2, never the raw
    * `devicePixelRatio`, so a 3x display doesn't triple texture memory for
@@ -45,6 +46,16 @@ export type GLContext = {
 }
 
 const contextsByRoot = new WeakMap<Element, GLContext>()
+
+/** Which plugin's canvas is currently on the page for a context, and over
+ *  which element — at most one per context. See mountCanvas(). */
+type MountState = {
+  target: HTMLElement
+  owner: string
+  hid: boolean
+  originalVisibility: string
+}
+const mountsByCanvas = new WeakMap<HTMLCanvasElement, MountState>()
 
 /**
  * Creates (or reuses) the one WebGL2 context for `root` — the element every
@@ -118,6 +129,10 @@ export function createGLContext(
     gl,
     resizeToDisplay(): void {
       if (destroyed) return
+      // Every drawing plugin calls this each frame, so it is also where the
+      // canvas follows its target's box when the layout around it moves.
+      const mount = mountsByCanvas.get(canvas)
+      if (mount) syncCanvasBox(canvas, mount.target)
       const dpr = effectiveDPR()
       const targetWidth = Math.max(1, Math.round(canvas.clientWidth * dpr))
       const targetHeight = Math.max(1, Math.round(canvas.clientHeight * dpr))
@@ -143,4 +158,100 @@ export function createGLContext(
 /** True if `root` currently has a live GLContext registered against it. */
 export function hasGLContext(root: Element): boolean {
   return contextsByRoot.has(root)
+}
+
+/** Positions the canvas exactly over `target`'s own layout box. offset*
+ *  values are relative to the offsetParent, which mountCanvas() makes the
+ *  shared parent — the same containing block the absolutely-positioned
+ *  canvas sibling resolves against. Offsets (not getBoundingClientRect)
+ *  ignore transforms, so a canvas inside a transformed ancestor (a rail
+ *  card) moves with it instead of double-applying the transform. Only
+ *  writes when something changed, since this runs every frame. */
+function syncCanvasBox(canvas: HTMLCanvasElement, target: HTMLElement): void {
+  const style = canvas.style
+  const left = `${target.offsetLeft}px`
+  const top = `${target.offsetTop}px`
+  const width = `${target.offsetWidth}px`
+  const height = `${target.offsetHeight}px`
+  if (style.left !== left) style.left = left
+  if (style.top !== top) style.top = top
+  if (style.width !== width) style.width = width
+  if (style.height !== height) style.height = height
+}
+
+export type CanvasMount = {
+  /** Removes the canvas and restores the target's own visibility. Idempotent. */
+  release(): void
+}
+
+/**
+ * Puts `context`'s canvas on the page over `target` — the one place every
+ * drawing plugin (distort, color, mosaic, ascii, morph, dissolve, particles)
+ * does this, instead of each copying it.
+ *
+ * Real bugs this replaces, all found on harness/site/ in Chromium:
+ *
+ *  - SIZE: each plugin sized the canvas to 100% of the target's PARENT. For
+ *    a container target (dissolve's stage, particles' target) that covered
+ *    the whole section, heading and body text included. The canvas now
+ *    matches the target's own box and follows it in resizeToDisplay().
+ *
+ *  - SHARED TEARDOWN: the context (and its one canvas) is shared per
+ *    element, but every plugin removed the canvas on teardown and restored
+ *    whatever visibility IT had saved — for the second plugin on an
+ *    element, that was the first one's `hidden`. Tearing down any one of
+ *    them blanked the element or pulled the canvas out from under the rest.
+ *    Now one mount owns the canvas and the target's original visibility.
+ *
+ *  - STACKING: two drawing plugins on one element never combined — each
+ *    draws a full-canvas quad from the raw media, so the last to draw
+ *    replaced the other entirely (proven by screenshot hashes). Rather than
+ *    silently discard an effect, a second mount THROWS, before touching the
+ *    DOM, naming both plugins. Real compositing is a separate project.
+ *
+ * `hideTarget`: media plugins hide the element the canvas replaces;
+ * container plugins (dissolve, particles) draw over a target that has no
+ * content of its own to hide.
+ */
+export function mountCanvas(
+  context: GLContext,
+  target: HTMLElement,
+  options: { owner: string; hideTarget: boolean },
+): CanvasMount {
+  const { canvas } = context
+  const existing = mountsByCanvas.get(canvas)
+  if (existing) {
+    throw new Error(
+      `[comice] ${options.owner}() can't draw on this element: ${existing.owner}() already does. ` +
+        'Two shader effects on one element do not combine — the last to draw would replace the other. ' +
+        'Use one GL effect per element (wrap the media and put the second effect on the wrapper).',
+    )
+  }
+
+  const parent = target.parentElement
+  if (parent && getComputedStyle(parent).position === 'static') {
+    parent.style.position = 'relative'
+  }
+
+  const state: MountState = {
+    target,
+    owner: options.owner,
+    hid: options.hideTarget,
+    originalVisibility: target.style.visibility,
+  }
+  if (options.hideTarget) target.style.visibility = 'hidden'
+  target.insertAdjacentElement('afterend', canvas)
+  syncCanvasBox(canvas, target)
+  mountsByCanvas.set(canvas, state)
+
+  let released = false
+  return {
+    release(): void {
+      if (released) return
+      released = true
+      canvas.remove()
+      if (state.hid) target.style.visibility = state.originalVisibility
+      mountsByCanvas.delete(canvas)
+    },
+  }
 }

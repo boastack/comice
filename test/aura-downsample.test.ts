@@ -25,6 +25,26 @@ describe('createDownsampler', () => {
     expect(result!.pixels.length).toBe(32 * 32 * 4)
   })
 
+  it('sample() restores the full-canvas viewport afterward — real bug: a plugin sharing the context drew into a 32x32 corner', () => {
+    // The GL context is shared per element. aura sampling an element that
+    // another plugin draws on (the stress page's hero) left the 32x32
+    // downsample viewport set, and resizeToDisplay() only resets the
+    // viewport when the canvas size changes — so the other plugin's next
+    // frames rendered into the corner.
+    const gl = createFakeGL2()
+    Object.defineProperty(gl, 'drawingBufferWidth', { value: 1200, configurable: true })
+    Object.defineProperty(gl, 'drawingBufferHeight', { value: 630, configurable: true })
+    const viewports: number[][] = []
+    gl.viewport = (x: number, y: number, w: number, h: number) => {
+      viewports.push([x, y, w, h])
+    }
+
+    createDownsampler(gl).sample(fakeTexture('media'))
+
+    expect(viewports).toContainEqual([0, 0, 32, 32]) // the downsample pass itself
+    expect(viewports.at(-1)).toEqual([0, 0, 1200, 630]) // then back to the full canvas
+  })
+
   it('sample() does not throw across repeated calls (reuses its own framebuffer/texture)', () => {
     const gl = createFakeGL2()
     const downsampler = createDownsampler(gl)

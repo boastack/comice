@@ -38,6 +38,8 @@ import {
   createPlane,
   createRasterizedMask,
   getResidencyPool,
+  mountCanvas,
+  type CanvasMount,
   type GLContext,
   type Plane,
   type RasterizedMask,
@@ -143,7 +145,7 @@ export function morph(options: MorphOptions): ComicePlugin {
   let unsubscribe: (() => void) | null = null
   let unregisterFromScheduler: (() => void) | null = null
   let resizeObserver: ResizeObserver | null = null
-  let originalVisibility = ''
+  let mount: CanvasMount | null = null
   let currentProgress = 0
   let destroyed = false
 
@@ -221,36 +223,17 @@ export function morph(options: MorphOptions): ComicePlugin {
       // rendering frames to its own backing store for texImage2D to read
       // anything meaningful) but is not itself painted by the browser —
       // the canvas below is what actually appears. visibility: hidden,
-      // never display: none, for exactly that reason.
-      originalVisibility = target.style.visibility
-      target.style.visibility = 'hidden'
-
-      // createGLContext() deliberately leaves DOM insertion to its caller
-      // (see gl/context.ts) — this is that insertion. The target itself
-      // is the root: its own layout box is what the canvas should cover,
-      // and per gl/context.ts's contract each distinct root gets its own
-      // canvas/context, so two morph instances on two different elements
-      // never share a canvas.
-      const parent = target.parentElement
-      if (parent && getComputedStyle(parent).position === 'static') {
-        parent.style.position = 'relative'
-      }
+      // never display: none, for exactly that reason. mountCanvas() does
+      // the hiding, sizes the canvas to the target's own box, restores both
+      // on release, and refuses a second GL effect on the same element.
+      //
+      // Degrade-never-disappear: a null glContext (no WebGL2) mounts
+      // nothing, so the original media stays painted by the browser — an
+      // SDF/liquid shader has no CSS equivalent to fall back to, and the
+      // untouched media beats a blank space.
       glContext = createGLContext(target)
       if (glContext) {
-        target.insertAdjacentElement('afterend', glContext.canvas)
-      }
-      // Degrade-never-disappear: a null glContext (no WebGL2) leaves
-      // renderFrame()'s early-return guard doing nothing every frame — the
-      // target stays visibility: hidden with no canvas replacing it,
-      // which is a real regression from "the browser paints it anyway"
-      // reveal's own no-op path gets for free. This is morph's own honest
-      // gap: an SDF/liquid shader has no CSS equivalent to degrade to,
-      // unlike reveal's clip-path/transform effects. Restoring visibility
-      // on a failed context is the least-bad fallback available without a
-      // CSS-only stand-in shader, so at minimum the original media is
-      // still seen rather than a blank space.
-      if (!glContext) {
-        target.style.visibility = originalVisibility
+        mount = mountCanvas(glContext, target, { owner: 'morph', hideTarget: true })
       }
 
       plane = createPlane(glContext, target)
@@ -266,6 +249,9 @@ export function morph(options: MorphOptions): ComicePlugin {
           recomposeEnd,
           thread,
         })
+        // A failed compile would otherwise leave the media hidden behind an
+        // empty canvas; show the original instead.
+        if (!morphProgram) mount?.release()
       }
 
       if (operation === 'mask') {
@@ -316,8 +302,8 @@ export function morph(options: MorphOptions): ComicePlugin {
       if (glContext && morphProgram) destroyMorphProgram(glContext.gl, morphProgram)
       plane?.destroy()
       rasterizedMask?.destroy()
-      glContext?.canvas.remove()
-      if (target) target.style.visibility = originalVisibility
+      mount?.release()
+      mount = null
       target = null
       glContext = null
       plane = null

@@ -44,7 +44,9 @@
   #hero-caption p { color: #ccc; margin: 6px 0 0; }
 
   /* Project grid: rail (coverflow) + mosaic/ascii hover swap + seed placeholders */
-  .rail-track { display: flex; gap: 20px; padding: 20px 0; height: 280px; }
+  /* overflow-x: clip — coverflow translates items up to ~1100px sideways;
+     unclipped, they widened the whole page (1380px wide on a phone). */
+  .rail-track { display: flex; gap: 20px; padding: 20px 0; height: 280px; overflow-x: clip; }
   .rail-track > div { flex: 0 0 260px; width: 260px; }
   .project-card { position: relative; cursor: pointer; }
   .project-card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 8px; display: block; background: #151515; }

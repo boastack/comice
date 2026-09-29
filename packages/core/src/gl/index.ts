@@ -6,7 +6,7 @@
  * WebGL2 context creation on a page that never uses it, same discipline as
  * drivers/audio.ts staying out of the main bundle.
  */
-export { createGLContext, hasGLContext, effectiveDPR, type GLContext } from './context.js'
+export { createGLContext, hasGLContext, effectiveDPR, mountCanvas, type GLContext, type CanvasMount } from './context.js'
 export { createPlane, drawPlane, type Plane, type PlaneSource } from './plane.js'
 export { waitForMediaReady } from './ready.js'
 export { getResidencyPool, type ResidencyPool } from './residency.js'

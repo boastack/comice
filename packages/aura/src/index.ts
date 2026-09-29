@@ -155,16 +155,13 @@ export function aura(options: AuraOptions = {}): ComicePlugin {
       }
       target = rawTarget
 
-      // A private, off-screen context — createGLContext() requires its
-      // root to be connected to the document (context.ts's own contract:
-      // "Returns null... if root is not attached to a document"), so this
-      // is keyed off the REAL target rather than a detached canvas (which
-      // would make createGLContext() unconditionally return null, even in
-      // a real browser). Per the file header, aura's own canvas is simply
-      // never INSERTED anywhere — glContext.canvas is created but stays
-      // detached from the DOM, so nothing renders visibly; this is what
-      // "never re-renders the media" actually means in practice, not a
-      // separate offscreen root.
+      // Keyed off the REAL target — createGLContext() returns null for a
+      // detached root. aura never mounts the canvas (it only reads), BUT
+      // the context is shared per element: when another plugin already
+      // draws on this target, this is that plugin's context and its canvas
+      // is on the page. So aura must never remove the canvas on teardown
+      // (it used to, blanking the other plugin — e.g. the stress page's
+      // hero), and must restore GL state it changes (see downsample.ts).
       glContext = createGLContext(target)
       plane = createPlane(glContext, target)
       if (glContext) {
@@ -197,7 +194,6 @@ export function aura(options: AuraOptions = {}): ComicePlugin {
       unregisterFromScheduler?.()
       downsampler?.destroy()
       plane?.destroy()
-      glContext?.canvas.remove()
       glowEl?.remove()
       if (target && cssVariables) {
         target.style.removeProperty('--aura-color')

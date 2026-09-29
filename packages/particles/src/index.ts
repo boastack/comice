@@ -41,7 +41,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
-import { createGLContext, type GLContext } from 'comice/gl'
+import { createGLContext, mountCanvas, type CanvasMount, type GLContext } from 'comice/gl'
 import { getSharedScheduler } from 'comice/scheduler'
 import { compileParticlesProgram, destroyParticlesProgram, drawParticles, uploadParticleBuffers, type ParticlesMode, type ParticlesProgram } from './shader.js'
 import { resampleToCount, sampleSource, type ParticleSample } from './sampler.js'
@@ -101,6 +101,7 @@ export function particles(options: ParticlesOptions): ComicePlugin {
   let unregisterFromScheduler: (() => void) | null = null
   let unsubscribeInstance: (() => void) | null = null
   let resizeObserver: ResizeObserver | null = null
+  let mount: CanvasMount | null = null
   let destroyed = false
   let currentProgress = 0
   let instanceCount = 0
@@ -153,13 +154,13 @@ export function particles(options: ParticlesOptions): ComicePlugin {
     setup(rawTarget: Element, instance: ComiceInstance) {
       target = rawTarget
 
-      const parent = target.parentElement
-      if (parent && getComputedStyle(parent).position === 'static') {
-        parent.style.position = 'relative'
-      }
+      // mountCanvas() sizes the canvas to the target's OWN box — it used to
+      // be 100% of the target's parent, covering the whole section
+      // (heading and text) on harness/site/. A non-HTML target mounts
+      // nothing (a canvas can't render as a sibling inside an <svg>).
       glContext = createGLContext(target)
-      if (glContext) {
-        target.insertAdjacentElement('afterend', glContext.canvas)
+      if (glContext && target instanceof HTMLElement) {
+        mount = mountCanvas(glContext, target, { owner: 'particles', hideTarget: false })
         particlesProgram = compileParticlesProgram(glContext.gl, { mode, fluid })
         if (particlesProgram) loadBuffers()
       }
@@ -197,7 +198,8 @@ export function particles(options: ParticlesOptions): ComicePlugin {
       unsubscribeInstance?.()
       resizeObserver?.disconnect()
       if (glContext && particlesProgram) destroyParticlesProgram(glContext.gl, particlesProgram)
-      glContext?.canvas.remove()
+      mount?.release()
+      mount = null
       target = null
       glContext = null
       particlesProgram = null

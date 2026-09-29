@@ -88,24 +88,45 @@ async function boot() {
   const heroImg = document.getElementById('hero-img')
   heroImg.src = (await drawGradientImage(1600, 900, PALETTES[0])).src
 
-  // ── Hero: TWO GL-shader plugins stacked on the SAME element (distort +
-  //    color), plus spotlight (pure CSS) — the deliberate stress case.
+  // ── Hero: distort (GL) + spotlight (pure CSS), driven by the pointer.
   try {
     const heroHandle = comice(heroImg)
       .use(distort({ effect: 'bulge', radius: 220, strength: 0.4 }))
-      .use(color({ effects: ['duotone', 'grain'], duotone: { shadow: [0.05, 0.02, 0.1], highlight: [1, 0.9, 0.7] } }))
       .use(spotlight({ lift: 0.02 }))
       .driver(pointer({ radius: 260 }))
-    log('hero: distort + color + spotlight, stacked on one element — mounted OK', 'ok')
+    log('hero: distort + spotlight — mounted OK', 'ok')
     window.__heroHandle = heroHandle
   } catch (err) {
-    log(`hero stack threw: ${err.message}`, 'fail')
+    log(`hero threw: ${err.message}`, 'fail')
   }
 
-  // aura samples the hero and pushes color into the header's own CSS variable.
+  // This page first stacked color() on the hero alongside distort(). That
+  // never worked — each draws a full quad from the raw image, so the last
+  // one silently replaced the other — and core now refuses it with a clear
+  // error. Kept here on purpose, so the refusal is exercised on a real page.
   try {
-    comice(heroImg).use(aura({ sample: 'palette', colors: 3, sampleIntervalMs: 300 }))
-    log('aura: sampling hero into --aura-color — mounted OK', 'ok')
+    comice(heroImg).use(color({ effects: ['duotone', 'grain'] }))
+    log('color on the hero was ACCEPTED — the one-GL-effect-per-element rule is not enforcing', 'fail')
+  } catch (err) {
+    log(`color on the hero refused as designed: ${err.message.split('.')[0]}`, 'ok')
+  }
+
+  // aura reads the hero and writes the header's colour. Its CSS variables
+  // land on the sampled element itself (--aura-color-0..N in palette mode);
+  // the header reads --aura-color from :root, so bridge via onSample.
+  try {
+    comice(heroImg).use(
+      aura({
+        sample: 'palette',
+        colors: 3,
+        sampleIntervalMs: 300,
+        glow: false,
+        onSample: ([first]) => {
+          if (first) document.documentElement.style.setProperty('--aura-color', `rgb(${first.join(', ')})`)
+        },
+      }),
+    )
+    log('aura: sampling hero into the header colour — mounted OK', 'ok')
   } catch (err) {
     log(`aura threw: ${err.message}`, 'fail')
   }

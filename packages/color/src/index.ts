@@ -21,7 +21,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
-import { createGLContext, createPlane, getResidencyPool, type GLContext, type Plane } from 'comice/gl'
+import { createGLContext, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type Plane } from 'comice/gl'
 import { getSharedScheduler } from 'comice/scheduler'
 import { compileColorProgram, destroyColorProgram, drawColor, type ColorDrawState, type ColorEffect, type ColorProgram } from './shader.js'
 import { packLutTexture, parseCubeLut } from './lut.js'
@@ -83,7 +83,7 @@ export function color(options: ColorOptions = {}): ComicePlugin {
   let lutSize = 2
   let unregisterFromScheduler: (() => void) | null = null
   let resizeObserver: ResizeObserver | null = null
-  let originalVisibility = ''
+  let mount: CanvasMount | null = null
   let destroyed = false
 
   let grainAmount = grain?.amount ?? 0.08
@@ -124,22 +124,13 @@ export function color(options: ColorOptions = {}): ComicePlugin {
       }
       target = rawTarget
 
-      originalVisibility = target.style.visibility
-      target.style.visibility = 'hidden'
-
-      const parent = target.parentElement
-      if (parent && getComputedStyle(parent).position === 'static') {
-        parent.style.position = 'relative'
-      }
+      // Degrade-never-disappear: with no WebGL2 nothing is mounted and the
+      // original, ungraded media stays as the browser shows it. See
+      // mountCanvas() for sizing, hiding/restoring, and the one-GL-effect-
+      // per-element rule.
       glContext = createGLContext(target)
       if (glContext) {
-        target.insertAdjacentElement('afterend', glContext.canvas)
-      }
-      if (!glContext) {
-        // Degrade-never-disappear, same fallback every single-media
-        // shader plugin in this repo uses: show the original, ungraded
-        // media rather than nothing.
-        target.style.visibility = originalVisibility
+        mount = mountCanvas(glContext, target, { owner: 'color', hideTarget: true })
       }
 
       plane = createPlane(glContext, target)
@@ -154,6 +145,9 @@ export function color(options: ColorOptions = {}): ComicePlugin {
           bloom,
           aberration,
         })
+        // A failed compile would otherwise leave the media hidden behind an
+        // empty canvas; show the original instead.
+        if (!colorProgram) mount?.release()
 
         if (effects.includes('lut') && lut) {
           fetch(lut)
@@ -171,10 +165,9 @@ export function color(options: ColorOptions = {}): ComicePlugin {
               // alive only by this local reference (its cache key,
               // `lut.size: 2`, is never a real caller-intended config —
               // only ever this transient pre-fetch placeholder), so it's
-              // destroyed here rather than left to leak: the shared
-              // program cache in shader.ts is keyed per-config, not
-              // reference-counted, and has no way to know this specific
-              // entry has become unreachable once colorProgram moves on.
+              // destroyed here rather than left to leak: shader.ts's
+              // reference-counted cache only frees a program when its
+              // holder releases it, and this is that holder.
               const staleProgram = colorProgram
               colorProgram = compileColorProgram(glContext.gl, {
                 effects,
@@ -217,8 +210,8 @@ export function color(options: ColorOptions = {}): ComicePlugin {
       if (glContext && colorProgram) destroyColorProgram(glContext.gl, colorProgram)
       if (glContext && lutTexture) glContext.gl.deleteTexture(lutTexture)
       plane?.destroy()
-      glContext?.canvas.remove()
-      if (target) target.style.visibility = originalVisibility
+      mount?.release()
+      mount = null
       target = null
       glContext = null
       plane = null

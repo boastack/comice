@@ -167,6 +167,12 @@ export function createDownsampler(gl: WebGL2RenderingContext): Downsampler {
 
       gl.bindVertexArray(null)
       gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+      // Restore the full-canvas viewport. The context is shared per element,
+      // so when aura samples an element another plugin draws on (the stress
+      // page's hero), leaving the 32x32 viewport set made that plugin's next
+      // frames render into a 32x32 corner — resizeToDisplay() only resets
+      // the viewport when the canvas SIZE changes, which it hadn't.
+      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
 
       return { width: DOWNSAMPLE_SIZE, height: DOWNSAMPLE_SIZE, pixels }
     },

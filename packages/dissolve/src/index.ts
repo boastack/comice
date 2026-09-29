@@ -25,7 +25,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
-import { createGLContext, createPlane, getResidencyPool, type GLContext, type Plane } from 'comice/gl'
+import { createGLContext, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type Plane } from 'comice/gl'
 import { getSharedScheduler } from 'comice/scheduler'
 import {
   compileDissolveProgram,
@@ -71,6 +71,7 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
   let unsubscribe: (() => void) | null = null
   let unregisterFromScheduler: (() => void) | null = null
   let resizeObserver: ResizeObserver | null = null
+  let mount: CanvasMount | null = null
   let currentProgress = 0
   let destroyed = false
 
@@ -99,19 +100,19 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
       // Unlike morph, the target is never hidden or read as media — it
       // is purely a positioning/sizing anchor for dissolve's own canvas.
       // See the file header for why from/to are separate options instead.
-      const parent = target.parentElement
-      if (parent && getComputedStyle(parent).position === 'static') {
-        parent.style.position = 'relative'
-      }
+      //
+      // mountCanvas() sizes the canvas to the target's OWN box. It used to
+      // be 100% of the target's parent, which on a real page covered the
+      // whole section, heading and body text included (harness/site/'s
+      // "Before / after" section was entirely hidden under it).
+      //
+      // Degrade-never-disappear: no WebGL2, or a non-HTML target (a canvas
+      // can't render as a sibling inside an <svg>), mounts nothing — the
+      // target was never touched, so the page shows it as it always would.
       glContext = createGLContext(target)
-      if (glContext) {
-        target.insertAdjacentElement('afterend', glContext.canvas)
+      if (glContext && target instanceof HTMLElement) {
+        mount = mountCanvas(glContext, target, { owner: 'dissolve', hideTarget: false })
       }
-      // Degrade-never-disappear: no WebGL2 means renderFrame() is
-      // permanently a no-op via its own null-check — the target element
-      // itself was never touched (no visibility hide, unlike morph), so
-      // there is nothing to restore on this path; the page simply shows
-      // whatever the target's own normal content is.
 
       fromPlane = createPlane(glContext, from)
       toPlane = createPlane(glContext, to)
@@ -146,7 +147,8 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
       if (glContext && dissolveProgram) destroyDissolveProgram(glContext.gl, dissolveProgram)
       fromPlane?.destroy()
       toPlane?.destroy()
-      glContext?.canvas.remove()
+      mount?.release()
+      mount = null
       target = null
       glContext = null
       fromPlane = null

@@ -29,7 +29,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
-import { createGLContext, createPlane, getResidencyPool, type GLContext, type Plane } from 'comice/gl'
+import { createGLContext, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type Plane } from 'comice/gl'
 import { getSharedScheduler } from 'comice/scheduler'
 import {
   compileDistortProgram,
@@ -76,7 +76,7 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
   let unsubscribe: (() => void) | null = null
   let unregisterFromScheduler: (() => void) | null = null
   let resizeObserver: ResizeObserver | null = null
-  let originalVisibility = ''
+  let mount: CanvasMount | null = null
   let destroyed = false
 
   // pointerX/pointerY/pointerActive are read from instance.display —
@@ -125,29 +125,23 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
       }
       target = rawTarget
 
-      originalVisibility = target.style.visibility
-      target.style.visibility = 'hidden'
-
-      const parent = target.parentElement
-      if (parent && getComputedStyle(parent).position === 'static') {
-        parent.style.position = 'relative'
-      }
+      // Degrade-never-disappear: with no WebGL2, nothing is mounted and the
+      // original, undistorted media stays exactly as the browser shows it.
+      // mountCanvas() owns hiding the target, sizing the canvas to it, and
+      // restoring both — and throws, before touching the DOM, if another
+      // GL plugin already draws on this element.
       glContext = createGLContext(target)
       if (glContext) {
-        target.insertAdjacentElement('afterend', glContext.canvas)
-      }
-      if (!glContext) {
-        // Degrade-never-disappear: no CSS equivalent for a distortion
-        // field exists, so the least-bad fallback is showing the
-        // original, undistorted media rather than nothing — same
-        // reasoning morph's own no-WebGL2 path uses.
-        target.style.visibility = originalVisibility
+        mount = mountCanvas(glContext, target, { owner: 'distort', hideTarget: true })
       }
 
       plane = createPlane(glContext, target)
 
       if (glContext) {
         distortProgram = compileDistortProgram(glContext.gl, { effect, falloff })
+        // A failed compile would otherwise leave the media hidden behind an
+        // empty canvas; show the original instead.
+        if (!distortProgram) mount?.release()
       }
 
       resizeObserver = new ResizeObserver(() => renderFrame())
@@ -185,8 +179,8 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
       resizeObserver?.disconnect()
       if (glContext && distortProgram) destroyDistortProgram(glContext.gl, distortProgram)
       plane?.destroy()
-      glContext?.canvas.remove()
-      if (target) target.style.visibility = originalVisibility
+      mount?.release()
+      mount = null
       target = null
       glContext = null
       plane = null
