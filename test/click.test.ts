@@ -29,33 +29,33 @@ describe('click driver', () => {
 
   it('reports progress 1 on every click by default (toggle: false)', () => {
     const signals: number[] = []
-    const teardown = click().attach(target, (signal) => signals.push(signal.progress))
+    const teardown = click({ duration: 0 }).attach(target, (signal) => signals.push(signal.progress))
 
     target.dispatchEvent(new Event('click', { bubbles: true }))
     target.dispatchEvent(new Event('click', { bubbles: true }))
     target.dispatchEvent(new Event('click', { bubbles: true }))
 
-    expect(signals).toEqual([1, 1, 1])
+    expect(signals).toEqual([1, 1, 1, 1, 1, 1]) // each arrival is sent twice to settle the state machine (tween.ts)
     teardown()
   })
 
   it('toggle: true alternates progress 1/0 on successive clicks', () => {
     const signals: number[] = []
-    const teardown = click({ toggle: true }).attach(target, (signal) => signals.push(signal.progress))
+    const teardown = click({ toggle: true, duration: 0 }).attach(target, (signal) => signals.push(signal.progress))
 
     target.dispatchEvent(new Event('click', { bubbles: true }))
     target.dispatchEvent(new Event('click', { bubbles: true }))
     target.dispatchEvent(new Event('click', { bubbles: true }))
     target.dispatchEvent(new Event('click', { bubbles: true }))
 
-    expect(signals).toEqual([1, 0, 1, 0])
+    expect(signals).toEqual([1, 1, 0, 0, 1, 1, 0, 0])
     teardown()
   })
 
   it('toggle state starts fresh for each attach() — two instances do not share state', () => {
     const signalsA: number[] = []
     const signalsB: number[] = []
-    const driver = click({ toggle: true })
+    const driver = click({ toggle: true, duration: 0 })
     const teardownA = driver.attach(target, (signal) => signalsA.push(signal.progress))
     const targetB = document.createElement('div')
     document.body.appendChild(targetB)
@@ -66,8 +66,8 @@ describe('click driver', () => {
 
     // Both start at "off", so both first clicks report 1 — independent
     // toggle state per attach(), not shared across the two targets.
-    expect(signalsA).toEqual([1])
-    expect(signalsB).toEqual([1])
+    expect(signalsA).toEqual([1, 1])
+    expect(signalsB).toEqual([1, 1])
 
     teardownA()
     teardownB()
@@ -98,11 +98,11 @@ describe('click driver', () => {
     it('a click landing on the parent inside the hidden target\'s box counts', () => {
       const { parent, img } = fixture()
       const signals: number[] = []
-      const teardown = click().attach(img, (signal) => signals.push(signal.progress))
+      const teardown = click({ duration: 0 }).attach(img, (signal) => signals.push(signal.progress))
 
       clickAt(parent, 150, 100)
 
-      expect(signals).toEqual([1])
+      expect(signals).toEqual([1, 1])
       teardown()
       parent.remove()
     })
@@ -110,7 +110,7 @@ describe('click driver', () => {
     it('a click on the parent OUTSIDE the target\'s box does not count', () => {
       const { parent, img } = fixture()
       const signals: number[] = []
-      const teardown = click().attach(img, (signal) => signals.push(signal.progress))
+      const teardown = click({ duration: 0 }).attach(img, (signal) => signals.push(signal.progress))
 
       clickAt(parent, 400, 100)
 
@@ -122,7 +122,7 @@ describe('click driver', () => {
     it('a click on an overlay drawn over the target (a caption) does not count', () => {
       const { parent, img, caption } = fixture()
       const signals: number[] = []
-      const teardown = click().attach(img, (signal) => signals.push(signal.progress))
+      const teardown = click({ duration: 0 }).attach(img, (signal) => signals.push(signal.progress))
 
       clickAt(caption, 150, 100) // inside the image's box, but on the caption
 
@@ -134,12 +134,12 @@ describe('click driver', () => {
 
   it('teardown() removes the listener — a click after teardown reports nothing further', () => {
     const signals: number[] = []
-    const teardown = click().attach(target, (signal) => signals.push(signal.progress))
+    const teardown = click({ duration: 0 }).attach(target, (signal) => signals.push(signal.progress))
     target.dispatchEvent(new Event('click', { bubbles: true }))
-    expect(signals).toEqual([1])
+    expect(signals).toEqual([1, 1])
 
     teardown()
     target.dispatchEvent(new Event('click', { bubbles: true }))
-    expect(signals).toEqual([1]) // unchanged — no new signal after teardown
+    expect(signals).toEqual([1, 1]) // unchanged — no new signal after teardown
   })
 })
