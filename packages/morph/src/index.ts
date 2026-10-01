@@ -45,7 +45,7 @@ import {
   type RasterizedMask,
   type RasterizedMaskSource,
 } from 'comice/gl'
-import { getSharedScheduler } from 'comice/scheduler'
+import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
 import {
   compileMorphProgram,
   destroyMorphProgram,
@@ -144,6 +144,7 @@ export function morph(options: MorphOptions): ComicePlugin {
   let maskScale = 0.345 // legacy's own appleLogo constant, replaced once the real bake size is known
   let unsubscribe: (() => void) | null = null
   let unregisterFromScheduler: (() => void) | null = null
+  let visibility: ReturnType<typeof createVisibilityGate> | null = null
   let resizeObserver: ResizeObserver | null = null
   let mount: CanvasMount | null = null
   let currentProgress = 0
@@ -278,9 +279,13 @@ export function morph(options: MorphOptions): ComicePlugin {
       // discipline every T1-T6 file holds to. Gated on the target's own
       // connectedness so a removed element's morph instance stops
       // rendering rather than ticking forever.
+      // Render only when visible (spec §13): off-screen or in a hidden tab, this
+      // does zero work. `isConnected` alone kept every effect drawing while
+      // scrolled away — particles off-screen held a whole page at 4fps.
+      visibility = createVisibilityGate(target)
       unregisterFromScheduler = getSharedScheduler().add(
         () => renderFrame(),
-        () => !destroyed && !!target && target.isConnected,
+        () => !destroyed && !!target && target.isConnected && visibility!.isVisible(),
       )
 
       // Same instance.on('*') pattern reveal's setup() uses — progress
@@ -297,6 +302,8 @@ export function morph(options: MorphOptions): ComicePlugin {
     teardown() {
       destroyed = true
       unregisterFromScheduler?.()
+      visibility?.destroy()
+      visibility = null
       unsubscribe?.()
       resizeObserver?.disconnect()
       if (glContext && morphProgram) destroyMorphProgram(glContext.gl, morphProgram)

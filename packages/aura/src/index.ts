@@ -35,7 +35,7 @@
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
 import { createGLContext, createPlane, type GLContext, type Plane } from 'comice/gl'
-import { getSharedScheduler } from 'comice/scheduler'
+import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
 import { createDownsampler, type Downsampler } from './downsample.js'
 import { clampToContrast, sampleEdges, samplePalette, type RGB } from './sample.js'
 
@@ -101,6 +101,7 @@ export function aura(options: AuraOptions = {}): ComicePlugin {
   let downsampler: Downsampler | null = null
   let glowEl: HTMLDivElement | null = null
   let unregisterFromScheduler: (() => void) | null = null
+  let visibility: ReturnType<typeof createVisibilityGate> | null = null
   let destroyed = false
   // `null` (not 0) means "never sampled yet" — a real rAF `timestamp` can
   // legitimately be a small number in the first few frames (or exactly 0
@@ -183,15 +184,21 @@ export function aura(options: AuraOptions = {}): ComicePlugin {
         target.insertAdjacentElement('beforebegin', glowEl)
       }
 
+      // Render only when visible (spec §13): off-screen or in a hidden tab, this
+      // does zero work. `isConnected` alone kept every effect drawing while
+      // scrolled away — particles off-screen held a whole page at 4fps.
+      visibility = createVisibilityGate(target)
       unregisterFromScheduler = getSharedScheduler().add(
         (_deltaMs, timestamp) => renderFrame(timestamp),
-        () => !destroyed && !!target && target.isConnected,
+        () => !destroyed && !!target && target.isConnected && visibility!.isVisible(),
       )
     },
 
     teardown() {
       destroyed = true
       unregisterFromScheduler?.()
+      visibility?.destroy()
+      visibility = null
       downsampler?.destroy()
       plane?.destroy()
       glowEl?.remove()

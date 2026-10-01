@@ -42,7 +42,7 @@
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
 import { createGLContext, mountCanvas, type CanvasMount, type GLContext } from 'comice/gl'
-import { getSharedScheduler } from 'comice/scheduler'
+import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
 import { compileParticlesProgram, destroyParticlesProgram, drawParticles, uploadParticleBuffers, type ParticlesMode, type ParticlesProgram } from './shader.js'
 import { resampleToCount, sampleSource, type ParticleSample } from './sampler.js'
 
@@ -99,6 +99,7 @@ export function particles(options: ParticlesOptions): ComicePlugin {
   let glContext: GLContext | null = null
   let particlesProgram: ParticlesProgram | null = null
   let unregisterFromScheduler: (() => void) | null = null
+  let visibility: ReturnType<typeof createVisibilityGate> | null = null
   let unsubscribeInstance: (() => void) | null = null
   let resizeObserver: ResizeObserver | null = null
   let mount: CanvasMount | null = null
@@ -180,9 +181,13 @@ export function particles(options: ParticlesOptions): ComicePlugin {
       })
       resizeObserver.observe(target)
 
+      // Render only when visible (spec §13): off-screen or in a hidden tab, this
+      // does zero work. `isConnected` alone kept every effect drawing while
+      // scrolled away — particles off-screen held a whole page at 4fps.
+      visibility = createVisibilityGate(target)
       unregisterFromScheduler = getSharedScheduler().add(
         (_deltaMs, timestamp) => renderFrame(timestamp),
-        () => !destroyed && !!target && target.isConnected,
+        () => !destroyed && !!target && target.isConnected && visibility!.isVisible(),
       )
 
       unsubscribeInstance = instance.on('*', (snapshot) => {
@@ -195,6 +200,8 @@ export function particles(options: ParticlesOptions): ComicePlugin {
     teardown() {
       destroyed = true
       unregisterFromScheduler?.()
+      visibility?.destroy()
+      visibility = null
       unsubscribeInstance?.()
       resizeObserver?.disconnect()
       if (glContext && particlesProgram) destroyParticlesProgram(glContext.gl, particlesProgram)

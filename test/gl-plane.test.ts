@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { createPlane, drawPlane } from '../packages/core/src/gl/plane.js'
 import { getSharedScheduler } from '../packages/core/src/scheduler.js'
 import { createFakeGLContext } from './fake-webgl2.js'
+import { installFakeIntersectionObserver, type FakeIntersection } from './fake-intersection.js'
 
 function readyImage(): HTMLImageElement {
   const img = document.createElement('img')
@@ -158,8 +159,12 @@ describe('createPlane — image source, real context', () => {
 describe('createPlane — video source', () => {
   let canvas: HTMLCanvasElement
   let video: HTMLVideoElement
+  let intersection: FakeIntersection
 
   beforeEach(() => {
+    // Per-frame uploads only run while an on-page video is on screen; happy-
+    // dom never reports anything as on screen.
+    intersection = installFakeIntersectionObserver()
     canvas = document.createElement('canvas')
     document.body.appendChild(canvas)
     video = document.createElement('video')
@@ -170,6 +175,65 @@ describe('createPlane — video source', () => {
     canvas.remove()
     video.remove()
     getSharedScheduler().stop()
+    intersection.uninstall()
+  })
+
+  function playing(v: HTMLVideoElement): void {
+    Object.defineProperty(v, 'readyState', { value: 2, configurable: true })
+    Object.defineProperty(v, 'paused', { value: false, configurable: true })
+    Object.defineProperty(v, 'ended', { value: false, configurable: true })
+  }
+
+  function withFrames(run: (frame: () => void) => void): void {
+    const original = globalThis.requestAnimationFrame
+    let pending: FrameRequestCallback | null = null
+    let t = 0
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      pending = cb
+      return 1
+    }) as typeof requestAnimationFrame
+    try {
+      run(() => pending?.((t += 16)))
+    } finally {
+      globalThis.requestAnimationFrame = original
+    }
+  }
+
+  it('an on-page video scrolled out of view stops re-uploading, and resumes in view — spec §13', () => {
+    playing(video)
+    withFrames((frame) => {
+      const context = createFakeGLContext(canvas)
+      const uploads = (context.gl as unknown as { __uploadFlips: boolean[] }).__uploadFlips
+      const plane = createPlane(context, video)
+
+      intersection.setVisible(false)
+      const before = uploads.length
+      frame()
+      frame()
+      expect(uploads.length).toBe(before) // off screen: no per-frame upload
+
+      intersection.setVisible(true)
+      frame()
+      expect(uploads.length).toBe(before + 1)
+      plane.destroy()
+    })
+  })
+
+  it('a DETACHED video (a dissolve/mosaic source never put on the page) keeps uploading', () => {
+    // It has no box of its own to be on screen — an IntersectionObserver
+    // never reports it visible — so gating it on visibility would freeze it.
+    const detached = document.createElement('video')
+    playing(detached)
+    intersection.setVisible(false)
+    withFrames((frame) => {
+      const context = createFakeGLContext(canvas)
+      const uploads = (context.gl as unknown as { __uploadFlips: boolean[] }).__uploadFlips
+      const plane = createPlane(context, detached)
+      const before = uploads.length
+      frame()
+      expect(uploads.length).toBe(before + 1)
+      plane.destroy()
+    })
   })
 
   it('registers against the shared scheduler, gated on playing/not-ended', () => {

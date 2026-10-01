@@ -26,7 +26,7 @@
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
 import { createGLContext, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type Plane } from 'comice/gl'
-import { getSharedScheduler } from 'comice/scheduler'
+import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
 import {
   compileDissolveProgram,
   destroyDissolveProgram,
@@ -70,6 +70,7 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
   let dissolveProgram: DissolveProgram | null = null
   let unsubscribe: (() => void) | null = null
   let unregisterFromScheduler: (() => void) | null = null
+  let visibility: ReturnType<typeof createVisibilityGate> | null = null
   let resizeObserver: ResizeObserver | null = null
   let mount: CanvasMount | null = null
   let currentProgress = 0
@@ -127,9 +128,13 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
       // Rides getSharedScheduler() — no private rAF loop, same discipline
       // every T1+ file in this package holds to. Gated on the target's
       // own connectedness, matching morph's own gate exactly.
+      // Render only when visible (spec §13): off-screen or in a hidden tab, this
+      // does zero work. `isConnected` alone kept every effect drawing while
+      // scrolled away — particles off-screen held a whole page at 4fps.
+      visibility = createVisibilityGate(target)
       unregisterFromScheduler = getSharedScheduler().add(
         () => renderFrame(),
-        () => !destroyed && !!target && target.isConnected,
+        () => !destroyed && !!target && target.isConnected && visibility!.isVisible(),
       )
 
       unsubscribe = instance.on('*', (snapshot) => {
@@ -142,6 +147,8 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
     teardown() {
       destroyed = true
       unregisterFromScheduler?.()
+      visibility?.destroy()
+      visibility = null
       unsubscribe?.()
       resizeObserver?.disconnect()
       if (glContext && dissolveProgram) destroyDissolveProgram(glContext.gl, dissolveProgram)

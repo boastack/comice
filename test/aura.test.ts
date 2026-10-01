@@ -10,6 +10,7 @@ import { comice, type ComiceHandle } from 'comice'
 import { getSharedScheduler } from 'comice/scheduler'
 import { aura } from '../packages/aura/src/index.js'
 import { createFakeGL2 } from './fake-webgl2.js'
+import { installFakeIntersectionObserver, type FakeIntersection } from './fake-intersection.js'
 
 function readyImage(): HTMLImageElement {
   const img = document.createElement('img')
@@ -76,12 +77,16 @@ describe('aura — with a real WebGL2 context (faked)', () => {
   const originalGetContext = HTMLCanvasElement.prototype.getContext
   let img: HTMLImageElement
   let handle: ComiceHandle | null = null
+  let intersection: FakeIntersection
 
   beforeEach(() => {
     ;(HTMLCanvasElement.prototype as any).getContext = function (type: string) {
       if (type === 'webgl2') return createFakeGL2()
       return originalGetContext.call(this, type)
     }
+    // aura only samples while its target is on screen (render-only-when-
+    // visible, spec §13); happy-dom never reports anything as on screen.
+    intersection = installFakeIntersectionObserver()
     img = readyImage()
     document.body.appendChild(img)
     handle = null
@@ -90,6 +95,7 @@ describe('aura — with a real WebGL2 context (faked)', () => {
   afterEach(() => {
     handle?.destroy()
     HTMLCanvasElement.prototype.getContext = originalGetContext
+    intersection.uninstall()
     img.remove()
     // Sweep any glow <div> left behind by a test whose handle wasn't
     // captured/destroyed cleanly — same defensive cleanup

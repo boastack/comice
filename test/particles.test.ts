@@ -11,6 +11,7 @@ import { comice, type ComiceHandle } from 'comice'
 import { getSharedScheduler } from 'comice/scheduler'
 import { particles } from '../packages/particles/src/index.js'
 import { createFakeGL2, installFake2DContext } from './fake-webgl2.js'
+import { installFakeIntersectionObserver, type FakeIntersection } from './fake-intersection.js'
 
 function readyImage(): HTMLImageElement {
   const img = document.createElement('img')
@@ -66,11 +67,15 @@ describe('particles — no WebGL2 available', () => {
 describe('particles — with a real WebGL2 + 2D context (both faked)', () => {
   const originalGetContext = HTMLCanvasElement.prototype.getContext
   let uninstall2D: () => void
+  let intersection: FakeIntersection
   let container: HTMLDivElement
   let handle: ComiceHandle | null = null
 
   beforeEach(() => {
     ;({ uninstall: uninstall2D } = installFake2DContext({ imageDataAlpha: 255 }))
+    // The render loop only runs while the target is on screen (spec §13);
+    // happy-dom never reports anything as on screen.
+    intersection = installFakeIntersectionObserver()
     const original2DAwareGetContext = HTMLCanvasElement.prototype.getContext
     ;(HTMLCanvasElement.prototype as any).getContext = function (type: string) {
       if (type === 'webgl2') return createFakeGL2()
@@ -85,6 +90,7 @@ describe('particles — with a real WebGL2 + 2D context (both faked)', () => {
     handle?.destroy()
     HTMLCanvasElement.prototype.getContext = originalGetContext
     uninstall2D()
+    intersection.uninstall()
     container.remove()
     document.querySelectorAll('canvas').forEach((c) => c.remove())
   })

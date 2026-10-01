@@ -16,7 +16,7 @@
 
 import { waitForMediaReady } from './ready.js'
 import { getResidencyPool } from './residency.js'
-import { getSharedScheduler } from '../scheduler.js'
+import { createVisibilityGate, getSharedScheduler } from '../scheduler.js'
 import type { GLContext } from './context.js'
 
 export type PlaneSource = HTMLImageElement | HTMLVideoElement
@@ -282,11 +282,20 @@ export function createPlane(context: GLContext | null, source: PlaneSource): Pla
   // pure waste — the render-loop-allocation discipline this package holds
   // to everywhere else (scheduler.ts, audio.ts) applies here too: only pay
   // per-frame cost for a source that actually changes per frame.
+  //
+  // And only while it can be seen (spec §13, "off screen planes do zero
+  // work"): a playing video scrolled away no longer re-uploads every frame.
+  // A source that is NOT on the page (dissolve/mosaic accept detached
+  // media as from/to/tiles) has no box of its own to be on screen — an
+  // IntersectionObserver never reports it visible — so it keeps uploading;
+  // the plugin drawing it is the one that is visible or not.
   let unregisterFromScheduler: (() => void) | null = null
+  let visibility: ReturnType<typeof createVisibilityGate> | null = null
   if (source instanceof HTMLVideoElement) {
+    visibility = createVisibilityGate(source)
     unregisterFromScheduler = getSharedScheduler().add(
       () => upload(),
-      () => !destroyed && !source.paused && !source.ended,
+      () => !destroyed && !source.paused && !source.ended && (!source.isConnected || visibility!.isVisible()),
     )
   }
 
@@ -303,6 +312,7 @@ export function createPlane(context: GLContext | null, source: PlaneSource): Pla
       if (destroyed) return
       destroyed = true
       unregisterFromScheduler?.()
+      visibility?.destroy()
       resizeObserver.disconnect()
       if (texture) gl.deleteTexture(texture)
     },

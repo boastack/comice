@@ -22,7 +22,7 @@
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
 import { createGLContext, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type Plane } from 'comice/gl'
-import { getSharedScheduler } from 'comice/scheduler'
+import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
 import { compileColorProgram, destroyColorProgram, drawColor, type ColorDrawState, type ColorEffect, type ColorProgram } from './shader.js'
 import { packLutTexture, parseCubeLut } from './lut.js'
 import type { AberrationOptions, BloomOptions, DuotoneOptions, GrainOptions } from './shader.js'
@@ -82,6 +82,7 @@ export function color(options: ColorOptions = {}): ComicePlugin {
   let lutTexture: WebGLTexture | null = null
   let lutSize = 2
   let unregisterFromScheduler: (() => void) | null = null
+  let visibility: ReturnType<typeof createVisibilityGate> | null = null
   let resizeObserver: ResizeObserver | null = null
   let mount: CanvasMount | null = null
   let destroyed = false
@@ -195,9 +196,13 @@ export function color(options: ColorOptions = {}): ComicePlugin {
       resizeObserver = new ResizeObserver(() => renderFrame())
       resizeObserver.observe(target)
 
+      // Render only when visible (spec §13): off-screen or in a hidden tab, this
+      // does zero work. `isConnected` alone kept every effect drawing while
+      // scrolled away — particles off-screen held a whole page at 4fps.
+      visibility = createVisibilityGate(target)
       unregisterFromScheduler = getSharedScheduler().add(
         () => renderFrame(),
-        () => !destroyed && !!target && target.isConnected,
+        () => !destroyed && !!target && target.isConnected && visibility!.isVisible(),
       )
 
       renderFrame()
@@ -206,6 +211,8 @@ export function color(options: ColorOptions = {}): ComicePlugin {
     teardown() {
       destroyed = true
       unregisterFromScheduler?.()
+      visibility?.destroy()
+      visibility = null
       resizeObserver?.disconnect()
       if (glContext && colorProgram) destroyColorProgram(glContext.gl, colorProgram)
       if (glContext && lutTexture) glContext.gl.deleteTexture(lutTexture)

@@ -16,7 +16,7 @@
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
 import { createGLContext, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type Plane } from 'comice/gl'
-import { getSharedScheduler } from 'comice/scheduler'
+import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
 import { compileAsciiProgram, destroyAsciiProgram, drawAscii, type AsciiProgram } from './shader.js'
 import { buildGlyphAtlas } from './atlas.js'
 
@@ -62,6 +62,7 @@ export function ascii(options: AsciiOptions = {}): ComicePlugin {
   let asciiProgram: AsciiProgram | null = null
   let atlasTexture: WebGLTexture | null = null
   let unregisterFromScheduler: (() => void) | null = null
+  let visibility: ReturnType<typeof createVisibilityGate> | null = null
   let resizeObserver: ResizeObserver | null = null
   let mount: CanvasMount | null = null
   let destroyed = false
@@ -119,9 +120,13 @@ export function ascii(options: AsciiOptions = {}): ComicePlugin {
       resizeObserver = new ResizeObserver(() => renderFrame())
       resizeObserver.observe(target)
 
+      // Render only when visible (spec §13): off-screen or in a hidden tab, this
+      // does zero work. `isConnected` alone kept every effect drawing while
+      // scrolled away — particles off-screen held a whole page at 4fps.
+      visibility = createVisibilityGate(target)
       unregisterFromScheduler = getSharedScheduler().add(
         () => renderFrame(),
-        () => !destroyed && !!target && target.isConnected,
+        () => !destroyed && !!target && target.isConnected && visibility!.isVisible(),
       )
 
       renderFrame()
@@ -130,6 +135,8 @@ export function ascii(options: AsciiOptions = {}): ComicePlugin {
     teardown() {
       destroyed = true
       unregisterFromScheduler?.()
+      visibility?.destroy()
+      visibility = null
       resizeObserver?.disconnect()
       if (glContext && asciiProgram) destroyAsciiProgram(glContext.gl, asciiProgram)
       if (glContext && atlasTexture) glContext.gl.deleteTexture(atlasTexture)
