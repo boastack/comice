@@ -20,6 +20,7 @@
  * earlier) still has one of its own.
  */
 
+import { prefersReducedMotion } from '../motion.js'
 import { getSharedScheduler } from '../scheduler.js'
 import type { Driver } from '../types.js'
 import { eventReachesTarget, listenOnDocument } from './hit.js'
@@ -135,7 +136,9 @@ export function drag(options: DragOptions = {}): Driver {
         if (!dragging || event.pointerId !== pointerId) return
         dragging = false
         pointerId = null
-        if (Math.abs(velocity) >= INERTIA_SETTLE_THRESHOLD) {
+        // Under reduced motion a release stops where the pointer let go —
+        // no coasting on after the person has stopped moving.
+        if (Math.abs(velocity) >= INERTIA_SETTLE_THRESHOLD && !prefersReducedMotion()) {
           startInertia()
         }
       }

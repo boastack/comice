@@ -32,6 +32,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
+import { snapForReducedMotion } from 'comice'
 import { meltFilter, type MeltOptions } from './gooey.js'
 
 export type TypeMode = 'fill' | 'behind' | 'knockout' | 'melt'
@@ -97,7 +98,8 @@ export function type(options: TypeOptions = {}): ComicePlugin {
   }
 
   function render(progress: number): void {
-    currentProgress = Math.max(0, Math.min(1, progress))
+    // Reduced motion: jump to whichever end state is closer, never animate between.
+    currentProgress = Math.max(0, Math.min(1, snapForReducedMotion(progress)))
     if (mode !== 'melt' || !target) return
     target.style.filter = meltFilter(currentProgress, melt)
   }

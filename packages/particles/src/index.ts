@@ -41,6 +41,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
+import { prefersReducedMotion, snapForReducedMotion } from 'comice'
 import { createGLContext, mountCanvas, type CanvasMount, type GLContext } from 'comice/gl'
 import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
 import { compileParticlesProgram, destroyParticlesProgram, drawParticles, uploadParticleBuffers, type ParticlesMode, type ParticlesProgram } from './shader.js'
@@ -137,7 +138,8 @@ export function particles(options: ParticlesOptions): ComicePlugin {
     drawParticles(glContext, particlesProgram, {
       progress: currentProgress,
       pointSize,
-      noiseAmount: fluid ? noiseAmount : 0,
+      // The fluid drift moves on its own clock: off under reduced motion.
+      noiseAmount: fluid && !prefersReducedMotion() ? noiseAmount : 0,
       time: elapsedSeconds,
       resolutionWidth: cssWidth,
       resolutionHeight: cssHeight,
@@ -146,7 +148,8 @@ export function particles(options: ParticlesOptions): ComicePlugin {
   }
 
   function render(progress: number): void {
-    currentProgress = Math.max(0, Math.min(1, progress))
+    // Reduced motion: jump to whichever end state is closer, never animate between.
+    currentProgress = Math.max(0, Math.min(1, snapForReducedMotion(progress)))
   }
 
   return {

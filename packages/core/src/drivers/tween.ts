@@ -23,6 +23,7 @@
  * in an already-settled state is a no-op for the machine.
  */
 
+import { prefersReducedMotion } from '../motion.js'
 import { getSharedScheduler } from '../scheduler.js'
 import type { DriverSignal } from '../types.js'
 
@@ -70,8 +71,9 @@ export function createTween(onSignal: (signal: DriverSignal) => void, durationMs
       target = Math.max(0, Math.min(1, next))
       elapsed = 0
       // A reversal halfway through takes half the time, not the full
-      // duration again, so interrupted hovers feel continuous.
-      span = durationMs * Math.abs(target - from)
+      // duration again, so interrupted hovers feel continuous. Under
+      // reduced motion there is no in-between: it arrives this instant.
+      span = prefersReducedMotion() ? 0 : durationMs * Math.abs(target - from)
       if (span <= 0) {
         arrive()
         return

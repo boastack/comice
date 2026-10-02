@@ -34,6 +34,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
+import { prefersReducedMotion } from 'comice'
 import { getSharedScheduler } from 'comice/scheduler'
 import { clampPosition, computeItemTransform, decayVelocity, nearestIndex, SETTLE_THRESHOLD, wrapIndex, type ItemTransform, type RailMode, type RailState } from './physics.js'
 
@@ -267,7 +268,9 @@ export function rail(options: RailOptions): ComicePlugin {
     // pure overhead. Matches core/drivers/drag.ts's own
     // INERTIA_SETTLE_THRESHOLD gate exactly, rather than the two nearly-
     // identical pieces of logic drifting to different thresholds.
-    if (Math.abs(velocity) >= SETTLE_THRESHOLD) {
+    // Under reduced motion a release stops (or snaps) where the pointer let
+    // go — no coasting on after the person has stopped moving.
+    if (Math.abs(velocity) >= SETTLE_THRESHOLD && !prefersReducedMotion()) {
       startInertia()
     } else if (snap) {
       setState('snapping')

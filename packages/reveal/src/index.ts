@@ -27,6 +27,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
+import { snapForReducedMotion } from 'comice'
 import { computeEffectStyle, type RevealEffect } from './effects.js'
 import { computeStaggerDelay, type StaggerOptions } from './stagger.js'
 import { waitForMediaReady } from './decode.js'
@@ -87,7 +88,8 @@ export function reveal(options: RevealOptions = {}): ComicePlugin {
   let destroyed = false
 
   function render(progress: number): void {
-    currentProgress = Math.max(0, Math.min(1, progress))
+    // Reduced motion: jump to whichever end state is closer, never animate between.
+    currentProgress = Math.max(0, Math.min(1, snapForReducedMotion(progress)))
     if (!el) return
     applyStyle(el, computeEffectStyle(effect, currentProgress))
   }

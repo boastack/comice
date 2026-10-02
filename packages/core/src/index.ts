@@ -27,6 +27,7 @@ import type {
 export { createInstance } from './machine.js'
 export { createMapping } from './mapping.js'
 export { createScheduler, createVisibilityGate, getSharedScheduler } from './scheduler.js'
+export { prefersReducedMotion, snapForReducedMotion } from './motion.js'
 export * from './types.js'
 export * from './drivers/index.js'
 

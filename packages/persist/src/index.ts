@@ -59,6 +59,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
+import { prefersReducedMotion } from 'comice'
 import { getSharedScheduler } from 'comice/scheduler'
 import { claim, register, unregister, type PersistTransition } from './registry.js'
 import { computeTransitionStyle, type Rect } from './transitions.js'
@@ -179,7 +180,8 @@ export function persist(options: PersistOptions): ComicePlugin {
         () => {
           if (!survivingElement) return
           const elapsed = performance.now() - startTime
-          const progress = duration > 0 ? Math.min(1, elapsed / duration) : 1
+          // Reduced motion: the media lands in its new place this frame.
+          const progress = duration > 0 && !prefersReducedMotion() ? Math.min(1, elapsed / duration) : 1
           const style = computeTransitionStyle(transition, fromRect, toRect, progress)
           applyRectStyle(survivingElement, style)
           if (progress >= 1) {
@@ -191,7 +193,9 @@ export function persist(options: PersistOptions): ComicePlugin {
       )
     }
 
-    if (shouldUseNative(native, transition)) {
+    // The browser's own View Transition animates too, so reduced motion takes
+    // the manual path, which lands instantly.
+    if (!prefersReducedMotion() && shouldUseNative(native, transition)) {
       runViewTransition(() => {
         applyRectStyle(survivingElement!, { rect: toRect, opacity: 1 })
       })

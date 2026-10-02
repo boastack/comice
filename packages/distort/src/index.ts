@@ -29,6 +29,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
+import { prefersReducedMotion } from 'comice'
 import { createGLContext, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type Plane } from 'comice/gl'
 import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
 import {
@@ -170,7 +171,9 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
         const rect = target!.getBoundingClientRect()
         pointerX = rect.width > 0 ? (snapshot.display.x / rect.width) * 2 - 1 : 0
         pointerY = rect.height > 0 ? 1 - (snapshot.display.y / rect.height) * 2 : 0
-        pointerActive = snapshot.state === 'active' || snapshot.state === 'entering'
+        // A field that follows the cursor IS motion: under reduced motion it
+        // stays off and the media shows undistorted.
+        pointerActive = (snapshot.state === 'active' || snapshot.state === 'entering') && !prefersReducedMotion()
         renderFrame()
       })
 

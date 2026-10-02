@@ -33,6 +33,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
+import { snapForReducedMotion } from 'comice'
 import {
   createGLContext,
   createPlane,
@@ -204,7 +205,8 @@ export function morph(options: MorphOptions): ComicePlugin {
   }
 
   function render(progress: number): void {
-    currentProgress = Math.max(0, Math.min(1, progress))
+    // Reduced motion: jump to whichever end state is closer, never animate between.
+    currentProgress = Math.max(0, Math.min(1, snapForReducedMotion(progress)))
     renderFrame()
   }
 

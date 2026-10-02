@@ -34,6 +34,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
+import { snapForReducedMotion } from 'comice'
 
 export type SpotlightPeersOptions = {
   /** Selector matching sibling elements to dim/blur while this instance is
@@ -131,7 +132,8 @@ export function spotlight(options: SpotlightOptions = {}): ComicePlugin {
   }
 
   function render(progress: number): void {
-    currentProgress = clamp01(progress)
+    // Reduced motion: jump to whichever end state is closer, never animate between.
+    currentProgress = clamp01(snapForReducedMotion(progress))
     renderTarget(currentProgress)
     renderPeers(currentProgress)
     renderReveal(currentProgress)
