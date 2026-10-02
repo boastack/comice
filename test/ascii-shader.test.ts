@@ -5,7 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { compileAsciiProgram, destroyAsciiProgram, drawAscii } from '../packages/ascii/src/shader.js'
+import { buildFragmentShader, compileAsciiProgram, destroyAsciiProgram, drawAscii } from '../packages/ascii/src/shader.js'
 import { getResidencyPool } from '../packages/core/src/gl/residency.js'
 import { createFakeGLContext } from './fake-webgl2.js'
 import type { Plane } from '../packages/core/src/gl/plane.js'
@@ -95,6 +95,23 @@ describe('compileAsciiProgram', () => {
     const b = compileAsciiProgram(context.gl, { glyphCount: 10 })
     expect(a).toBeNull()
     expect(b).toBeNull()
+  })
+})
+
+describe('glyph order — real bug: highlights vanished, a white image rendered black', () => {
+  // Spec: charset is "ordered dark to light. Default ' .:-=+*#%@'". Glyphs
+  // draw in the media's own colour on black, so the space is the darkest
+  // glyph and '@' the lightest. The shader inverted the index, putting the
+  // space on bright pixels. The fake GL can't rasterize, so this pins the
+  // mapping in the generated GLSL.
+  it('a bright pixel picks a high (inky) glyph index: brightness maps to the index directly', () => {
+    const source = buildFragmentShader({ glyphCount: 10 })
+    expect(source).toContain('int glyphIndex = bucket;')
+    expect(source).not.toContain('glyphCount - 1 - bucket')
+  })
+
+  it('samples glyphs right way up (atlas rows are top-first, gl_FragCoord counts from the bottom)', () => {
+    expect(buildFragmentShader({ glyphCount: 10 })).toContain('1.0 - cellLocalUv.y')
   })
 })
 

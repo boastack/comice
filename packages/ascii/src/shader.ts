@@ -48,12 +48,14 @@ void main() {
 /**
  * Builds the fragment shader. Each screen cell:
  *   1. samples the media texture's average luminance for that cell,
- *   2. maps luminance -> a glyph index in [0, glyphCount) — DARKER pixels
- *      map toward the END of charset (spec's own convention: charset is
- *      "ordered dark to light", so index 0 is the densest glyph and a
- *      LOW luminance should pick a HIGH-density glyph, i.e. a LOW index —
- *      the mapping below is `glyphCount - 1 - bucket` for exactly this
- *      reason, not a naive direct luminance->index map),
+ *   2. maps luminance -> a glyph index in [0, glyphCount) DIRECTLY. Spec:
+ *      charset is "ordered dark to light. Default ' .:-=+*#%@'." Glyphs
+ *      are drawn in the media's own colour on black, so the space (no ink)
+ *      is the darkest glyph and '@' (most ink) the lightest: a bright
+ *      pixel picks a high index. The previous version inverted this
+ *      (`glyphCount - 1 - bucket`, reading index 0 as "densest"), which put
+ *      the SPACE on bright pixels — highlights vanished and a white image
+ *      rendered solid black (seen in Chromium on harness/site/),
  *   3. samples the SDF atlas at that glyph's own UV slice, using the
  *      cell-local UV (not the whole-screen UV) so the glyph shape repeats
  *      once per cell,
@@ -82,13 +84,15 @@ void main() {
 
   int glyphCount = ${glyphCount};
   int bucket = int(clamp(luma * float(glyphCount), 0.0, float(glyphCount - 1)));
-  // charset is dark->light; a LOW luminance should land on charset's
-  // DENSEST (first) glyph, so the bucket is inverted here.
-  int glyphIndex = glyphCount - 1 - bucket;
+  // charset is dark -> light (see above): brightness indexes it directly.
+  int glyphIndex = bucket;
 
   vec2 cellLocalUv = fract(gl_FragCoord.xy / u_cell);
   float atlasStep = 1.0 / float(glyphCount);
-  vec2 atlasUv = vec2((float(glyphIndex) + cellLocalUv.x) * atlasStep, cellLocalUv.y);
+  // The atlas is uploaded as raw rows, TOP row first; cellLocalUv.y comes
+  // from gl_FragCoord, which counts from the BOTTOM. Without the flip every
+  // glyph drew upside down ('.' at the top of its cell, '@' inverted).
+  vec2 atlasUv = vec2((float(glyphIndex) + cellLocalUv.x) * atlasStep, 1.0 - cellLocalUv.y);
 
   float sdf = texture(u_atlas, atlasUv).r;
   float glyphMask = smoothstep(0.45, 0.55, sdf);
