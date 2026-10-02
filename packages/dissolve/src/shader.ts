@@ -29,11 +29,23 @@
  * composeNoiseGLSL() output, not two copies.
  */
 
-import { getResidencyPool } from 'comice/gl'
+import { bindMaskUniforms, getResidencyPool, MASK_SAMPLE_GLSL, type MaskField } from 'comice/gl'
 import { composeNoiseGLSL } from 'comice/gl'
 import type { GLContext, Plane } from 'comice/gl'
 
-export type DissolveTransition = 'crossfade' | 'noise' | 'liquid'
+export type DissolveTransition =
+  | 'crossfade'
+  | 'displace'
+  | 'wipe'
+  | 'zoomBlur'
+  | 'pixelBridge'
+  | 'ink'
+  | 'flip'
+  | 'glitch'
+  | 'noise'
+  | 'liquid'
+  | 'mask'
+  | 'dissolve'
 
 export type NoiseOptions = {
   /** Spatial frequency of the noise field. Higher values read as finer
@@ -48,11 +60,23 @@ export type NoiseOptions = {
    *  values blend over a wider band. Matches spec §08's `noise.softness`.
    *  Default 0.15. */
   softness?: number
+  /** Degrees. Biases where the crossing starts, so it sweeps across the
+   *  image in that direction (0 = left to right, 90 = bottom to top). For
+   *  noise/liquid/dissolve, and the direction of 'wipe'. Default: no bias
+   *  (noise), left to right (wipe). */
+  direction?: number
+  /** 0..1, where the median pixel crosses: lower crosses earlier. For
+   *  noise/liquid/dissolve. Default 0.5. */
+  threshold?: number
+  /** Picks a different noise pattern. Default 0. */
+  seed?: number
 }
 
 export type DissolveShaderOptions = {
   transition: DissolveTransition
   noise?: NoiseOptions
+  /** 'displace' with a caller-supplied displacement texture (`map`). */
+  hasMap?: boolean
 }
 
 const VERTEX_SHADER = `#version 300 es
@@ -76,57 +100,148 @@ void main() {
  * (crop/cover differences) is out of this pass's scope.
  */
 function buildFragmentShader(options: DissolveShaderOptions): string {
-  const { transition, noise } = options
-  const scale = noise?.scale ?? 3
-  const intensity = noise?.intensity ?? 1
-  const softness = Math.max(0.001, Math.min(1, noise?.softness ?? 0.15))
+  const { transition, noise, hasMap = false } = options
+  const scale = (noise?.scale ?? 3).toFixed(6)
+  const intensity = (noise?.intensity ?? 1).toFixed(6)
+  const softness = Math.max(0.001, Math.min(1, noise?.softness ?? 0.15)).toFixed(6)
+  const threshold = (noise?.threshold ?? 0.5).toFixed(6)
+  const seed = (noise?.seed ?? 0).toFixed(6)
+  const angle = ((noise?.direction ?? 0) * Math.PI) / 180
+  const direction = `vec2(${Math.cos(angle).toFixed(6)}, ${Math.sin(angle).toFixed(6)})`
+  // `direction` on the noise transitions: pixels further along it cross
+  // later, so the crossing sweeps that way. No bias unless asked for.
+  const sweep = noise?.direction === undefined ? '0.0' : `dot(v_uv - 0.5, ${direction}) * 0.8`
 
-  const needsNoise = transition === 'noise' || transition === 'liquid'
+  const needsNoise = ['noise', 'liquid', 'ink'].includes(transition) || (transition === 'displace' && !hasMap)
   const noiseGLSL = needsNoise ? composeNoiseGLSL({ curl: false, displacement: transition === 'liquid' }) : ''
 
-  // blendGLSL: the one thing that differs per transition — everything
-  // else (uniform declarations, both texture samples, output) is shared.
-  const blendGLSL =
-    transition === 'crossfade'
-      ? `
-  vec4 fromColor = texture(u_from, v_uv);
-  vec4 toColor = texture(u_to, v_uv);
-  outColor = mix(fromColor, toColor, p);`
-      : transition === 'noise'
-        ? `
+  // One entry per transition on spec §08's card. Everything around it
+  // (uniforms, progress, output) is shared.
+  const BLENDS: Record<DissolveTransition, string> = {
+    crossfade: `
+  outColor = mix(texture(u_from, v_uv), texture(u_to, v_uv), p);`,
+
+    noise: `
   // Per-pixel CROSSING POINT drawn from simplex noise, NOT a plain lerp —
-  // this is spec §08's own "why noise matters": a crossfade moves every
-  // pixel at the same rate, which is the one thing a real material never
-  // does. Each pixel gets its own threshold in [0,1] (n01 below); as p
-  // sweeps 0->1, a pixel flips from 'from' to 'to' once p passes ITS OWN
-  // threshold, with a soft smoothstep band of width softness around the
-  // crossing — so p=0 reads as all-from, p=1 reads as all-to, and every
-  // point in between is a genuinely different per-pixel mix, not a
-  // uniform-everywhere blend. intensity scales how far n01 spreads from
-  // the neutral 0.5 (a plain crossfade sweep) toward the full [0,1] range.
-  float n = simplexNoise(vec3(v_uv * ${scale.toFixed(6)}, 0.0));
-  float n01 = 0.5 + 0.5 * n * ${intensity.toFixed(6)};
-  float localP = smoothstep(n01 - ${softness.toFixed(6)}, n01 + ${softness.toFixed(6)}, p);
-  vec4 fromColor = texture(u_from, v_uv);
-  vec4 toColor = texture(u_to, v_uv);
-  outColor = mix(fromColor, toColor, localP);`
-        : `
-  // liquid: the same per-pixel noise-driven crossing point as 'noise'
-  // (see that branch's own comment), PLUS a displacement pass on the
-  // sampling UV itself (via gl/noise.ts's displacementOffset(), the
-  // shared sampler spec §07 explicitly calls out as common between
-  // dissolve's liquid transition and distort's liquid/glass presets) —
-  // so image A reads as FLOWING into B, not just fading through a torn
-  // edge.
-  vec2 flow = displacementOffset(v_uv, p, ${(intensity * 0.05).toFixed(6)});
+  // spec §08's own "why noise matters": a crossfade moves every pixel at
+  // the same rate, which a real material never does. Each pixel crosses
+  // once p passes its own threshold (n01), with a soft band around it.
+  float n = simplexNoise(vec3(v_uv * ${scale}, ${seed}));
+  float n01 = ${threshold} + 0.5 * n * ${intensity} + ${sweep};
+  float localP = smoothstep(n01 - ${softness}, n01 + ${softness}, p);
+  outColor = mix(texture(u_from, v_uv), texture(u_to, v_uv), localP);`,
+
+    liquid: `
+  // liquid: noise's per-pixel crossing PLUS displacement on the sampling
+  // uv (gl/noise.ts's displacementOffset(), the sampler spec §07 shares
+  // with distort's liquid/glass) — A reads as FLOWING into B.
+  vec2 flow = displacementOffset(v_uv, p, ${(Number(intensity) * 0.05).toFixed(6)});
   vec2 fromUv = clamp(v_uv - flow * (1.0 - p), 0.0, 1.0);
   vec2 toUv = clamp(v_uv + flow * p, 0.0, 1.0);
-  float n = simplexNoise(vec3(v_uv * ${scale.toFixed(6)}, p * 2.0));
-  float n01 = 0.5 + 0.5 * n * ${intensity.toFixed(6)};
-  float localP = smoothstep(n01 - ${softness.toFixed(6)}, n01 + ${softness.toFixed(6)}, p);
-  vec4 fromColor = texture(u_from, fromUv);
-  vec4 toColor = texture(u_to, toUv);
-  outColor = mix(fromColor, toColor, localP);`
+  float n = simplexNoise(vec3(v_uv * ${scale}, p * 2.0 + ${seed}));
+  float n01 = ${threshold} + 0.5 * n * ${intensity} + ${sweep};
+  float localP = smoothstep(n01 - ${softness}, n01 + ${softness}, p);
+  outColor = mix(texture(u_from, fromUv), texture(u_to, toUv), localP);`,
+
+    dissolve: `
+  // dissolve: the classic film dissolve — a per-PIXEL random threshold
+  // (fine speckle), unlike 'noise''s smooth regions.
+  float n = fract(sin(dot(floor(v_uv * u_resolution) + ${seed}, vec2(12.9898, 78.233))) * 43758.5453);
+  float n01 = ${threshold} + (n - 0.5) * ${intensity} + ${sweep};
+  float localP = smoothstep(n01 - ${softness} * 0.2, n01 + ${softness} * 0.2, p);
+  outColor = mix(texture(u_from, v_uv), texture(u_to, v_uv), localP);`,
+
+    displace: `
+  // displace: both images are pushed by a displacement field — A away as
+  // it leaves, B into place as it arrives — so the edge of the change
+  // ripples. The field is the caller's \`map\` (its red/green around 0.5),
+  // or procedural noise without one.
+  vec2 field = ${hasMap ? 'texture(u_map, v_uv).rg - 0.5' : `vec2(simplexNoise(vec3(v_uv * ${scale}, ${seed})), simplexNoise(vec3(v_uv * ${scale} + 17.0, ${seed}))) * 0.5`};
+  float push = 0.25 * ${intensity};
+  vec4 a = texture(u_from, clamp(v_uv + field * p * push, 0.0, 1.0));
+  vec4 b = texture(u_to, clamp(v_uv - field * (1.0 - p) * push, 0.0, 1.0));
+  outColor = mix(a, b, smoothstep(0.2, 0.8, p));`,
+
+    wipe: `
+  // wipe: a soft edge sweeps across in \`noise.direction\` (default left to
+  // right), B behind it.
+  vec2 dir = ${direction};
+  float along = dot(v_uv - 0.5, dir) / (abs(dir.x) + abs(dir.y)) + 0.5;
+  float edge = ${softness} * 0.5;
+  float t = mix(-edge, 1.0 + edge, p);
+  outColor = mix(texture(u_from, v_uv), texture(u_to, v_uv), 1.0 - smoothstep(t - edge, t + edge, along));`,
+
+    zoomBlur: `
+  // zoomBlur: a radial blur toward the centre, strongest mid-transition,
+  // while A turns into B inside it.
+  float strength = sin(p * 3.14159265) * 0.3 * ${intensity};
+  float toB = smoothstep(0.35, 0.65, p);
+  vec2 c = v_uv - 0.5;
+  vec4 sum = vec4(0.0);
+  for (int i = 0; i < 12; i++) {
+    vec2 q = 0.5 + c * (1.0 - strength * float(i) / 11.0);
+    sum += mix(texture(u_from, q), texture(u_to, q), toB);
+  }
+  outColor = sum / 12.0;`,
+
+    pixelBridge: `
+  // pixelBridge: both images break into blocks that grow to the midpoint,
+  // swap there, and resolve as B.
+  float size = max(1.0, sin(p * 3.14159265) * 48.0 * ${intensity});
+  vec2 cell = size / u_resolution;
+  vec2 q = size > 1.0 ? (floor(v_uv / cell) + 0.5) * cell : v_uv;
+  outColor = mix(texture(u_from, q), texture(u_to, q), smoothstep(0.45, 0.55, p));`,
+
+    ink: `
+  // ink: B spreads in like ink blots from the centre — a noisy, organic
+  // front with a dark rim where the ink is wet.
+  float n = simplexNoise(vec3(v_uv * ${scale} * 1.5, ${seed})) * 0.5 + 0.5;
+  float reach = (1.0 - distance(v_uv, vec2(0.5)) * 1.2) * 0.6 + n * 0.6 * ${intensity};
+  float t = mix(1.4, -0.4, p);
+  float k = smoothstep(t - ${softness} * 0.3, t + ${softness} * 0.3, reach);
+  float rim = 1.0 - abs(k * 2.0 - 1.0);
+  vec4 c = mix(texture(u_from, v_uv), texture(u_to, v_uv), k);
+  outColor = vec4(c.rgb * (1.0 - rim * 0.55), c.a);`,
+
+    flip: `
+  // flip: a card turning on its vertical axis — A narrows away to edge-on,
+  // then B widens in. Darker edge-on, empty outside the card.
+  float c = cos(p * 3.14159265);
+  float w = max(abs(c), 0.0001);
+  float x = (v_uv.x - 0.5) / w + 0.5;
+  if (x < 0.0 || x > 1.0) {
+    outColor = vec4(0.0);
+  } else {
+    vec4 face = c > 0.0 ? texture(u_from, vec2(x, v_uv.y)) : texture(u_to, vec2(x, v_uv.y));
+    outColor = vec4(face.rgb * (0.55 + 0.45 * w), face.a);
+  }`,
+
+    glitch: `
+  // glitch: bands of rows jump sideways and split their colour channels,
+  // peaking mid-transition; each band switches to B at a slightly
+  // different moment.
+  float g = sin(p * 3.14159265) * ${intensity};
+  float band = floor(v_uv.y * 24.0);
+  float h = fract(sin((band + ${seed} * 13.0) * 78.233) * 43758.5453);
+  float shift = (h - 0.5) * 0.15 * g * step(0.5, fract(h * 7.0 + p * 3.0));
+  float pick = step(0.5, p + (h - 0.5) * 0.4 * g);
+  vec2 q = vec2(v_uv.x + shift, v_uv.y);
+  vec2 split = vec2(0.012 * g, 0.0);
+  vec4 mid = mix(texture(u_from, q), texture(u_to, q), pick);
+  outColor = vec4(
+    mix(texture(u_from, q + split).r, texture(u_to, q + split).r, pick),
+    mid.g,
+    mix(texture(u_from, q - split).b, texture(u_to, q - split).b, pick),
+    mid.a
+  );`,
+
+    mask: `
+  // mask: B appears through the mask (a shape, text, another image or a
+  // video — core's mask field, section 07), then fills in.
+  float edge = 0.08;
+  float t = mix(1.0 + edge, -edge, p);
+  outColor = mix(texture(u_from, v_uv), texture(u_to, v_uv), smoothstep(t - edge, t + edge, sampleMask(v_uv)));`,
+  }
 
   return `#version 300 es
 precision mediump float;
@@ -134,6 +249,9 @@ precision mediump float;
 uniform float u_progress;
 uniform sampler2D u_from;
 uniform sampler2D u_to;
+uniform vec2 u_resolution;
+${hasMap ? 'uniform sampler2D u_map;' : ''}
+${transition === 'mask' ? MASK_SAMPLE_GLSL : ''}
 
 in vec2 v_uv;
 out vec4 outColor;
@@ -142,7 +260,7 @@ ${noiseGLSL}
 
 void main() {
   float p = clamp(u_progress, 0.0, 1.0);
-  ${blendGLSL}
+  ${BLENDS[transition]}
 }`
 }
 
@@ -164,6 +282,10 @@ export type DissolveProgram = {
   uProgress: WebGLUniformLocation | null
   uFrom: WebGLUniformLocation | null
   uTo: WebGLUniformLocation | null
+  uResolution?: WebGLUniformLocation | null
+  uMap?: WebGLUniformLocation | null
+  /** For 'mask': what bindMaskUniforms() writes. */
+  mask?: Parameters<typeof bindMaskUniforms>[1] | null
 }
 
 /**
@@ -182,8 +304,8 @@ const PROGRAM_CACHE = new WeakMap<WebGL2RenderingContext, Map<string, DissolvePr
 const REFCOUNTS = new WeakMap<WebGL2RenderingContext, Map<string, number>>()
 
 function cacheKey(options: DissolveShaderOptions): string {
-  const { transition, noise } = options
-  return `${transition}:${noise?.scale ?? 3}:${noise?.intensity ?? 1}:${noise?.softness ?? 0.15}`
+  const { transition, noise, hasMap = false } = options
+  return `${transition}:${noise?.scale ?? 3}:${noise?.intensity ?? 1}:${noise?.softness ?? 0.15}:${noise?.direction ?? ''}:${noise?.threshold ?? 0.5}:${noise?.seed ?? 0}:${hasMap}`
 }
 
 export function compileDissolveProgram(gl: WebGL2RenderingContext, options: DissolveShaderOptions): DissolveProgram | null {
@@ -258,6 +380,20 @@ export function compileDissolveProgram(gl: WebGL2RenderingContext, options: Diss
     uProgress: gl.getUniformLocation(program, 'u_progress'),
     uFrom: gl.getUniformLocation(program, 'u_from'),
     uTo: gl.getUniformLocation(program, 'u_to'),
+    uResolution: gl.getUniformLocation(program, 'u_resolution'),
+    uMap: gl.getUniformLocation(program, 'u_map'),
+    mask:
+      options.transition === 'mask'
+        ? {
+            uMaskKind: gl.getUniformLocation(program, 'u_maskKind'),
+            uMaskTexture: gl.getUniformLocation(program, 'u_maskTexture'),
+            uMaskUvTransform: gl.getUniformLocation(program, 'u_maskUvTransform'),
+            uMaskCursorCenter: gl.getUniformLocation(program, 'u_maskCursorCenter'),
+            uMaskCursorRadius: gl.getUniformLocation(program, 'u_maskCursorRadius'),
+            uMaskCursorSoftness: gl.getUniformLocation(program, 'u_maskCursorSoftness'),
+            uMaskCursorFalloff: gl.getUniformLocation(program, 'u_maskCursorFalloff'),
+          }
+        : null,
   }
   byConfig.set(key, result)
   refcounts.set(key, 1) // this compile call is itself the first live reference
@@ -285,6 +421,14 @@ export function destroyDissolveProgram(gl: WebGL2RenderingContext, dissolveProgr
 
 export type DissolveDrawState = {
   progress: number
+  /** CSS px of the stage, for the per-pixel transitions. */
+  resolutionWidth?: number
+  resolutionHeight?: number
+  /** 'displace''s map texture, when the caller gave one. */
+  mapTexture?: WebGLTexture | null
+  /** 'mask''s field (core's mask producers). An absent field reveals
+   *  nothing, so the transition holds on `from` until the mask exists. */
+  maskField?: MaskField | null
 }
 
 /**
@@ -322,6 +466,16 @@ export function drawDissolve(context: GLContext, dissolveProgram: DissolveProgra
   gl.uniform1f(dissolveProgram.uProgress, state.progress)
   gl.uniform1i(dissolveProgram.uFrom, fromUnit)
   gl.uniform1i(dissolveProgram.uTo, toUnit)
+  gl.uniform2f(dissolveProgram.uResolution ?? null, state.resolutionWidth ?? 1, state.resolutionHeight ?? 1)
+  if (state.mapTexture) {
+    const mapUnit = pool.bind(state.mapTexture)
+    if (mapUnit !== null) gl.uniform1i(dissolveProgram.uMap ?? null, mapUnit)
+  }
+  if (dissolveProgram.mask) {
+    const field = state.maskField ?? null
+    const maskUnit = field?.kind === 'texture' ? (pool.bind(field.texture) ?? fromUnit) : fromUnit
+    bindMaskUniforms(gl, dissolveProgram.mask, field, maskUnit)
+  }
 
   gl.enable(gl.BLEND)
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)

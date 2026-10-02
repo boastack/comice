@@ -7,68 +7,95 @@
  * different sources bound in one pass) and T5 (gl/noise.ts, spliced into
  * a real shader for the first time anywhere in this codebase).
  *
- * SCOPE: three of the spec card's eleven transitions — `crossfade`,
- * `noise`, `liquid` — see shader.ts's own header for why these three.
- * `displace`/`wipe`/`zoomBlur`/`pixelBridge`/`ink`/`flip`/`glitch`/`mask`/
- * `dissolve` are a follow-up.
+ * ALL TWELVE TRANSITIONS on the card: crossfade, displace, wipe, zoomBlur,
+ * pixelBridge, ink, flip, glitch, noise, liquid, mask, dissolve — one GLSL
+ * entry each in shader.ts.
  *
  * HOW from/to WORK, DIFFERENT FROM morph: spec's own examples —
  * `comice('#gallery').use(dissolve({ to: images, ... }))` and
  * `comice('.hero').use(dissolve({ from: imageA, to: imageB, ... }))` —
  * make `from`/`to` explicit MEDIA OPTIONS, not the target element itself.
- * The target is where dissolve's own canvas is anchored/sized (matching
- * morph's createGLContext(target) pattern), but the actual pixels come
- * from two separately-supplied elements. Unlike morph, the target itself
- * is never hidden or used as a media source — it is purely a positioning
- * anchor. A caller typically points dissolve at an otherwise-empty
- * container element sized to the desired output box.
+ * The target is where dissolve's own canvas is anchored/sized, but the
+ * pixels come from separately-supplied elements; the target itself is
+ * never hidden or used as a media source. A caller typically points
+ * dissolve at an otherwise-empty container sized to the output box.
+ *
+ * SEQUENCES: "to may be an array for a sequence." Progress then runs
+ * through every source in order — with N sources, each neighbouring pair
+ * gets 1/(N-1) of the range — and `from` may be left out (the gallery
+ * example has none): the sequence starts at to[0].
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
 import { snapForReducedMotion } from 'comice'
-import { createGLContext, createGLReporter, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type GLReporter, type Plane } from 'comice/gl'
-import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
 import {
-  compileDissolveProgram,
-  destroyDissolveProgram,
-  drawDissolve,
-  type DissolveProgram,
-  type DissolveTransition,
-  type NoiseOptions,
-} from './shader.js'
+  createDerivedMask,
+  createGLContext,
+  createGLReporter,
+  createPlane,
+  createRasterizedMask,
+  getResidencyPool,
+  mountCanvas,
+  type CanvasMount,
+  type DerivedMask,
+  type GLContext,
+  type GLReporter,
+  type Plane,
+  type RasterizedMask,
+  type RasterizedMaskSource,
+} from 'comice/gl'
+import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
+import { compileDissolveProgram, destroyDissolveProgram, drawDissolve, type DissolveProgram, type DissolveTransition, type NoiseOptions } from './shader.js'
+
+type Media = HTMLImageElement | HTMLVideoElement
+
+/** For transition 'mask': a shape, text, or another image/video read by
+ *  brightness (brightest crosses first). */
+export type DissolveMaskSource = RasterizedMaskSource | Media
 
 export type DissolveOptions = {
-  /** Which transition drives the blend. Default 'crossfade'. Matches spec
-   *  §08's `transition` option exactly ("Default 'crossfade'."). */
+  /** Which transition drives the blend. Default 'crossfade'. */
   transition?: DissolveTransition
-  /** The starting media. Required. */
-  from: HTMLImageElement | HTMLVideoElement
-  /** The ending media. Required. Spec §08 allows `to` to be an array for
-   *  a sequence — not implemented this pass (single Media only); see the
-   *  file header's scope note. */
-  to: HTMLImageElement | HTMLVideoElement
-  /** `{ scale, intensity, softness }` for the 'noise' and 'liquid'
-   *  transitions. Ignored for 'crossfade'. */
+  /** The starting media. Optional when `to` is a sequence (it starts at
+   *  to[0]); required otherwise. */
+  from?: Media
+  /** The ending media — or an array, for a sequence through all of them. */
+  to: Media | readonly Media[]
+  /** `{ scale, intensity, direction, threshold, softness, seed }` — the
+   *  noise transitions' field; `direction` also steers 'wipe'. */
   noise?: NoiseOptions
+  /** URL of a displacement texture for 'displace' (red/green around 0.5
+   *  push x/y). Without one, displace uses procedural noise. */
+  map?: string
+  /** For transition 'mask'. */
+  mask?: DissolveMaskSource
+}
+
+function isMedia(value: unknown): value is Media {
+  return value instanceof HTMLImageElement || value instanceof HTMLVideoElement
 }
 
 export function dissolve(options: DissolveOptions): ComicePlugin {
-  const { transition = 'crossfade', from, to, noise } = options
+  const { transition = 'crossfade', from, to, noise, map, mask } = options
+  const sources: Media[] = [...(from ? [from] : []), ...(Array.isArray(to) ? to : to ? [to as Media] : [])]
 
-  if (!from || !to) {
-    // Same "fail loudly on a programmer error" discipline every other
-    // plugin's construction-time validation uses (morph's mask
-    // requirement, mapping.ts's malformed-config throws) — a dissolve
-    // with no real media to blend between is a configuration error, not
-    // something to silently no-op.
-    throw new Error("[comice] dissolve() requires both `from` and `to` media.")
+  if (sources.length < 2) {
+    // A dissolve with nothing to move between is a configuration error,
+    // not something to silently no-op.
+    throw new Error('[comice] dissolve() needs two media to move between: `from` and `to`, or a `to` sequence of two or more.')
+  }
+  if (transition === 'mask' && !mask) {
+    throw new Error("[comice] dissolve(): transition 'mask' needs a `mask` — a shape, text, an image or a video.")
   }
 
   let target: Element | null = null
   let glContext: GLContext | null = null
   let reporter: GLReporter | null = null
-  let fromPlane: Plane | null = null
-  let toPlane: Plane | null = null
+  let planes: Plane[] = []
+  let mapPlane: Plane | null = null
+  let maskPlane: Plane | null = null
+  let rasterized: RasterizedMask | null = null
+  let derived: DerivedMask | null = null
   let dissolveProgram: DissolveProgram | null = null
   let unsubscribe: (() => void) | null = null
   let unregisterFromScheduler: (() => void) | null = null
@@ -78,16 +105,37 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
   let currentProgress = 0
   let destroyed = false
 
-  function renderFrame(): void {
-    if (destroyed || !glContext || !fromPlane || !toPlane || !dissolveProgram) return
-    glContext.resizeToDisplay()
+  function rasterizeMask(): void {
+    if (!rasterized || !mask || isMedia(mask) || !(target instanceof HTMLElement)) return
+    rasterized.rasterize(mask, target.clientWidth || target.offsetWidth || 1, target.clientHeight || target.offsetHeight || 1)
+  }
 
-    // Both planes drawn in the SAME residency pass — this is the actual
-    // point of T2: two independent textures resident and addressable
-    // together, not two separate draws each starting a fresh pass.
+  function renderFrame(): void {
+    if (destroyed || !glContext || !dissolveProgram) return
+    glContext.resizeToDisplay()
+    const width = glContext.canvas.clientWidth || 1
+    const height = glContext.canvas.clientHeight || 1
+
+    // Which neighbouring pair, and how far between them: a sequence of N
+    // sources splits progress into N-1 equal legs.
+    const legs = planes.length - 1
+    const position = currentProgress * legs
+    const leg = Math.min(legs - 1, Math.floor(position))
+    const legProgress = position - leg
+
+    if (derived && maskPlane?.texture) derived.reduce(maskPlane.texture, width, height)
+
+    // Every texture in the SAME residency pass — T2's point: independent
+    // textures resident and addressable together.
     getResidencyPool(glContext).beginPass()
-    drawDissolve(glContext, dissolveProgram, fromPlane, toPlane, { progress: currentProgress })
-    reporter?.afterDraw(fromPlane, toPlane)
+    drawDissolve(glContext, dissolveProgram, planes[leg]!, planes[leg + 1]!, {
+      progress: legProgress,
+      resolutionWidth: width,
+      resolutionHeight: height,
+      mapTexture: mapPlane?.texture ?? null,
+      maskField: rasterized?.field ?? derived?.field ?? null,
+    })
+    reporter?.afterDraw(planes[leg]!, planes[leg + 1]!, ...(mapPlane ? [mapPlane] : []), ...(maskPlane ? [maskPlane] : []))
   }
 
   function render(progress: number): void {
@@ -102,45 +150,50 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
     setup(rawTarget: Element, instance: ComiceInstance) {
       target = rawTarget
 
-      // Unlike morph, the target is never hidden or read as media — it
-      // is purely a positioning/sizing anchor for dissolve's own canvas.
-      // See the file header for why from/to are separate options instead.
-      //
-      // mountCanvas() sizes the canvas to the target's OWN box. It used to
-      // be 100% of the target's parent, which on a real page covered the
-      // whole section, heading and body text included (harness/site/'s
-      // "Before / after" section was entirely hidden under it).
-      //
+      // mountCanvas() sizes the canvas to the target's OWN box (it used to
+      // cover the whole parent section, heading and text included).
       // Degrade-never-disappear: no WebGL2, or a non-HTML target (a canvas
       // can't render as a sibling inside an <svg>), mounts nothing — the
       // target was never touched, so the page shows it as it always would.
       glContext = createGLContext(target)
-      // ready / error lifecycle events (spec §04): say why an effect isn't
-      // showing instead of degrading silently.
+      // ready / error lifecycle events (spec §04).
       reporter = createGLReporter(instance, 'dissolve', () => mount?.release())
       if (!glContext) reporter.noContext()
       if (glContext && target instanceof HTMLElement) {
         mount = mountCanvas(glContext, target, { owner: 'dissolve', hideTarget: false })
       }
 
-      fromPlane = createPlane(glContext, from)
-      toPlane = createPlane(glContext, to)
+      planes = sources.map((source) => createPlane(glContext, source))
 
       if (glContext) {
-        dissolveProgram = compileDissolveProgram(glContext.gl, { transition, noise })
+        if (transition === 'displace' && map) {
+          const mapImage = new Image()
+          mapImage.crossOrigin = 'anonymous'
+          mapImage.src = map
+          mapPlane = createPlane(glContext, mapImage)
+        }
+        if (transition === 'mask' && mask) {
+          if (isMedia(mask)) {
+            maskPlane = createPlane(glContext, mask)
+            derived = createDerivedMask(glContext, mask instanceof HTMLVideoElement ? 'video' : 'image')
+          } else {
+            rasterized = createRasterizedMask(glContext)
+            rasterizeMask()
+          }
+        }
+        dissolveProgram = compileDissolveProgram(glContext.gl, { transition, noise, hasMap: !!mapPlane })
         if (!dissolveProgram) reporter.noProgram()
       }
 
-      resizeObserver = new ResizeObserver(() => renderFrame())
+      resizeObserver = new ResizeObserver(() => {
+        rasterizeMask()
+        renderFrame()
+      })
       resizeObserver.observe(target)
 
-      // Rides getSharedScheduler() — no private rAF loop, same discipline
-      // every T1+ file in this package holds to. Gated on the target's
-      // own connectedness, matching morph's own gate exactly.
       // Render only when visible (spec §13): off-screen, in a hidden tab, or once
       // the frame budget has dropped to a static poster (core's budget.ts), this
-      // does zero work. `isConnected` alone kept every effect drawing while
-      // scrolled away — particles off-screen held a whole page at 4fps.
+      // does zero work.
       visibility = createVisibilityGate(target)
       unregisterFromScheduler = getSharedScheduler().add(
         () => renderFrame(),
@@ -162,14 +215,20 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
       unsubscribe?.()
       resizeObserver?.disconnect()
       if (glContext && dissolveProgram) destroyDissolveProgram(glContext.gl, dissolveProgram)
-      fromPlane?.destroy()
-      toPlane?.destroy()
+      planes.forEach((plane) => plane.destroy())
+      mapPlane?.destroy()
+      maskPlane?.destroy()
+      rasterized?.destroy()
+      derived?.destroy()
       mount?.release()
       mount = null
       target = null
       glContext = null
-      fromPlane = null
-      toPlane = null
+      planes = []
+      mapPlane = null
+      maskPlane = null
+      rasterized = null
+      derived = null
       dissolveProgram = null
       resizeObserver = null
     },
@@ -190,4 +249,4 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
   }
 }
 
-export type { DissolveTransition } from './shader.js'
+export type { DissolveTransition, NoiseOptions } from './shader.js'
