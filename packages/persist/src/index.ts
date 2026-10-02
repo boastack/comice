@@ -207,7 +207,7 @@ export function persist(options: PersistOptions): ComicePlugin {
   return {
     name: 'persist',
 
-    setup(rawTarget: Element, _instance: ComiceInstance) {
+    setup(rawTarget: Element, instance: ComiceInstance) {
       if (!isUploadableSource(rawTarget)) {
         throw new Error('[comice] persist() requires an <img> or <video> target.')
       }
@@ -228,6 +228,9 @@ export function persist(options: PersistOptions): ComicePlugin {
       // element becomes available to claim on whatever page comes next.
 
       register(match, target, transition)
+      // `ready` lifecycle event (spec §04): no GPU work to wait for, so this
+      // plugin's effect is in place once setup has run.
+      instance.ready('persist')
     },
 
     teardown() {

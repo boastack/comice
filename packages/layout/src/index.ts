@@ -165,7 +165,7 @@ export function layout(options: LayoutOptions): ComicePlugin {
   return {
     name: 'layout',
 
-    setup(rawTarget: Element, _instance: ComiceInstance) {
+    setup(rawTarget: Element, instance: ComiceInstance) {
       if (!isUploadableSource(rawTarget)) {
         throw new Error('[comice] layout() requires an <img> or <video> target as the media element.')
       }
@@ -196,6 +196,9 @@ export function layout(options: LayoutOptions): ComicePlugin {
 
       resizeObserver = new ResizeObserver(() => render())
       resizeObserver.observe(mediaEl)
+      // `ready` lifecycle event (spec §04): no GPU work to wait for, so this
+      // plugin's effect is in place once setup has run.
+      instance.ready('layout')
     },
 
     teardown() {

@@ -30,7 +30,7 @@
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
 import { prefersReducedMotion } from 'comice'
-import { createGLContext, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type Plane } from 'comice/gl'
+import { createGLContext, createGLReporter, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type GLReporter, type Plane } from 'comice/gl'
 import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
 import {
   compileDistortProgram,
@@ -72,6 +72,7 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
 
   let target: Uploadable | null = null
   let glContext: GLContext | null = null
+  let reporter: GLReporter | null = null
   let plane: Plane | null = null
   let distortProgram: DistortProgram | null = null
   let unsubscribe: (() => void) | null = null
@@ -116,6 +117,7 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
       resolutionWidth: cssWidth,
       resolutionHeight: cssHeight,
     })
+    reporter?.afterDraw(plane)
   }
 
   return {
@@ -133,6 +135,10 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
       // restoring both — and throws, before touching the DOM, if another
       // GL plugin already draws on this element.
       glContext = createGLContext(target)
+      // ready / error lifecycle events (spec §04): say why an effect isn't
+      // showing instead of degrading silently.
+      reporter = createGLReporter(instance, 'distort', () => mount?.release())
+      if (!glContext) reporter.noContext()
       if (glContext) {
         mount = mountCanvas(glContext, target, { owner: 'distort', hideTarget: true })
       }
@@ -143,7 +149,10 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
         distortProgram = compileDistortProgram(glContext.gl, { effect, falloff })
         // A failed compile would otherwise leave the media hidden behind an
         // empty canvas; show the original instead.
-        if (!distortProgram) mount?.release()
+        if (!distortProgram) {
+          mount?.release()
+          reporter.noProgram()
+        }
       }
 
       resizeObserver = new ResizeObserver(() => renderFrame())

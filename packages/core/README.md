@@ -33,8 +33,14 @@ A plugin decides what happens to the media. A driver decides when. Any plugin wo
 | `.set(props)` / `.set(plugin, props)` | Applies values immediately, no transition (like `gsap.set()`). |
 | `.transition(state)` | Forces a state change through the normal interrupt-safe rules. |
 | `.map(signal).to(plugin, param, options)` | Routes a named signal (from `audio()`) into a plugin parameter. |
-| `.on(event, fn)` / `.off()` | State and lifecycle events. |
+| `.on(event, fn)` / `.off()` | State events (`idle`, `entering`, `active`, `leaving`, `progress`) and lifecycle events: `ready` when a plugin's effect is first on screen, `error` (with the reason) when it can't run. |
 | `.destroy()` | Tears everything down and releases GPU resources. |
+
+```js
+comice('.hero img')
+  .use(distort())
+  .on('error', (_state, { plugin, error }) => console.warn(plugin, error.message))
+```
 
 Every interactive element is a state machine — `idle`, `entering`, `active`, `leaving` — driven by real events, so an interrupted hover or an early drag release reverses from wherever it is instead of restarting.
 

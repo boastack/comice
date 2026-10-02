@@ -36,12 +36,14 @@ import type { ComiceInstance, ComicePlugin } from 'comice'
 import { snapForReducedMotion } from 'comice'
 import {
   createGLContext,
+  createGLReporter,
   createPlane,
   createRasterizedMask,
   getResidencyPool,
   mountCanvas,
   type CanvasMount,
   type GLContext,
+  type GLReporter,
   type Plane,
   type RasterizedMask,
   type RasterizedMaskSource,
@@ -139,6 +141,7 @@ export function morph(options: MorphOptions): ComicePlugin {
 
   let target: Uploadable | null = null
   let glContext: GLContext | null = null
+  let reporter: GLReporter | null = null
   let plane: Plane | null = null
   let morphProgram: MorphProgram | null = null
   let rasterizedMask: RasterizedMask | null = null
@@ -202,6 +205,7 @@ export function morph(options: MorphOptions): ComicePlugin {
       maskTexture: rasterizedMask?.field?.kind === 'texture' ? rasterizedMask.field.texture : null,
       maskScale,
     })
+    reporter?.afterDraw(plane)
   }
 
   function render(progress: number): void {
@@ -235,6 +239,10 @@ export function morph(options: MorphOptions): ComicePlugin {
       // SDF/liquid shader has no CSS equivalent to fall back to, and the
       // untouched media beats a blank space.
       glContext = createGLContext(target)
+      // ready / error lifecycle events (spec §04): say why an effect isn't
+      // showing instead of degrading silently.
+      reporter = createGLReporter(instance, 'morph', () => mount?.release())
+      if (!glContext) reporter.noContext()
       if (glContext) {
         mount = mountCanvas(glContext, target, { owner: 'morph', hideTarget: true })
       }
@@ -254,7 +262,10 @@ export function morph(options: MorphOptions): ComicePlugin {
         })
         // A failed compile would otherwise leave the media hidden behind an
         // empty canvas; show the original instead.
-        if (!morphProgram) mount?.release()
+        if (!morphProgram) {
+          mount?.release()
+          reporter.noProgram()
+        }
       }
 
       if (operation === 'mask') {

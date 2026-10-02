@@ -129,6 +129,9 @@ export function reveal(options: RevealOptions = {}): ComicePlugin {
       }
 
       const armReady = (): void => {
+        // `ready` lifecycle event (spec §04): the media is decoded and the
+        // reveal is armed to play, never on a blank frame.
+        instance.ready('reveal')
         if (delay > 0) {
           staggerTimer = setTimeout(start, delay)
         } else {

@@ -185,7 +185,7 @@ export function seed(options: SeedOptions = {}): ComicePlugin {
   return {
     name: 'seed',
 
-    setup(rawTarget: Element, _instance: ComiceInstance) {
+    setup(rawTarget: Element, instance: ComiceInstance) {
       if (!isUploadableSource(rawTarget)) {
         throw new Error('[comice] seed() requires an <img> or <video> target.')
       }
@@ -239,6 +239,8 @@ export function seed(options: SeedOptions = {}): ComicePlugin {
         // (harmless once opaque real content paints over it) rather than
         // removed, avoiding a redundant reflow for no visible benefit.
         target.style.filter = ''
+        // `ready` lifecycle event (spec §04): the real media is showing.
+        instance.ready('seed')
       })
     },
 

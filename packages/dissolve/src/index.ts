@@ -26,7 +26,7 @@
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
 import { snapForReducedMotion } from 'comice'
-import { createGLContext, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type Plane } from 'comice/gl'
+import { createGLContext, createGLReporter, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type GLReporter, type Plane } from 'comice/gl'
 import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
 import {
   compileDissolveProgram,
@@ -66,6 +66,7 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
 
   let target: Element | null = null
   let glContext: GLContext | null = null
+  let reporter: GLReporter | null = null
   let fromPlane: Plane | null = null
   let toPlane: Plane | null = null
   let dissolveProgram: DissolveProgram | null = null
@@ -86,6 +87,7 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
     // together, not two separate draws each starting a fresh pass.
     getResidencyPool(glContext).beginPass()
     drawDissolve(glContext, dissolveProgram, fromPlane, toPlane, { progress: currentProgress })
+    reporter?.afterDraw(fromPlane, toPlane)
   }
 
   function render(progress: number): void {
@@ -113,6 +115,10 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
       // can't render as a sibling inside an <svg>), mounts nothing — the
       // target was never touched, so the page shows it as it always would.
       glContext = createGLContext(target)
+      // ready / error lifecycle events (spec §04): say why an effect isn't
+      // showing instead of degrading silently.
+      reporter = createGLReporter(instance, 'dissolve', () => mount?.release())
+      if (!glContext) reporter.noContext()
       if (glContext && target instanceof HTMLElement) {
         mount = mountCanvas(glContext, target, { owner: 'dissolve', hideTarget: false })
       }
@@ -122,6 +128,7 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
 
       if (glContext) {
         dissolveProgram = compileDissolveProgram(glContext.gl, { transition, noise })
+        if (!dissolveProgram) reporter.noProgram()
       }
 
       resizeObserver = new ResizeObserver(() => renderFrame())

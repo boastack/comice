@@ -42,7 +42,7 @@
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
 import { prefersReducedMotion, snapForReducedMotion } from 'comice'
-import { createGLContext, mountCanvas, type CanvasMount, type GLContext } from 'comice/gl'
+import { createGLContext, createGLReporter, mountCanvas, type CanvasMount, type GLContext, type GLReporter } from 'comice/gl'
 import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
 import { compileParticlesProgram, destroyParticlesProgram, drawParticles, uploadParticleBuffers, type ParticlesMode, type ParticlesProgram } from './shader.js'
 import { resampleToCount, sampleSource, type ParticleSample } from './sampler.js'
@@ -98,6 +98,7 @@ export function particles(options: ParticlesOptions): ComicePlugin {
 
   let target: Element | null = null
   let glContext: GLContext | null = null
+  let reporter: GLReporter | null = null
   let particlesProgram: ParticlesProgram | null = null
   let unregisterFromScheduler: (() => void) | null = null
   let visibility: ReturnType<typeof createVisibilityGate> | null = null
@@ -145,6 +146,7 @@ export function particles(options: ParticlesOptions): ComicePlugin {
       resolutionHeight: cssHeight,
       instanceCount,
     })
+    if (instanceCount > 0) reporter?.afterDraw()
   }
 
   function render(progress: number): void {
@@ -163,9 +165,14 @@ export function particles(options: ParticlesOptions): ComicePlugin {
       // (heading and text) on harness/site/. A non-HTML target mounts
       // nothing (a canvas can't render as a sibling inside an <svg>).
       glContext = createGLContext(target)
+      // ready / error lifecycle events (spec §04): say why an effect isn't
+      // showing instead of degrading silently.
+      reporter = createGLReporter(instance, 'particles')
+      if (!glContext) reporter.noContext()
       if (glContext && target instanceof HTMLElement) {
         mount = mountCanvas(glContext, target, { owner: 'particles', hideTarget: false })
         particlesProgram = compileParticlesProgram(glContext.gl, { mode, fluid })
+        if (!particlesProgram) reporter.noProgram()
         if (particlesProgram) loadBuffers()
       }
       // Degrade-never-disappear: no WebGL2, or a failed compile, leaves

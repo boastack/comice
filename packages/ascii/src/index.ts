@@ -15,7 +15,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
-import { createGLContext, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type Plane } from 'comice/gl'
+import { createGLContext, createGLReporter, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type GLReporter, type Plane } from 'comice/gl'
 import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
 import { compileAsciiProgram, destroyAsciiProgram, drawAscii, type AsciiProgram } from './shader.js'
 import { buildGlyphAtlas } from './atlas.js'
@@ -58,6 +58,7 @@ export function ascii(options: AsciiOptions = {}): ComicePlugin {
 
   let target: Uploadable | null = null
   let glContext: GLContext | null = null
+  let reporter: GLReporter | null = null
   let plane: Plane | null = null
   let asciiProgram: AsciiProgram | null = null
   let atlasTexture: WebGLTexture | null = null
@@ -81,12 +82,13 @@ export function ascii(options: AsciiOptions = {}): ComicePlugin {
       resolutionHeight: cssHeight,
       cell: cellSize,
     })
+    reporter?.afterDraw(plane)
   }
 
   return {
     name: 'ascii',
 
-    setup(rawTarget: Element, _instance: ComiceInstance) {
+    setup(rawTarget: Element, instance: ComiceInstance) {
       if (!isUploadableSource(rawTarget)) {
         throw new Error('[comice] ascii() requires an <img> or <video> target.')
       }
@@ -96,6 +98,10 @@ export function ascii(options: AsciiOptions = {}): ComicePlugin {
       // mountCanvas() for sizing, hiding/restoring, and the one-GL-effect-
       // per-element rule.
       glContext = createGLContext(target)
+      // ready / error lifecycle events (spec §04): say why an effect isn't
+      // showing instead of degrading silently.
+      reporter = createGLReporter(instance, 'ascii', () => mount?.release())
+      if (!glContext) reporter.noContext()
       if (glContext) {
         mount = mountCanvas(glContext, target, { owner: 'ascii', hideTarget: true })
       }
@@ -106,7 +112,10 @@ export function ascii(options: AsciiOptions = {}): ComicePlugin {
         asciiProgram = compileAsciiProgram(glContext.gl, { glyphCount: Array.from(charset).length })
         // A failed compile would otherwise leave the media hidden behind an
         // empty canvas; show the original instead.
-        if (!asciiProgram) mount?.release()
+        if (!asciiProgram) {
+          mount?.release()
+          reporter.noProgram()
+        }
         const atlas = buildGlyphAtlas(charset)
         if (atlas) {
           atlasTexture = uploadAtlasTexture(glContext.gl, atlas)

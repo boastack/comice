@@ -8,6 +8,7 @@
  */
 export { createGLContext, hasGLContext, effectiveDPR, mountCanvas, type GLContext, type CanvasMount } from './context.js'
 export { createPlane, drawPlane, type Plane, type PlaneSource } from './plane.js'
+export { createGLReporter, type GLReporter } from './report.js'
 export { waitForMediaReady } from './ready.js'
 export { getResidencyPool, type ResidencyPool } from './residency.js'
 export {

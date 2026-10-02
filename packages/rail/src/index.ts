@@ -301,7 +301,7 @@ export function rail(options: RailOptions): ComicePlugin {
   return {
     name: 'rail',
 
-    setup(rawTarget: Element, _instance: ComiceInstance) {
+    setup(rawTarget: Element, instance: ComiceInstance) {
       if (!(rawTarget instanceof HTMLElement)) {
         throw new Error('[comice] rail() requires an HTMLElement target.')
       }
@@ -353,6 +353,9 @@ export function rail(options: RailOptions): ComicePlugin {
 
       setState('idle')
       render()
+      // `ready` lifecycle event (spec §04): no GPU work to wait for, so this
+      // plugin's effect is in place once setup has run.
+      instance.ready('rail')
     },
 
     teardown() {

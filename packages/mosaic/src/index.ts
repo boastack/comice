@@ -26,7 +26,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
-import { createGLContext, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type Plane } from 'comice/gl'
+import { createGLContext, createGLReporter, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type GLReporter, type Plane } from 'comice/gl'
 import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
 import { buildPalette } from './palette.js'
 import { compileMosaicProgram, destroyMosaicProgram, drawMosaic, type MosaicFill, type MosaicProgram } from './shader.js'
@@ -74,6 +74,7 @@ export function mosaic(options: MosaicOptions): ComicePlugin {
 
   let target: Uploadable | null = null
   let glContext: GLContext | null = null
+  let reporter: GLReporter | null = null
   let plane: Plane | null = null
   let sourcePlanes: Plane[] = []
   let mosaicProgram: MosaicProgram | null = null
@@ -98,12 +99,13 @@ export function mosaic(options: MosaicOptions): ComicePlugin {
       cell: cellSize,
       palette: paletteColors ?? undefined,
     })
+    reporter?.afterDraw(plane, ...sourcePlanes)
   }
 
   return {
     name: 'mosaic',
 
-    setup(rawTarget: Element, _instance: ComiceInstance) {
+    setup(rawTarget: Element, instance: ComiceInstance) {
       if (!isUploadableSource(rawTarget)) {
         throw new Error('[comice] mosaic() requires an <img> or <video> target.')
       }
@@ -113,6 +115,10 @@ export function mosaic(options: MosaicOptions): ComicePlugin {
       // mountCanvas() for sizing, hiding/restoring, and the one-GL-effect-
       // per-element rule.
       glContext = createGLContext(target)
+      // ready / error lifecycle events (spec §04): say why an effect isn't
+      // showing instead of degrading silently.
+      reporter = createGLReporter(instance, 'mosaic', () => mount?.release())
+      if (!glContext) reporter.noContext()
       if (glContext) {
         mount = mountCanvas(glContext, target, { owner: 'mosaic', hideTarget: true })
       }
@@ -130,7 +136,10 @@ export function mosaic(options: MosaicOptions): ComicePlugin {
         })
         // A failed compile would otherwise leave the media hidden behind an
         // empty canvas; show the original instead.
-        if (!mosaicProgram) mount?.release()
+        if (!mosaicProgram) {
+          mount?.release()
+          reporter.noProgram()
+        }
       }
 
       resizeObserver = new ResizeObserver(() => renderFrame())

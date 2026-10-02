@@ -28,6 +28,12 @@ export type ComiceEvent =
   | { type: 'progress'; value: number }
   | { type: 'rest'; value: Transform }
   | { type: 'display'; value: Transform }
+  /** A plugin's effect is on screen for the first time (spec §04 lifecycle). */
+  | { type: 'ready'; plugin: string }
+  /** A plugin can't show its effect — no WebGL2, a shader that won't
+   *  compile, media the GPU can't read. The media still shows (rule 04);
+   *  this says why the effect doesn't. */
+  | { type: 'error'; plugin: string; error: Error }
 
 export type ComiceEventType = ComiceEvent['type']
 
@@ -64,6 +70,13 @@ export type ComiceInstance = {
   setProgress(value: number): void
   setRest(next: Partial<Transform>): void
   setDisplay(next: Partial<Transform>): void
+  /** For plugins: report that `plugin`'s effect is on screen. Emits
+   *  `ready` on the next microtask, so `.on('ready')` chained after
+   *  `.use()` still hears it. */
+  ready(plugin: string): void
+  /** For plugins: report why `plugin` can't show its effect. Emits
+   *  `error` on the next microtask, like ready(). */
+  fail(plugin: string, error: Error): void
   destroy(): void
 
   on(type: ComiceEventType | '*', listener: StateListener): () => void

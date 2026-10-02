@@ -175,6 +175,9 @@ export function spotlight(options: SpotlightOptions = {}): ComicePlugin {
       unsubscribe = instance.on('*', (snapshot) => {
         render(snapshot.progress)
       })
+      // `ready` lifecycle event (spec §04): no GPU work to wait for, so this
+      // plugin's effect is in place once setup has run.
+      instance.ready('spotlight')
     },
 
     teardown() {

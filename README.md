@@ -77,7 +77,7 @@ Comice core ships with **zero effects**. Every visual effect is a plugin, regist
 | `.map(sourceKey).to(plugin, paramName, options)` | Routes one named signal from the most recently attached driver into one plugin parameter, through a clamp/remap/invert/multiplier/offset/easing/smoothing pipeline. |
 | `.set(props)` / `.set(plugin, props)` | Applies values immediately, no transition (like `gsap.set()`): plugin parameters by name, plus `progress`. Scoped to one plugin when two share a parameter name. |
 | `.transition(state)` | Forces a state change through the normal interrupt-safe rules. |
-| `.on(event, fn)` / `.off()` | State and lifecycle events: `active`, `leaving`, `entering`, `idle`, `progress`, `rest`, `display`. |
+| `.on(event, fn)` / `.off()` | State events (`idle`, `entering`, `active`, `leaving`, `progress`, `rest`, `display`) and lifecycle events: `ready` when a plugin's effect is first on screen, `error` when it can't run (no WebGL2, a shader that won't compile, cross-origin media without CORS) — with the reason. The media still shows either way. |
 | `.destroy()` | Tears down every driver and plugin attached to this instance and releases its resources. |
 
 ### Drivers

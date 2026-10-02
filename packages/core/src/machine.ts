@@ -231,7 +231,27 @@ export function createInstance(options: ComiceOptions = {}): ComiceInstance {
     )
   }
 
+  // Lifecycle events change no state, and fire on the next microtask: a
+  // plugin reports during setup(), which runs inside `.use()` — before a
+  // `.on('error')` chained after it is attached. Firing synchronously would
+  // make a setup-time failure impossible to hear.
+  let destroyed = false
+  function lifecycle(event: ComiceEvent): void {
+    queueMicrotask(() => {
+      if (!destroyed) emit(event)
+    })
+  }
+
+  function ready(plugin: string): void {
+    lifecycle({ type: 'ready', plugin })
+  }
+
+  function fail(plugin: string, error: Error): void {
+    lifecycle({ type: 'error', plugin, error })
+  }
+
   function destroy(): void {
+    destroyed = true
     listenersAll.clear()
     listenersByType.clear()
   }
@@ -296,6 +316,8 @@ export function createInstance(options: ComiceOptions = {}): ComiceInstance {
     setProgress,
     setRest,
     setDisplay,
+    ready,
+    fail,
     destroy,
 
     on,

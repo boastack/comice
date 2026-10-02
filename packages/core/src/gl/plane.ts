@@ -39,6 +39,11 @@ export type Plane = {
    *  of `context.canvas`'s offset parent. Undefined until the first
    *  syncLayout(). */
   readonly box: { x: number; y: number; width: number; height: number } | null
+  /** Why the last upload failed — almost always cross-origin media served
+   *  without CORS headers, which taints WebGL. Null after a good upload.
+   *  The plane still degrades quietly (no texture, media shows as-is);
+   *  this lets the plugin say why, through `instance.fail()`. */
+  readonly error?: Error | null
   destroy(): void
 }
 
@@ -210,6 +215,7 @@ export function createPlane(context: GLContext | null, source: PlaneSource): Pla
   const { gl, canvas } = context
   const texture = gl.createTexture()
   let hasUploadedOnce = false
+  let uploadError: Error | null = null
 
   function configureTexture(): void {
     if (!texture) return
@@ -235,7 +241,13 @@ export function createPlane(context: GLContext | null, source: PlaneSource): Pla
     try {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source)
       hasUploadedOnce = true
-    } catch {
+      uploadError = null
+    } catch (err) {
+      uploadError = new Error(
+        'This media could not be read by WebGL — usually a cross-origin image or video served without CORS headers ' +
+          '(add crossorigin="anonymous" and an Access-Control-Allow-Origin header). The original media is shown unchanged.',
+        { cause: err },
+      )
       // A cross-origin source without CORS headers taints the canvas and
       // texImage2D throws — degrade, never disappear: the plane simply
       // never gets a texture, same as the no-WebGL2 path above, rather
@@ -302,6 +314,9 @@ export function createPlane(context: GLContext | null, source: PlaneSource): Pla
   return {
     get texture() {
       return hasUploadedOnce ? texture : null
+    },
+    get error() {
+      return uploadError
     },
     upload,
     syncLayout,

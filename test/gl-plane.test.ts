@@ -84,6 +84,21 @@ describe('createPlane — image source, real context', () => {
     expect(gl.__flipY).toBe(false) // reset, so no other upload on the shared context inherits it
   })
 
+  it('a failed upload is kept on plane.error (with the CORS fix spelled out), and cleared by a later good upload', () => {
+    img = readyImage()
+    document.body.appendChild(img)
+    const context = createFakeGLContext(canvas, { failTexImage: true })
+    const plane = createPlane(context, img)
+    expect(plane.texture).toBeNull()
+    expect(plane.error?.message).toMatch(/crossorigin="anonymous".*Access-Control-Allow-Origin/)
+
+    // The server starts sending CORS headers; the next upload succeeds.
+    ;(context.gl as unknown as { texImage2D: () => void }).texImage2D = () => {}
+    plane.upload()
+    expect(plane.texture).not.toBeNull()
+    expect(plane.error).toBeNull()
+  })
+
   it('resets UNPACK_FLIP_Y_WEBGL even when the upload throws (tainted canvas)', () => {
     img = readyImage()
     document.body.appendChild(img)

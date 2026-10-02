@@ -34,7 +34,7 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
-import { createGLContext, createPlane, type GLContext, type Plane } from 'comice/gl'
+import { createGLContext, createGLReporter, createPlane, type GLContext, type GLReporter, type Plane } from 'comice/gl'
 import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
 import { createDownsampler, type Downsampler } from './downsample.js'
 import { clampToContrast, sampleEdges, samplePalette, type RGB } from './sample.js'
@@ -97,6 +97,7 @@ export function aura(options: AuraOptions = {}): ComicePlugin {
 
   let target: Uploadable | null = null
   let glContext: GLContext | null = null
+  let reporter: GLReporter | null = null
   let plane: Plane | null = null
   let downsampler: Downsampler | null = null
   let glowEl: HTMLDivElement | null = null
@@ -148,7 +149,12 @@ export function aura(options: AuraOptions = {}): ComicePlugin {
     lastSampleTime = timestamp
 
     plane.upload()
-    if (!plane.texture) return
+    if (!plane.texture) {
+      // No texture is exactly the cross-origin case: report it before
+      // bailing, or the error would never be heard.
+      reporter?.afterDraw(plane)
+      return
+    }
 
     const downsampled = downsampler.sample(plane.texture)
     if (!downsampled) return
@@ -156,12 +162,13 @@ export function aura(options: AuraOptions = {}): ComicePlugin {
     const result = sample === 'edges' ? [sampleEdges(downsampled.pixels, downsampled.width, downsampled.height)] : samplePalette(downsampled.pixels, downsampled.width, downsampled.height, colors)
 
     applyColors(result)
+    reporter?.afterDraw(plane)
   }
 
   return {
     name: 'aura',
 
-    setup(rawTarget: Element, _instance: ComiceInstance) {
+    setup(rawTarget: Element, instance: ComiceInstance) {
       if (!isUploadableSource(rawTarget)) {
         throw new Error('[comice] aura() requires an <img> or <video> target.')
       }
@@ -175,6 +182,10 @@ export function aura(options: AuraOptions = {}): ComicePlugin {
       // (it used to, blanking the other plugin — e.g. the stress page's
       // hero), and must restore GL state it changes (see downsample.ts).
       glContext = createGLContext(target)
+      // ready / error lifecycle events (spec §04): ready once colours are
+      // produced; error says why none will be.
+      reporter = createGLReporter(instance, 'aura')
+      if (!glContext) reporter.noContext()
       plane = createPlane(glContext, target)
       if (glContext) {
         downsampler = createDownsampler(glContext.gl)
