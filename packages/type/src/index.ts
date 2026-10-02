@@ -106,6 +106,9 @@ export function type(options: TypeOptions = {}): ComicePlugin {
 
   return {
     name: 'type',
+    // A fresh, identically configured copy, for comice('.many') giving every
+    // matched element its own instance (see core's ComicePlugin.create).
+    create: () => type(options),
 
     setup(rawTarget: Element, instance: ComiceInstance) {
       if (!(rawTarget instanceof HTMLElement)) {

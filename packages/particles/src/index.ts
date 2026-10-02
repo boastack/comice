@@ -156,6 +156,9 @@ export function particles(options: ParticlesOptions): ComicePlugin {
 
   return {
     name: 'particles',
+    // A fresh, identically configured copy, for comice('.many') giving every
+    // matched element its own instance (see core's ComicePlugin.create).
+    create: () => particles(options),
 
     setup(rawTarget: Element, instance: ComiceInstance) {
       target = rawTarget

@@ -71,7 +71,7 @@ Comice core ships with **zero effects**. Every visual effect is a plugin, regist
 
 | | |
 |---|---|
-| `comice(target)` | Wraps a CSS selector, an element, or a NodeList. Returns a chainable handle (or an array of them for multiple matches). |
+| `comice(target)` | Wraps a CSS selector, an element, or a NodeList. Always returns one chainable handle: with several matches, each call applies to every element, and each element gets its own copy of every plugin. |
 | `.use(plugin)` | Attaches a plugin. Chainable. One GPU effect per element: a second shader plugin on the same element throws, naming both, instead of silently replacing the first. |
 | `.driver(driver)` | Attaches an input source, `scroll()`, `hover()`, `pointer()`, `audio()`, or a custom one. |
 | `.map(sourceKey).to(plugin, paramName, options)` | Routes one named signal from the most recently attached driver into one plugin parameter, through a clamp/remap/invert/multiplier/offset/easing/smoothing pipeline. |

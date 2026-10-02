@@ -184,6 +184,9 @@ export function seed(options: SeedOptions = {}): ComicePlugin {
 
   return {
     name: 'seed',
+    // A fresh, identically configured copy, for comice('.many') giving every
+    // matched element its own instance (see core's ComicePlugin.create).
+    create: () => seed(options),
 
     setup(rawTarget: Element, instance: ComiceInstance) {
       if (!isUploadableSource(rawTarget)) {

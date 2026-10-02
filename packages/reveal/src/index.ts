@@ -112,6 +112,9 @@ export function reveal(options: RevealOptions = {}): ComicePlugin {
 
   return {
     name: 'reveal',
+    // A fresh, identically configured copy, for comice('.many') giving every
+    // matched element its own instance (see core's ComicePlugin.create).
+    create: () => reveal(options),
 
     setup(target, instance: ComiceInstance) {
       if (!(target instanceof HTMLElement)) {

@@ -98,22 +98,10 @@ describe('comice() — target resolution', () => {
     expect((handle as ComiceHandle).state).toBe('idle')
   })
 
-  it('wraps a multi-match selector as an array of handles', () => {
-    const second = document.createElement('div')
-    second.className = 'target'
-    document.body.appendChild(second)
-
-    const handles = comice('.target')
-    expect(Array.isArray(handles)).toBe(true)
-    expect((handles as ComiceHandle[]).length).toBe(2)
-
-    second.remove()
-  })
-
-  it('wraps a NodeList as an array of handles', () => {
-    const nodeList = document.querySelectorAll('.target')
-    const handles = comice(nodeList)
-    expect(Array.isArray(handles)).toBe(true)
+  it('a NodeList of one element is one handle too', () => {
+    const handle = comice(document.querySelectorAll('.target'))
+    expect(handle.handles).toHaveLength(1)
+    expect(handle.state).toBe('idle')
   })
 })
 
@@ -267,6 +255,157 @@ describe('comice() — .driver() with a NamedSignalDriver', () => {
     driver.fire({ bass: 0.9 })
     expect(handle.progress).toBe(0)
     expect(handle.state).toBe('idle')
+  })
+})
+
+describe('comice() — many elements, one chainable handle (spec §04)', () => {
+  // It used to return an ARRAY for several matches (and [] for none), so
+  // comice('.card').use(...) threw on any page with two cards.
+  let els: HTMLElement[]
+
+  beforeEach(() => {
+    els = [0, 1, 2].map(() => {
+      const el = document.createElement('div')
+      el.className = 'card'
+      document.body.appendChild(el)
+      return el
+    })
+  })
+  afterEach(() => els.forEach((el) => el.remove()))
+
+  /** A plugin whose create() makes copies, recording which element each set up on. */
+  function copyablePlugin(log: Element[] = []): ComicePlugin & { params: MappableTarget; values: Record<string, number>; log: Element[] } {
+    const values: Record<string, number> = {}
+    return {
+      name: 'copyable',
+      log,
+      values,
+      setup(target) {
+        log.push(target)
+      },
+      params: {
+        getParam: (name) => values[name] ?? 0,
+        setParam: (name, value) => {
+          values[name] = value
+        },
+      },
+      create: () => copyablePlugin(log),
+    }
+  }
+
+  it('is one handle that chains, with one handle per element underneath', () => {
+    const handle = comice('.card')
+    expect(Array.isArray(handle)).toBe(false)
+    expect(handle.handles).toHaveLength(3)
+    expect(handle.driver(fakeDriver())).toBe(handle)
+  })
+
+  it('.use() gives every element its own copy of the plugin', () => {
+    const log: Element[] = []
+    comice('.card').use(copyablePlugin(log))
+    expect(log).toEqual(els) // set up once per element, each on its own
+  })
+
+  it('a plugin with no create() fails clearly, before touching any element', () => {
+    const plugin = fakePlugin()
+    expect(() => comice('.card').use(plugin)).toThrow(/can't be used on 3 elements at once: it has no create\(\)/)
+    expect(plugin.setupCalls).toBe(0)
+  })
+
+  it('.set() applies to every element; scoped to a plugin, it reaches each element\'s copy', () => {
+    const plugin = copyablePlugin()
+    const handle = comice('.card').use(plugin)
+    handle.set({ progress: 0.4 })
+    expect(handle.handles.map((h) => h.progress)).toEqual([0.4, 0.4, 0.4])
+    handle.set(plugin, { amount: 0.7 })
+    expect(plugin.values.amount).toBe(0.7) // the original (first element); copies get it too, checked via .map below
+  })
+
+  it('.map().to(plugin) feeds every copy of that plugin', () => {
+    const plugin = copyablePlugin()
+    const copies: Array<Record<string, number>> = []
+    const original = plugin.create!
+    plugin.create = () => {
+      const copy = original() as ReturnType<typeof copyablePlugin>
+      copies.push(copy.values)
+      return copy
+    }
+    const listeners: Array<(signals: Readonly<SignalValues>) => void> = []
+    const driver: NamedSignalDriver = {
+      name: 'every-attach',
+      attachSignals(_target, cb) {
+        listeners.push(cb)
+        return () => {}
+      },
+    }
+    comice('.card').use(plugin).driver(driver).map('bass').to(plugin, 'amount')
+    listeners.forEach((cb) => cb({ bass: 0.6 }))
+    expect([plugin.values.amount, ...copies.map((v) => v.amount)]).toEqual([0.6, 0.6, 0.6])
+  })
+
+  it('.on() listens to every element, and its unsubscribe removes all of them', () => {
+    const handle = comice('.card')
+    let heard = 0
+    const off = handle.on('entering', () => heard++)
+    handle.transition('entering')
+    expect(heard).toBe(3)
+    off()
+    handle.transition('leaving')
+    handle.transition('entering')
+    expect(heard).toBe(3)
+    const listener = () => heard++
+    handle.on('idle', listener)
+    handle.off('idle', listener)
+    handle.transition('leaving')
+    handle.transition('idle')
+    expect(heard).toBe(3)
+  })
+
+  it('state, progress and transforms read from the first element; setters reach all', () => {
+    const handle = comice('.card')
+    expect(handle.transition('entering')).toBe('entering')
+    handle.setProgress(0.5)
+    handle.setRest({ x: 4 })
+    handle.setDisplay({ y: 2 })
+    expect(handle.state).toBe('entering')
+    expect(handle.progress).toBe(0.5)
+    expect(handle.rest.x).toBe(4)
+    expect(handle.display.y).toBe(2)
+    expect(handle.handles.every((h) => h.progress === 0.5 && h.rest.x === 4)).toBe(true)
+  })
+
+  it('ready/fail and destroy reach every element', async () => {
+    const handle = comice('.card')
+    const seen: string[] = []
+    handle.on('*', (_s, e) => seen.push(e.type))
+    handle.ready('x')
+    handle.fail('x', new Error('no'))
+    await new Promise<void>((r) => queueMicrotask(r))
+    expect(seen.filter((t) => t === 'ready')).toHaveLength(3)
+    expect(seen.filter((t) => t === 'error')).toHaveLength(3)
+
+    const plugin = copyablePlugin()
+    let torn = 0
+    const counting = { ...plugin, teardown: () => torn++, create: () => ({ ...copyablePlugin(), teardown: () => torn++ }) }
+    comice('.card').use(counting).destroy()
+    expect(torn).toBe(3)
+  })
+
+  it('no matches: a handle that does nothing (and a dev warning), not a crash', () => {
+    const warn = console.warn
+    const warnings: string[] = []
+    console.warn = (message: string) => void warnings.push(message)
+    try {
+      const handle = comice('.nothing-here')
+      expect(() => handle.use(copyablePlugin()).driver(fakeDriver()).set({ progress: 1 }).map('x').to(copyablePlugin(), 'y')).not.toThrow()
+      expect(handle.handles).toHaveLength(0)
+      expect([handle.state, handle.progress, handle.rest.scale, handle.display.scale]).toEqual(['idle', 0, 1, 1])
+      expect(handle.transition('entering')).toBe('idle')
+      expect(warnings[0]).toMatch(/comice\('\.nothing-here'\) matched no elements/)
+      expect(() => comice(document.querySelectorAll('.nothing-here'))).not.toThrow() // NodeList: same, no selector to name
+    } finally {
+      console.warn = warn
+    }
   })
 })
 

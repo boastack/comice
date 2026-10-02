@@ -300,6 +300,9 @@ export function rail(options: RailOptions): ComicePlugin {
 
   return {
     name: 'rail',
+    // A fresh, identically configured copy, for comice('.many') giving every
+    // matched element its own instance (see core's ComicePlugin.create).
+    create: () => rail(options),
 
     setup(rawTarget: Element, instance: ComiceInstance) {
       if (!(rawTarget instanceof HTMLElement)) {

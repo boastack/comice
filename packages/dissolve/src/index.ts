@@ -146,6 +146,9 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
 
   return {
     name: 'dissolve',
+    // A fresh, identically configured copy, for comice('.many') giving every
+    // matched element its own instance (see core's ComicePlugin.create).
+    create: () => dissolve(options),
 
     setup(rawTarget: Element, instance: ComiceInstance) {
       target = rawTarget

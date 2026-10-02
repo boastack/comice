@@ -168,6 +168,9 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
 
   return {
     name: 'distort',
+    // A fresh, identically configured copy, for comice('.many') giving every
+    // matched element its own instance (see core's ComicePlugin.create).
+    create: () => distort(options),
 
     setup(rawTarget: Element, instance: ComiceInstance) {
       if (!isUploadableSource(rawTarget)) {

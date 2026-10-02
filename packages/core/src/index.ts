@@ -22,6 +22,7 @@ import type {
   MappingOptions,
   NamedSignalDriver,
   SignalValues,
+  Transform,
 } from './types.js'
 
 export { createInstance } from './machine.js'
@@ -52,6 +53,11 @@ export type ComicePlugin = {
   setup(target: Element, instance: ComiceInstance): void
   teardown?(): void
   params?: MappableTarget
+  /** A fresh, identically configured copy of this plugin. A plugin holds
+   *  state for ONE element, so when `comice('.card')` matches several, core
+   *  calls this to give each element its own. Every official plugin has
+   *  one; a plugin without it works on a single element only. */
+  create?(): ComicePlugin
 }
 
 /**
@@ -88,6 +94,10 @@ export type ComiceHandle = ComiceInstance & {
    */
   set(props: SetProps): ComiceHandle
   set(plugin: ComicePlugin, props: SetProps): ComiceHandle
+  /** One handle per matched element — `[this]` for a single element. A
+   *  handle for several elements applies everything to all of them, and
+   *  reads state/progress from the first; this reaches each one. */
+  readonly handles: readonly ComiceHandle[]
 }
 
 /** Values for `.set()`: plugin parameters by name, plus `progress`. */
@@ -114,6 +124,7 @@ function wrap(target: Element): ComiceHandle {
   const mappings: Array<{ apply(signals: Readonly<SignalValues>): void }> = []
 
   const handle = instance as ComiceInstance as ComiceHandle
+  ;(handle as { handles: readonly ComiceHandle[] }).handles = [handle]
 
   handle.use = (plugin: ComicePlugin): ComiceHandle => {
     plugins.push(plugin)
@@ -273,12 +284,95 @@ function wrap(target: Element): ComiceHandle {
  * Wraps one or more elements. Accepts a CSS selector, a single Element, or
  * a NodeList — matching section 04's contract exactly.
  */
-export function comice(target: string | Element | NodeListOf<Element>): ComiceHandle | ComiceHandle[] {
-  if (typeof target === 'string') {
-    const elements = Array.from(document.querySelectorAll(target))
-    if (elements.length === 1) return wrap(elements[0])
-    return elements.map(wrap)
+/**
+ * One chainable handle for several elements — spec §04: comice(target)
+ * "returns a chainable instance. Same shape whether target is a CSS
+ * selector, an element, or a NodeList." It used to return an ARRAY for more
+ * than one match (and an empty one for none), so `comice('.card').use(…)`
+ * threw on any page with two cards — almost every example in the spec.
+ *
+ * Each element keeps its own instance and its own copy of every plugin
+ * (ComicePlugin.create), so each still animates independently. Everything
+ * applies to all of them; state/progress read from the first; `.on()`
+ * listens to all; `.map().to(plugin)` feeds every copy of that plugin.
+ */
+function group(handles: ComiceHandle[]): ComiceHandle {
+  const copies = new Map<ComicePlugin, ComicePlugin[]>()
+  const copyFor = (plugin: ComicePlugin, index: number): ComicePlugin => copies.get(plugin)?.[index] ?? plugin
+  const first = handles[0]
+  const identity: Transform = { x: 0, y: 0, scale: 1, rotate: 0 }
+
+  const g: ComiceHandle = {
+    get state() {
+      return first?.state ?? 'idle'
+    },
+    get progress() {
+      return first?.progress ?? 0
+    },
+    get rest() {
+      return first?.rest ?? { ...identity }
+    },
+    get display() {
+      return first?.display ?? { ...identity }
+    },
+    handles,
+    use(plugin) {
+      // Every copy is made BEFORE any is attached, so a plugin that can't
+      // be copied fails cleanly instead of leaving half the elements set up.
+      const perElement = handles.map((_handle, index) => {
+        if (index === 0) return plugin
+        if (!plugin.create) {
+          throw new Error(
+            `[comice] ${plugin.name}() can't be used on ${handles.length} elements at once: it has no create() to make one per element. ` +
+              'Call comice() once per element, or give the plugin a create().',
+          )
+        }
+        return plugin.create()
+      })
+      copies.set(plugin, perElement)
+      handles.forEach((handle, index) => handle.use(perElement[index]!))
+      return g
+    },
+    driver(driver) {
+      handles.forEach((handle) => handle.driver(driver))
+      return g
+    },
+    map(sourceKey) {
+      return {
+        to(plugin, paramName, options) {
+          handles.forEach((handle, index) => handle.map(sourceKey).to(copyFor(plugin, index), paramName, options))
+          return g
+        },
+      }
+    },
+    set(firstArg: SetProps | ComicePlugin, scoped?: SetProps) {
+      handles.forEach((handle, index) => (scoped ? handle.set(copyFor(firstArg as ComicePlugin, index), scoped) : handle.set(firstArg as SetProps)))
+      return g
+    },
+    transition(next) {
+      handles.forEach((handle) => handle.transition(next))
+      return first?.state ?? 'idle'
+    },
+    setProgress: (value) => handles.forEach((handle) => handle.setProgress(value)),
+    setRest: (next) => handles.forEach((handle) => handle.setRest(next)),
+    setDisplay: (next) => handles.forEach((handle) => handle.setDisplay(next)),
+    ready: (plugin) => handles.forEach((handle) => handle.ready(plugin)),
+    fail: (plugin, error) => handles.forEach((handle) => handle.fail(plugin, error)),
+    on(type, listener) {
+      const offs = handles.map((handle) => handle.on(type, listener))
+      return () => offs.forEach((off) => off())
+    },
+    off: (type, listener) => handles.forEach((handle) => handle.off(type, listener)),
+    destroy: () => handles.forEach((handle) => handle.destroy()),
   }
-  if (target instanceof Element) return wrap(target)
-  return Array.from(target).map(wrap)
+  return g
+}
+
+export function comice(target: string | Element | NodeListOf<Element>): ComiceHandle {
+  const elements = typeof target === 'string' ? Array.from(document.querySelectorAll(target)) : target instanceof Element ? [target] : Array.from(target)
+  if (elements.length === 1) return wrap(elements[0]!)
+  if (elements.length === 0 && __DEV__) {
+    console.warn(`[comice] comice(${typeof target === 'string' ? `'${target}'` : 'target'}) matched no elements; the handle does nothing.`)
+  }
+  return group(elements.map(wrap))
 }

@@ -141,6 +141,9 @@ export function spotlight(options: SpotlightOptions = {}): ComicePlugin {
 
   return {
     name: 'spotlight',
+    // A fresh, identically configured copy, for comice('.many') giving every
+    // matched element its own instance (see core's ComicePlugin.create).
+    create: () => spotlight(options),
 
     setup(rawTarget: Element, instance: ComiceInstance) {
       if (!(rawTarget instanceof HTMLElement)) {

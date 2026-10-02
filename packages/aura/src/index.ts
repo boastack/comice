@@ -167,6 +167,9 @@ export function aura(options: AuraOptions = {}): ComicePlugin {
 
   return {
     name: 'aura',
+    // A fresh, identically configured copy, for comice('.many') giving every
+    // matched element its own instance (see core's ComicePlugin.create).
+    create: () => aura(options),
 
     setup(rawTarget: Element, instance: ComiceInstance) {
       if (!isUploadableSource(rawTarget)) {

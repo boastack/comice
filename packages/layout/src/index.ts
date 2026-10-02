@@ -198,6 +198,9 @@ export function layout(options: LayoutOptions): ComicePlugin {
 
   return {
     name: 'layout',
+    // A fresh, identically configured copy, for comice('.many') giving every
+    // matched element its own instance (see core's ComicePlugin.create).
+    create: () => layout(options),
 
     setup(rawTarget: Element, instance: ComiceInstance) {
       if (!isUploadableSource(rawTarget)) {

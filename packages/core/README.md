@@ -27,7 +27,7 @@ A plugin decides what happens to the media. A driver decides when. Any plugin wo
 
 | | |
 |---|---|
-| `comice(target)` | Wraps a CSS selector, an element, or a NodeList. Returns a chainable handle (an array of them for several matches). |
+| `comice(target)` | Wraps a CSS selector, an element, or a NodeList. Always returns one chainable handle: for several matches, every call applies to each element, and each gets its own copy of every plugin (via the plugin's `create()`). `.handles` lists the per-element handles; no matches gives a handle that does nothing. |
 | `.use(plugin)` | Attaches a plugin. One GPU effect per element: a second shader plugin on the same element throws, naming both. |
 | `.driver(driver)` | Attaches an input. |
 | `.set(props)` / `.set(plugin, props)` | Applies values immediately, no transition (like `gsap.set()`). |

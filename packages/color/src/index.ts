@@ -117,6 +117,9 @@ export function color(options: ColorOptions = {}): ComicePlugin {
 
   return {
     name: 'color',
+    // A fresh, identically configured copy, for comice('.many') giving every
+    // matched element its own instance (see core's ComicePlugin.create).
+    create: () => color(options),
 
     setup(rawTarget: Element, instance: ComiceInstance) {
       if (!isUploadableSource(rawTarget)) {

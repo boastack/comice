@@ -104,6 +104,9 @@ export function mosaic(options: MosaicOptions): ComicePlugin {
 
   return {
     name: 'mosaic',
+    // A fresh, identically configured copy, for comice('.many') giving every
+    // matched element its own instance (see core's ComicePlugin.create).
+    create: () => mosaic(options),
 
     setup(rawTarget: Element, instance: ComiceInstance) {
       if (!isUploadableSource(rawTarget)) {
