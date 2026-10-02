@@ -72,19 +72,27 @@ Comice core ships with **zero effects**. Every visual effect is a plugin, regist
 | | |
 |---|---|
 | `comice(target)` | Wraps a CSS selector, an element, or a NodeList. Returns a chainable handle (or an array of them for multiple matches). |
-| `.use(plugin)` | Attaches a plugin. Chainable, order matters for the render pass list. |
+| `.use(plugin)` | Attaches a plugin. Chainable. One GPU effect per element: a second shader plugin on the same element throws, naming both, instead of silently replacing the first. |
 | `.driver(driver)` | Attaches an input source, `scroll()`, `hover()`, `pointer()`, `audio()`, or a custom one. |
 | `.map(sourceKey).to(plugin, paramName, options)` | Routes one named signal from the most recently attached driver into one plugin parameter, through a clamp/remap/invert/multiplier/offset/easing/smoothing pipeline. |
+| `.set(props)` / `.set(plugin, props)` | Applies values immediately, no transition (like `gsap.set()`): plugin parameters by name, plus `progress`. Scoped to one plugin when two share a parameter name. |
+| `.transition(state)` | Forces a state change through the normal interrupt-safe rules. |
 | `.on(event, fn)` / `.off()` | State and lifecycle events: `active`, `leaving`, `entering`, `idle`, `progress`, `rest`, `display`. |
 | `.destroy()` | Tears down every driver and plugin attached to this instance and releases its resources. |
 
 ### Drivers
 
-`scroll()`, `hover()`, `pointer()`, `drag()`, `click()`, and `time()` each drive the state machine directly through a single normalised `progress` value (0..1) — all six state-machine drivers are built. `audio()` is different: it's a `NamedSignalDriver`, reporting a bag of named values every frame (`bass`, `mid`, `high`, `energy`, `amplitude`, `spectrum`) plus discrete `beat`/`onset`/`drop` events, routed to plugin parameters through `.map()` rather than driving `progress` directly, since audio has no single honest notion of "how far along" it is.
+`scroll()`, `hover()`, `pointer()`, `drag()`, `click()`, and `time()` each drive the state machine directly through a single `progress` value (0..1) — all six state-machine drivers are built. `click()` and `hover()` animate progress over a `duration` (default 400ms) and reverse mid-way when interrupted. `audio()` is different: it's a `NamedSignalDriver`, reporting a bag of named values every frame (`bass`, `mid`, `high`, `energy`, `amplitude`, `spectrum`) plus discrete `beat`/`onset`/`drop` events, routed to plugin parameters through `.map()` rather than driving `progress` directly, since audio has no single honest notion of "how far along" it is.
 
 ### Where a plugin's work lands
 
-Every plugin reduces to one of five operations: **merge** (many pieces become one), **breakout** (one piece becomes many), **distribute** (pieces travel into an arrangement), **mask** (media takes the shape of something), or **recompose** (one layout becomes another). The full catalogue is 18 plugins across this shape. Fourteen ship today — `reveal`, `morph`, `dissolve`, `distort`, `spotlight`, `rail`, `color`, `seed`, `mosaic`, `ascii`, `aura`, `type`, `layout`, `particles` — each with either its complete spec card or a genuine, documented, tested subset. The remaining four — `vision`, `spatial`, `footage`, `persist` — are blocked on `vision` (on-device ML for depth/segmentation), which needs its own design pass before it or anything depending on it can be built.
+Every plugin reduces to one of five operations: **merge** (many pieces become one), **breakout** (one piece becomes many), **distribute** (pieces travel into an arrangement), **mask** (media takes the shape of something), or **recompose** (one layout becomes another). The full catalogue is 18 plugins across this shape. Fifteen ship today — `reveal`, `morph`, `dissolve`, `distort`, `spotlight`, `rail`, `color`, `seed`, `mosaic`, `ascii`, `aura`, `type`, `layout`, `particles`, `persist` — each with either its complete spec card or a genuine, documented, tested subset. The remaining three — `vision`, `spatial`, `footage` — wait on `vision` (on-device ML for depth/segmentation), which needs its own design pass before it or anything depending on it can be built.
+
+### Built-in budgets
+
+- **Render only when visible.** Effects scrolled off screen or in a hidden tab do no work.
+- **Frame budget.** When a device keeps missing ~40fps for two seconds, effects step down to 75% resolution, then 50%, then hold their last frame as a still. `setAdaptiveQuality(false)` opts out; `qualityLevel()` reports the current level.
+- **Reduced motion.** With `prefers-reduced-motion`, effects that move jump straight to their end state; effects that only change how media looks (colour grading, placeholders, text wrap) keep working. `prefersReducedMotion()` exposes the live setting.
 
 ### Design principles
 

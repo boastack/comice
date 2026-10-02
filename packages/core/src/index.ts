@@ -74,7 +74,24 @@ export type ComiceHandle = ComiceInstance & {
    * no-op.
    */
   map(sourceKey: string): MappingBuilder
+  /**
+   * Applies values immediately, no transition — spec §04, "matches
+   * gsap.set()". Each key is a plugin parameter (the same values `.map()`
+   * writes into), written to every attached plugin; a plugin without that
+   * parameter ignores it. `progress` sets the instance's progress directly,
+   * without moving its state. Pass a plugin first to write to that plugin
+   * only, when two plugins share a parameter name — scoped, `progress` is
+   * that plugin's own `progress` parameter (dissolve, morph, particles).
+   *
+   *   comice('.hero').use(distort()).set({ strength: 0.8 })
+   *   handle.set(distortPlugin, { strength: 0.8 })
+   */
+  set(props: SetProps): ComiceHandle
+  set(plugin: ComicePlugin, props: SetProps): ComiceHandle
 }
+
+/** Values for `.set()`: plugin parameters by name, plus `progress`. */
+export type SetProps = { progress?: number } & Record<string, number>
 
 const sharedScheduler = getSharedScheduler()
 
@@ -208,6 +225,21 @@ function wrap(target: Element): ComiceHandle {
       return handle
     },
   })
+
+  handle.set = (first: SetProps | ComicePlugin, scoped?: SetProps): ComiceHandle => {
+    const only = scoped ? (first as ComicePlugin) : null
+    const props = scoped ?? (first as SetProps)
+    for (const [name, value] of Object.entries(props)) {
+      if (name === 'progress' && !only) {
+        // Progress within the current state, applied as-is: no transition,
+        // which is the point of set() as opposed to transition().
+        instance.setProgress(value)
+        continue
+      }
+      for (const plugin of only ? [only] : plugins) plugin.params?.setParam(name, value)
+    }
+    return handle
+  }
 
   const originalDestroy = instance.destroy
   handle.destroy = (): void => {

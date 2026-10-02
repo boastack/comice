@@ -376,6 +376,56 @@ describe('comice() — .map().to()', () => {
   })
 })
 
+describe('comice() — .set() (spec §04: applies immediately, no transition)', () => {
+  function el(): HTMLElement {
+    const div = document.createElement('div')
+    document.body.appendChild(div)
+    return div
+  }
+
+  it('writes each value into every attached plugin, and returns the handle for chaining', () => {
+    const a = mappablePlugin()
+    const b = mappablePlugin()
+    const handle = comice(el()) as ComiceHandle
+    expect(handle.use(a).use(b).set({ strength: 0.8, radius: 120 })).toBe(handle)
+    expect(a.values).toEqual({ strength: 0.8, radius: 120 })
+    expect(b.values).toEqual({ strength: 0.8, radius: 120 })
+  })
+
+  it('progress sets the instance directly — no state transition', () => {
+    const handle = comice(el()) as ComiceHandle
+    const states: string[] = []
+    handle.on('*', (s) => states.push(s.state))
+    handle.set({ progress: 0.6 })
+    expect(handle.progress).toBe(0.6)
+    expect(handle.state).toBe('idle') // a driver signal would have entered; set() does not
+    expect(states).toEqual(['idle'])
+  })
+
+  it('progress is not passed to plugins as a parameter when unscoped', () => {
+    const p = mappablePlugin()
+    const handle = comice(el()) as ComiceHandle
+    handle.use(p).set({ progress: 0.3 })
+    expect(p.values).toEqual({})
+  })
+
+  it('scoped to one plugin: only that plugin receives the values, including its own `progress`', () => {
+    const a = mappablePlugin()
+    const b = mappablePlugin()
+    const handle = comice(el()) as ComiceHandle
+    handle.use(a).use(b).set(b, { strength: 0.5, progress: 0.4 })
+    expect(a.values).toEqual({})
+    expect(b.values).toEqual({ strength: 0.5, progress: 0.4 })
+    expect(handle.progress).toBe(0) // the instance's progress is untouched
+  })
+
+  it('plugins without params are skipped, not an error', () => {
+    const handle = comice(el()) as ComiceHandle
+    handle.use(fakePlugin())
+    expect(() => handle.set({ strength: 1 })).not.toThrow()
+  })
+})
+
 describe('comice() — .destroy() crash isolation', () => {
   let el: HTMLElement
 
