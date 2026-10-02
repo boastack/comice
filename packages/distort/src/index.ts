@@ -39,6 +39,7 @@ import {
   type DistortEffect,
   type DistortProgram,
 } from './shader.js'
+import { createLiquidField, type LiquidField } from './liquid.js'
 
 export type DistortOptions = {
   /** Which distortion field. Default 'bulge'. Matches spec §08 exactly:
@@ -92,6 +93,15 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
   let pointerY = 0
   let pointerActive = false
 
+  // Per-frame motion state, advanced once per real frame in tick() — not
+  // in renderFrame(), which events can call several times a frame.
+  let seconds = 0 // for 'ripple'
+  let velocityX = 0 // uv per frame, y up, smoothed — for 'smear' and 'liquid'
+  let velocityY = 0
+  let lastUvX: number | null = null
+  let lastUvY = 0
+  let liquid: LiquidField | null = null
+
   function renderFrame(): void {
     if (destroyed || !glContext || !plane || !distortProgram || !target) return
     glContext.resizeToDisplay()
@@ -116,8 +126,44 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
       refraction,
       resolutionWidth: cssWidth,
       resolutionHeight: cssHeight,
+      time: seconds,
+      velocityX,
+      velocityY,
+      fieldTexture: liquid?.texture ?? null,
     })
     reporter?.afterDraw(plane)
+  }
+
+  /** Once per real frame: the clock, the pointer's velocity, the liquid
+   *  field's step — then a draw. */
+  function tick(timestamp: number): void {
+    if (destroyed || !glContext) return
+    seconds = timestamp / 1000
+    const uvX = pointerX * 0.5 + 0.5
+    const uvY = pointerY * 0.5 + 0.5
+    const rawX = pointerActive && lastUvX !== null ? uvX - lastUvX : 0
+    const rawY = pointerActive && lastUvX !== null ? uvY - lastUvY : 0
+    velocityX += (rawX - velocityX) * 0.5
+    velocityY += (rawY - velocityY) * 0.5
+    lastUvX = pointerActive ? uvX : null
+    lastUvY = uvY
+
+    if (liquid) {
+      const cssWidth = glContext.canvas.clientWidth || 1
+      const cssHeight = glContext.canvas.clientHeight || 1
+      liquid.resize(cssWidth, cssHeight)
+      liquid.step({
+        pointerX: uvX,
+        pointerY: uvY,
+        velocityX,
+        velocityY,
+        radius: Math.max(0.001, radius / cssHeight),
+        strength,
+        active: pointerActive,
+        aspect: cssWidth / cssHeight,
+      })
+    }
+    renderFrame()
   }
 
   return {
@@ -152,6 +198,19 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
         if (!distortProgram) {
           mount?.release()
           reporter.noProgram()
+        } else if (effect === 'liquid') {
+          // liquid needs memory between frames: a displacement field in core's
+          // feedback buffer (liquid.ts). Without one there's no liquid.
+          const rect = target.getBoundingClientRect()
+          liquid = createLiquidField(glContext, rect.width || 1, rect.height || 1)
+          if (!liquid) {
+            // Release the cached program's reference, or it leaks (shader.ts's
+            // cache is reference-counted per holder).
+            destroyDistortProgram(glContext.gl, distortProgram)
+            distortProgram = null
+            mount?.release()
+            reporter.noProgram()
+          }
         }
       }
 
@@ -164,7 +223,7 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
       // scrolled away — particles off-screen held a whole page at 4fps.
       visibility = createVisibilityGate(target)
       unregisterFromScheduler = getSharedScheduler().add(
-        () => renderFrame(),
+        (_deltaMs, timestamp) => tick(timestamp),
         () => !destroyed && !!target && target.isConnected && visibility!.shouldDraw(),
       )
 
@@ -199,6 +258,8 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
       resizeObserver?.disconnect()
       if (glContext && distortProgram) destroyDistortProgram(glContext.gl, distortProgram)
       plane?.destroy()
+      liquid?.destroy()
+      liquid = null
       mount?.release()
       mount = null
       target = null

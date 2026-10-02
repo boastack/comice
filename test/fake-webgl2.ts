@@ -249,6 +249,7 @@ export function createFakeGL2(
 
     activeTexture(_unit: number) {},
     enable(_cap: number) {},
+    disable(_cap: number) {},
     blendFunc(_sfactor: number, _dfactor: number) {},
     drawArrays(_mode: number, _first: number, _count: number) {},
     // Instanced drawing — @comice/particles's shader.ts is the first

@@ -27,7 +27,7 @@ comice('.hero img')
 
 | Option | Type | |
 |---|---|---|
-| `effect` | `'bulge'` \| `'lens'` \| `'glass'` | Default `'bulge'`. |
+| `effect` | `'bulge'` `'lens'` `'ripple'` `'smear'` `'shapedLens'` `'tear'` `'liquid'` `'glass'` | Default `'bulge'`. `ripple`: rings spreading from the pointer. `smear`: pixels drag along the pointer's motion. `shapedLens`: a rounded-square magnifier. `tear`: the image rips along a line through the pointer. `liquid`: the pointer pushes the surface, which keeps moving and settles after it leaves. `glass`: refracts, with chromatic fringing. |
 | `radius` | number | Field radius in px. Default 160. |
 | `strength` | number | Default 0.5. |
 | `refraction` | number | Chromatic split, for `'glass'`. |

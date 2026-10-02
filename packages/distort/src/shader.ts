@@ -35,7 +35,7 @@ import { getResidencyPool } from 'comice/gl'
 import { composeNoiseGLSL } from 'comice/gl'
 import type { GLContext, Plane } from 'comice/gl'
 
-export type DistortEffect = 'bulge' | 'lens' | 'glass'
+export type DistortEffect = 'bulge' | 'lens' | 'ripple' | 'smear' | 'shapedLens' | 'tear' | 'liquid' | 'glass'
 
 export type DistortShaderOptions = {
   effect: DistortEffect
@@ -76,9 +76,17 @@ function buildFragmentShader(options: DistortShaderOptions): string {
   const needsNoise = effect === 'glass'
   const noiseGLSL = needsNoise ? composeNoiseGLSL({ curl: false, displacement: true }) : ''
 
-  const distortGLSL =
-    effect === 'bulge'
-      ? `
+  // Every effect reads the same field: distance from the pointer (d, in
+  // units of the radius, aspect-corrected so it's round), the falloff, and
+  // the pointer's activity. What differs is what the field does to the
+  // pixels underneath. One entry per effect on spec §08's card.
+  const FIELD = `
+  vec2 toPointer = uv - (u_pointer * 0.5 + 0.5);
+  float d = length(toPointer * vec2(aspect, 1.0)) / (u_radius);
+  float field = (${fieldExpr}) * u_strength * u_pointerActive;`
+
+  const EFFECTS: Record<DistortEffect, string> = {
+    bulge: `
   // bulge: pushes samples radially outward from the pointer, strongest
   // at the center, fading to none at the field's edge — the classic
   // "poke a soft surface" distortion.
@@ -98,17 +106,16 @@ function buildFragmentShader(options: DistortShaderOptions): string {
   // black hole into the image exactly under the cursor.
   float ramp = smoothstep(0.0, 0.35, d);
   vec2 offset = -dir * field * ramp * 0.12;
-  outColor = texture(u_media, clamp(uv + offset, 0.0, 1.0));`
-      : effect === 'lens'
-        ? `
+  outColor = texture(u_media, clamp(uv + offset, 0.0, 1.0));`,
+    lens: `
   // lens: samples pull INWARD toward the pointer (the opposite sign of
   // bulge's push), reading as local magnification rather than a poke.
   vec2 toPointer = uv - (u_pointer * 0.5 + 0.5);
   float d = length(toPointer * vec2(aspect, 1.0)) / (u_radius);
   float field = (${fieldExpr}) * u_strength * u_pointerActive;
   vec2 offset = toPointer * field * 0.5;
-  outColor = texture(u_media, clamp(uv - offset, 0.0, 1.0));`
-        : `
+  outColor = texture(u_media, clamp(uv - offset, 0.0, 1.0));`,
+    glass: `
   // glass: refracts through displacementOffset() (gl/noise.ts, T5 — the
   // SAME sampler dissolve's liquid transition uses) rather than
   // displacing samples directly, plus a chromatic-fringe split on the
@@ -131,7 +138,58 @@ function buildFragmentShader(options: DistortShaderOptions): string {
     mediaColor.g,
     texture(u_media, clamp(uv + refraction - fringe, 0.0, 1.0)).b,
     mediaColor.a
-  );`
+  );`,
+    ripple: `
+  // ripple: rings travel outward from the pointer, like a drop in water —
+  // samples move along the radial direction by a sine of distance minus
+  // time, fading out with the field.
+  ${FIELD}
+  vec2 dir = normalize(toPointer * vec2(aspect, 1.0) + 0.00001) / vec2(aspect, 1.0);
+  float wave = sin(d * 18.0 - u_time * 6.0);
+  // Ramped in from the pointer, like bulge: a unit direction is
+  // discontinuous there and pinched the image into a blob under the cursor.
+  float ramp = smoothstep(0.0, 0.35, d);
+  outColor = texture(u_media, clamp(uv + dir * wave * field * ramp * 0.035, 0.0, 1.0));`,
+    smear: `
+  // smear: pixels drag along the pointer's motion — each sample reaches
+  // back against the velocity, so a fast swipe streaks and a still pointer
+  // leaves the image untouched.
+  ${FIELD}
+  outColor = texture(u_media, clamp(uv - u_velocity * field * 8.0, 0.0, 1.0));`,
+    shapedLens: `
+  // shapedLens: lens's inward pull, but the field's edge is a squircle
+  // (|x|^4 + |y|^4) rather than a circle — a rounded-square magnifier.
+  vec2 toPointer = uv - (u_pointer * 0.5 + 0.5);
+  vec2 q = abs(toPointer * vec2(aspect, 1.0));
+  float d = pow(pow(q.x, 4.0) + pow(q.y, 4.0), 0.25) / (u_radius);
+  float field = (${fieldExpr}) * u_strength * u_pointerActive;
+  outColor = texture(u_media, clamp(uv - toPointer * field * 0.5, 0.0, 1.0));`,
+    tear: `
+  // tear: the image rips apart along a ragged horizontal line through the
+  // pointer. Rows above and below pull away from it; inside the gap there
+  // is nothing (the page shows through). The rip is widest under the
+  // pointer and closes toward the edge of the radius.
+  vec2 tp = (uv - (u_pointer * 0.5 + 0.5)) * vec2(aspect, 1.0);
+  float d = abs(tp.x) / (u_radius);
+  float field = (${fieldExpr}) * u_strength * u_pointerActive;
+  float ragged = (fract(sin(floor(uv.x * u_resolution.x / 3.0) * 12.9898) * 43758.5453) - 0.5) * 0.008 * field;
+  float y = tp.y + ragged;
+  float gap = field * 0.04;
+  if (abs(y) < gap) {
+    outColor = vec4(0.0);
+  } else {
+    outColor = texture(u_media, clamp(uv - vec2(0.0, sign(y) * gap), 0.0, 1.0));
+  }`,
+    liquid: `
+  // liquid: "pushes them, carrying momentum so the surface settles after
+  // the cursor has gone" (spec). The push lives in a displacement field
+  // the step pass (LIQUID_STEP) keeps in core's feedback buffer from frame
+  // to frame — it decays rather than vanishing, so the surface keeps
+  // moving after the pointer stops. Encoded around 0.5 (8-bit texture).
+  vec2 push = texture(u_field, uv).rg - 0.5;
+  outColor = texture(u_media, clamp(uv - push * 0.25, 0.0, 1.0));`,
+  }
+  const distortGLSL = EFFECTS[effect]
 
   return `#version 300 es
 precision mediump float;
@@ -143,6 +201,9 @@ uniform float u_radius;        // normalized (0..1-ish) field radius
 uniform float u_strength;
 uniform float u_refraction;    // only meaningful for 'glass'
 uniform sampler2D u_media;
+uniform float u_time;          // seconds, for 'ripple'
+uniform vec2 u_velocity;       // pointer motion, uv per frame, for 'smear'
+uniform sampler2D u_field;     // displacement field, for 'liquid'
 
 in vec2 v_uv;
 out vec4 outColor;
@@ -178,6 +239,9 @@ export type DistortProgram = {
   uStrength: WebGLUniformLocation | null
   uRefraction: WebGLUniformLocation | null
   uMedia: WebGLUniformLocation | null
+  uTime?: WebGLUniformLocation | null
+  uVelocity?: WebGLUniformLocation | null
+  uField?: WebGLUniformLocation | null
 }
 
 const PROGRAM_CACHE = new WeakMap<WebGL2RenderingContext, Map<string, DistortProgram | null>>()
@@ -268,6 +332,9 @@ export function compileDistortProgram(gl: WebGL2RenderingContext, options: Disto
     uStrength: gl.getUniformLocation(program, 'u_strength'),
     uRefraction: gl.getUniformLocation(program, 'u_refraction'),
     uMedia: gl.getUniformLocation(program, 'u_media'),
+    uTime: gl.getUniformLocation(program, 'u_time'),
+    uVelocity: gl.getUniformLocation(program, 'u_velocity'),
+    uField: gl.getUniformLocation(program, 'u_field'),
   }
   byConfig.set(key, result)
   refcounts.set(key, 1) // this compile call is itself the first live reference
@@ -302,6 +369,13 @@ export type DistortDrawState = {
   refraction: number
   resolutionWidth: number
   resolutionHeight: number
+  /** Seconds, for 'ripple'. */
+  time?: number
+  /** Pointer motion in uv per frame (y up), for 'smear'. */
+  velocityX?: number
+  velocityY?: number
+  /** The displacement field texture, for 'liquid' (see liquid.ts). */
+  fieldTexture?: WebGLTexture | null
 }
 
 /**
@@ -330,6 +404,14 @@ export function drawDistort(context: GLContext, distortProgram: DistortProgram, 
   gl.uniform1f(distortProgram.uStrength, state.strength)
   gl.uniform1f(distortProgram.uRefraction, state.refraction)
   gl.uniform1i(distortProgram.uMedia, unit)
+  gl.uniform1f(distortProgram.uTime ?? null, state.time ?? 0)
+  gl.uniform2f(distortProgram.uVelocity ?? null, state.velocityX ?? 0, state.velocityY ?? 0)
+  if (state.fieldTexture) {
+    // Liquid needs two units (media + field); WebGL2 guarantees 16, so a
+    // null here only happens against a deliberately tiny pool in tests.
+    const fieldUnit = pool.bind(state.fieldTexture)
+    if (fieldUnit !== null) gl.uniform1i(distortProgram.uField ?? null, fieldUnit)
+  }
 
   gl.enable(gl.BLEND)
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
