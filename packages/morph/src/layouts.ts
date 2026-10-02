@@ -114,12 +114,16 @@ export function shelfLayout(options: LayoutOptions = {}): LayoutShape {
 
   const declarations = Array.from({ length: count }, (_, index) => {
     const offset = index - (count - 1) / 2
+    // Per card, not shared: with `order` each card moves on its own clock
+    // (see perPieceProgress), so its gap and width follow its own pMerge.
     return `
-      float cardCenter${index} = ${offset.toFixed(1)} * (cardWidth + cardGap);
+      float cardGap${index} = mix(${startGap.toFixed(6)}, 0.0, pMerge);
+      float cardWidth${index} = mix(${startWidth.toFixed(6)}, ${(totalWidth / count).toFixed(6)}, pMerge);
+      float cardCenter${index} = ${offset.toFixed(1)} * (cardWidth${index} + cardGap${index});
       float dShape${index} = sdRoundedBox(
         st - vec2(cardCenter${index}, 0.0),
-        vec2(cardWidth * 0.5, 0.5),
-        cardRadius
+        vec2(cardWidth${index} * 0.5, 0.5),
+        0.045
       );
     `
   }).join('')
@@ -128,9 +132,6 @@ export function shelfLayout(options: LayoutOptions = {}): LayoutShape {
 
   return {
     glsl: `
-    float cardGap = mix(${startGap.toFixed(6)}, 0.0, pMerge);
-    float cardWidth = mix(${startWidth.toFixed(6)}, ${(totalWidth / count).toFixed(6)}, pMerge);
-    float cardRadius = mix(0.045, 0.045, pMerge);
     ${declarations}
     float dShapes = ${union};
   `,
@@ -239,26 +240,31 @@ export function symbolsLayout(options: LayoutOptions = {}): LayoutShape {
 
   return {
     glsl: `
-    float symbolScale = mix(0.16, 0.58, pMerge);
-    vec2 squareCenter = mix(vec2(-0.66, 0.0), vec2(0.0), pMerge);
-    vec2 triangleCenter = mix(vec2(-0.22, 0.0), vec2(0.0), pMerge);
-    vec2 circleCenter = mix(vec2(0.22, 0.0), vec2(0.0), pMerge);
-    vec2 crossCenter = mix(vec2(0.66, 0.0), vec2(0.0), pMerge);
+    // Every value numbered by its piece (0 square, 1 triangle, 2 circle,
+    // 3 cross), so with \`order\` each symbol moves on its own clock.
+    float symbolScale0 = mix(0.16, 0.58, pMerge);
+    float symbolScale1 = mix(0.16, 0.58, pMerge);
+    float symbolScale2 = mix(0.16, 0.58, pMerge);
+    float symbolScale3 = mix(0.16, 0.58, pMerge);
+    vec2 symbolCenter0 = mix(vec2(-0.66, 0.0), vec2(0.0), pMerge);
+    vec2 symbolCenter1 = mix(vec2(-0.22, 0.0), vec2(0.0), pMerge);
+    vec2 symbolCenter2 = mix(vec2(0.22, 0.0), vec2(0.0), pMerge);
+    vec2 symbolCenter3 = mix(vec2(0.66, 0.0), vec2(0.0), pMerge);
 
-    float dShape0 = sdRoundedBox(st - squareCenter, vec2(symbolScale), mix(0.035, 0.055, pMerge));
-    vec2 trianglePoint = st - triangleCenter;
-    float triangleBottom = -trianglePoint.y - symbolScale;
-    float triangleSides = trianglePoint.y + 2.0 * abs(trianglePoint.x) - symbolScale;
-    float dShape1 = max(triangleBottom, triangleSides);
-    float dShape2 = length(st - circleCenter) - symbolScale;
+    float dShape0 = sdRoundedBox(st - symbolCenter0, vec2(symbolScale0), mix(0.035, 0.055, pMerge));
+    vec2 trianglePoint1 = st - symbolCenter1;
+    float triangleBottom1 = -trianglePoint1.y - symbolScale1;
+    float triangleSides1 = trianglePoint1.y + 2.0 * abs(trianglePoint1.x) - symbolScale1;
+    float dShape1 = max(triangleBottom1, triangleSides1);
+    float dShape2 = length(st - symbolCenter2) - symbolScale2;
 
-    vec2 crossPoint = st - crossCenter;
-    crossPoint = mat2(0.7071068, -0.7071068, 0.7071068, 0.7071068) * crossPoint;
-    float crossWidth = mix(0.065, 0.24, pMerge);
-    float crossLength = 1.4142136 * symbolScale - crossWidth + mix(0.007, 0.0, pMerge);
-    float dCrossV = sdRoundedBox(crossPoint, vec2(crossWidth, crossLength), crossWidth * 0.38);
-    float dCrossH = sdRoundedBox(crossPoint, vec2(crossLength, crossWidth), crossWidth * 0.38);
-    float dShape3 = min(dCrossV, dCrossH);
+    vec2 crossPoint3 = st - symbolCenter3;
+    crossPoint3 = mat2(0.7071068, -0.7071068, 0.7071068, 0.7071068) * crossPoint3;
+    float crossWidth3 = mix(0.065, 0.24, pMerge);
+    float crossLength3 = 1.4142136 * symbolScale3 - crossWidth3 + mix(0.007, 0.0, pMerge);
+    float dCrossV3 = sdRoundedBox(crossPoint3, vec2(crossWidth3, crossLength3), crossWidth3 * 0.38);
+    float dCrossH3 = sdRoundedBox(crossPoint3, vec2(crossLength3, crossWidth3), crossWidth3 * 0.38);
+    float dShape3 = min(dCrossV3, dCrossH3);
 
     float dShapes = ${unionChain(['dShape0', 'dShape1', 'dShape2', 'dShape3'], liquid)};
   `,
@@ -481,6 +487,25 @@ export const LAYOUT_SDF_DEPENDENCIES: Record<LayoutName, LayoutSdfDependencies> 
  *  than importing every layout function individually, so adding a new
  *  layout later means one new entry here (plus one in
  *  LAYOUT_SDF_DEPENDENCIES), never a change to shader.ts's own logic. */
+/**
+ * Points each piece's statements at that piece's own progress, for
+ * spec §08's `order` ('sequence' | 'alternate'): every statement that
+ * DECLARES a piece-numbered value (`dShape2`, `fanCenter2`, `dThread2`…)
+ * reads `pMerge2` instead of the shared `pMerge`. Every layout already
+ * numbers its per-piece values this way (shelf and symbols were brought
+ * into line for it), so ordering needs no per-layout code. Statements
+ * about no single piece keep the shared `pMerge`.
+ */
+export function perPieceProgress(glsl: string): string {
+  return glsl
+    .split(';')
+    .map((statement) => {
+      const declared = /^\s*(?:float|vec2|vec3|vec4|mat2)\s+[A-Za-z_]+?(\d+)\s*=/.exec(statement)
+      return declared ? statement.replace(/\bpMerge\b/g, `pMerge${declared[1]}`) : statement
+    })
+    .join(';')
+}
+
 export function buildLayoutGLSL(name: LayoutName, options: LayoutOptions = {}): LayoutShape {
   return LAYOUT_GENERATORS[name](options)
 }

@@ -54,6 +54,7 @@ import {
   destroyMorphProgram,
   drawMorph,
   type MorphOperation,
+  type MorphOrder,
   type MorphProgram,
   type RecomposeTarget,
   type ThreadOptions,
@@ -111,6 +112,9 @@ export type MorphOptions = {
    *  no distribute targets to bridge). Omitted (the default) means no
    *  thread at all — see shader.ts/thread.ts for the actual math. */
   thread?: ThreadOptions
+  /** The order the pieces move in: 'sequence' (default) one after another,
+   *  'alternate' dealt either side of the centre. Spec §08. */
+  order?: MorphOrder
 }
 
 type Uploadable = HTMLImageElement | HTMLVideoElement
@@ -130,6 +134,7 @@ export function morph(options: MorphOptions): ComicePlugin {
     recomposeStart = 0.85,
     recomposeEnd = 1.0,
     thread,
+    order = 'sequence',
   } = options
 
   if (operation === 'mask' && !mask) {
@@ -259,6 +264,7 @@ export function morph(options: MorphOptions): ComicePlugin {
           recomposeStart,
           recomposeEnd,
           thread,
+          order,
         })
         // A failed compile would otherwise leave the media hidden behind an
         // empty canvas; show the original instead.
@@ -369,5 +375,5 @@ export function morph(options: MorphOptions): ComicePlugin {
   }
 }
 
-export type { MorphOperation } from './shader.js'
+export type { MorphOperation, MorphOrder } from './shader.js'
 export type { LayoutName } from './layouts.js'

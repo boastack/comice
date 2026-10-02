@@ -53,7 +53,7 @@
 import { getResidencyPool } from 'comice/gl'
 import type { GLContext, Plane } from 'comice/gl'
 import { composeSdfGLSL, SD_ROUNDED_BOX_GLSL } from './sdf.js'
-import { buildLayoutGLSL, LAYOUT_SDF_DEPENDENCIES, type LayoutName } from './layouts.js'
+import { buildLayoutGLSL, LAYOUT_SDF_DEPENDENCIES, perPieceProgress, type LayoutName } from './layouts.js'
 import { SD_THREAD_GLSL } from './thread.js'
 
 export type MorphOperation = 'merge' | 'breakout' | 'distribute' | 'mask' | 'recompose'
@@ -106,6 +106,30 @@ export type MorphShaderOptions = {
    *  in this shader (mask's own uniforms, recompose's pFinal) that only
    *  appears in the compiled source when actually requested. */
   thread?: ThreadOptions
+  /** Spec §08: the order the pieces move in. 'sequence' (default) one
+   *  after another in index order; 'alternate' dealt either side of a seed
+   *  origin — the centre piece first, then outward, alternating sides.
+   *  Either way each piece gets its own window of the timeline (see
+   *  ORDER_STAGGER). Before this, every piece moved at once. */
+  order?: MorphOrder
+}
+
+export type MorphOrder = 'sequence' | 'alternate'
+
+/** How much of the timeline separates the first piece's start from the
+ *  last's. Each piece's own move takes the remaining 1 - ORDER_STAGGER, so
+ *  neighbours overlap and the whole thing still finishes at progress 1. */
+const ORDER_STAGGER = 0.3
+
+/** Each piece's place in the deal (0 moves first). 'alternate' starts at
+ *  the centre — the seed origin — and works outward, left before right. */
+export function orderRanks(count: number, order: MorphOrder): number[] {
+  if (order === 'sequence') return Array.from({ length: count }, (_, i) => i)
+  const centre = (count - 1) / 2
+  const dealt = Array.from({ length: count }, (_, i) => i).sort((a, b) => Math.abs(a - centre) - Math.abs(b - centre) || a - b)
+  const ranks = new Array<number>(count)
+  dealt.forEach((piece, rank) => (ranks[piece] = rank))
+  return ranks
 }
 
 /** See thread.ts's own header for the full design. All four fields are
@@ -166,6 +190,7 @@ function buildFragmentShader(options: MorphShaderOptions): string {
     recomposeStart = 0.85,
     recomposeEnd = 1.0,
     thread,
+    order = 'sequence',
   } = options
   const clampedLiquid = Math.max(0, Math.min(1, liquid))
   const isMask = operation === 'mask'
@@ -181,7 +206,7 @@ function buildFragmentShader(options: MorphShaderOptions): string {
   // — it composes a second blend stage on top of the same dShapes union,
   // it does not replace it.
   const layoutShape = usesLayout ? buildLayoutGLSL(layout!, { count, liquid: clampedLiquid > 0 }) : null
-  const shapeGLSL = layoutShape?.glsl ?? ''
+  const shapeGLSL = perPieceProgress(layoutShape?.glsl ?? '')
   const sdfGLSL = usesLayout ? composeSdfGLSL(LAYOUT_SDF_DEPENDENCIES[layout!]) : ''
 
   // thread: one sdThread() call per distribute target, connecting that
@@ -222,7 +247,8 @@ function buildFragmentShader(options: MorphShaderOptions): string {
     // of the option).
     const threadNames = layoutShape!.targetPositions.map((_position, index) => `dThread${index}`)
     const withThreads = threadNames.reduce((current, name) => `min(${current}, ${name})`, 'dShapes')
-    threadGLSL = `${declarations}\n  float dShapesWithThread = ${withThreads};`
+    // Each strand follows its own piece's progress, not the shared one.
+    threadGLSL = `${perPieceProgress(declarations)}\n  float dShapesWithThread = ${withThreads};`
   }
   // recompose's fixed target shapes (circle/square/frame) all need
   // sdRoundedBox even when the chosen distribute layout's own
@@ -253,6 +279,21 @@ function buildFragmentShader(options: MorphShaderOptions): string {
   // distribute shape to interpolate toward) — p itself drives the
   // media-frame -> mask-shape blend directly, see dResultGLSL below.
   const pMergeExpr = operation === 'breakout' ? '1.0 - p' : 'p'
+
+  // One progress value per piece (`order`). The stagger is applied to TIME
+  // (p) before breakout's reversal, so the piece ranked first moves first
+  // in either direction. Each piece's window is ORDER_STAGGER-offset by
+  // its rank and 1 - ORDER_STAGGER long; the last finishes at p = 1.
+  const pieceCount = layoutShape?.targetPositions.length ?? 0
+  const ranks = orderRanks(pieceCount, order)
+  const span = 1 - ORDER_STAGGER
+  const pieceProgressGLSL = ranks
+    .map((rank, piece) => {
+      const start = pieceCount > 1 ? (rank / (pieceCount - 1)) * ORDER_STAGGER : 0
+      const local = `clamp((p - ${start.toFixed(6)}) / ${span.toFixed(6)}, 0.0, 1.0)`
+      return `  float pMerge${piece} = smoothstep(0.10, 0.90, ${operation === 'breakout' ? `1.0 - ${local}` : local});`
+    })
+    .join('\n')
 
   // blendK: legacy's exact formula, `liquid` (this package's 0..1 option)
   // taking the place of legacy's boolean enableLiquid as a continuous
@@ -340,6 +381,7 @@ void main() {
 
   float p = clamp(u_progress, 0.0, 1.0);
   float pMerge = smoothstep(0.10, 0.90, ${pMergeExpr});
+${pieceProgressGLSL}
   float blendK = ${blendKExpr};
   ${dResultGLSL}
 

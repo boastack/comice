@@ -174,7 +174,7 @@ describe('symbolsLayout', () => {
     const shape = symbolsLayout()
     expect(shape.glsl).toContain('triangleBottom')
     expect(shape.glsl).toContain('triangleSides')
-    expect(shape.glsl).toContain('max(triangleBottom, triangleSides)')
+    expect(shape.glsl).toContain('max(triangleBottom1, triangleSides1)') // numbered by piece, for `order`
   })
 
   it('includes an inline 45-degree rotation matrix for the cross, not a rotate2d() call', () => {
