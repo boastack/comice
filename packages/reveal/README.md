@@ -23,11 +23,22 @@ comice('.section img')
   .driver(scroll({ threshold: 0.3 }))
 ```
 
+The media can also enter through a mask — a shape, text, another image, or the cursor:
+
+```js
+import { comice, pointer, scroll } from 'comice'
+import { reveal } from '@comice/reveal'
+
+comice('.photo').use(reveal({ mask: { type: 'cursor', radius: 200, softness: 0.4 } })).driver(pointer())
+comice('.photo').use(reveal({ mask: { type: 'text', text: 'COMICE' } })).driver(scroll())
+```
+
 ## Options
 
 | Option | Type | |
 |---|---|---|
-| `effect` | `'wipe'` `'scale'` `'blur'` `'blinds'` `'slats'` `'curtain'` `'expand'` | How the element enters. |
+| `effect` | `'mask'` `'wipe'` `'scale'` `'blur'` `'blinds'` `'slats'` `'curtain'` `'expand'` | How the element enters. Default `'mask'` when a `mask` is given, otherwise `'scale'`. |
+| `mask` | cursor \| shape \| text \| `<img>` \| `<video>` | For `'mask'`: `{ type: 'cursor', radius, softness }`, `{ type: 'shape', path }`, `{ type: 'text', text }`, or another image/video read by brightness. Needs an `<img>`/`<video>` target. `'subject'`/`'depth'` need `@comice/vision` (not built yet). |
 | `stagger` | object | Offsets for several elements entering together. |
 | `waitForDecode` | boolean | Never reveal a blank frame. Default `true`. |
 

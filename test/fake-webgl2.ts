@@ -127,6 +127,7 @@ export function createFakeGL2(
     RGBA8: 28,
     UNPACK_ALIGNMENT: 29,
     UNPACK_FLIP_Y_WEBGL: 30,
+    COLOR_BUFFER_BIT: 31,
 
     get __flipY() {
       return flipY
@@ -143,6 +144,8 @@ export function createFakeGL2(
       return options.maxTextureUnits ?? 16
     },
     viewport(_x: number, _y: number, _width: number, _height: number) {},
+    clearColor(_r: number, _g: number, _b: number, _a: number) {},
+    clear(_mask: number) {},
     pixelStorei(pname: number, param: number | boolean) {
       if (pname === 30) flipY = !!param
     },

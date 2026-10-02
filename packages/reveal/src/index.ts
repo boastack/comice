@@ -11,13 +11,11 @@
  * actually hold up against a real consumer." Everything in this file exists
  * to exercise that contract, not to be an impressive effect.
  *
- * v0.1 SCOPE: wipe, scale, blur, blinds, slats, curtain, expand — all pure
- * CSS (clip-path/transform/filter), no shaders. `mask` is NOT implemented
- * here; it needs the shared mask field from spec section 07, which needs
- * the GPU pipeline, which does not exist yet (see ROADMAP.md section 2,
- * "Where we are right now"). Shipping a fake DOM-clip mask now would mean
- * throwing it away and rewriting it once the real mask field lands in
- * v0.2 — see effects.ts's header for the fuller reasoning.
+ * EFFECTS: wipe, scale, blur, blinds, slats, curtain, expand are pure CSS
+ * (clip-path/transform/filter) on any element. `mask` draws the media on
+ * the GPU through core's mask field (section 07) — a cursor, a shape,
+ * text, another image or a video — so it needs an <img>/<video> target;
+ * see mask.ts.
  *
  * DRIVEN BY STATE, NOT DURATION. reveal reacts to the instance's
  * idle -> entering -> active -> leaving state machine via instance.on(),
@@ -31,11 +29,17 @@ import { snapForReducedMotion } from 'comice'
 import { computeEffectStyle, type RevealEffect } from './effects.js'
 import { computeStaggerDelay, type StaggerOptions } from './stagger.js'
 import { waitForMediaReady } from './decode.js'
+import { createMaskReveal, validateMaskSource, type MaskReveal, type RevealMaskSource } from './mask.js'
 
 export type RevealOptions = {
-  /** Which CSS effect drives the reveal. Default 'scale'. Spec's default is
-   *  'mask', but mask is out of v0.1 scope — see the file header. */
-  effect?: RevealEffect
+  /** How the element enters. The CSS effects work on any element; 'mask'
+   *  draws an <img>/<video> through `mask`. Default: 'mask' when a `mask`
+   *  is given (spec's default), otherwise 'scale' — a mask effect with no
+   *  mask would have nothing to reveal through. */
+  effect?: RevealEffect | 'mask'
+  /** For effect 'mask': a cursor, a shape, text, an image or a video.
+   *  See mask.ts. 'subject' and 'depth' need @comice/vision. */
+  mask?: RevealMaskSource
   /** Coordinates delay across sibling elements matched by the same selector. */
   stagger?: StaggerOptions
   /** Never reveal a blank frame: for an <img>/<video> target, holds the
@@ -44,7 +48,7 @@ export type RevealOptions = {
   waitForDecode?: boolean
 }
 
-const DEFAULT_EFFECT: RevealEffect = 'scale'
+const DEFAULT_CSS_EFFECT: RevealEffect = 'scale'
 
 /** Reads the current inline style values this plugin owns, so setup() can
  *  restore them cleanly on teardown() rather than leaving stray inline
@@ -76,7 +80,9 @@ function idleStyle(effect: RevealEffect): ReturnType<typeof computeEffectStyle> 
 }
 
 export function reveal(options: RevealOptions = {}): ComicePlugin {
-  const { effect = DEFAULT_EFFECT, stagger, waitForDecode = true } = options
+  const { stagger, waitForDecode = true, mask } = options
+  const effect = options.effect ?? (mask !== undefined ? 'mask' : DEFAULT_CSS_EFFECT)
+  if (effect === 'mask') validateMaskSource(mask)
 
   let el: HTMLElement | null = null
   let unsubscribe: (() => void) | null = null
@@ -86,11 +92,16 @@ export function reveal(options: RevealOptions = {}): ComicePlugin {
   let currentProgress = 0
   let staggerTimer: ReturnType<typeof setTimeout> | null = null
   let destroyed = false
+  let maskReveal: MaskReveal | null = null
 
   function render(progress: number): void {
     // Reduced motion: jump to whichever end state is closer, never animate between.
     currentProgress = Math.max(0, Math.min(1, snapForReducedMotion(progress)))
-    if (!el) return
+    if (maskReveal) {
+      maskReveal.setProgress(currentProgress)
+      return
+    }
+    if (!el || effect === 'mask') return
     applyStyle(el, computeEffectStyle(effect, currentProgress))
   }
 
@@ -112,8 +123,15 @@ export function reveal(options: RevealOptions = {}): ComicePlugin {
       }
 
       el = target
-      originalStyle = snapshotOwnedStyle(el)
-      applyStyle(el, idleStyle(effect))
+      if (effect === 'mask') {
+        if (!(target instanceof HTMLImageElement || target instanceof HTMLVideoElement)) {
+          throw new Error("[comice] reveal(): effect 'mask' draws the media itself, so it needs an <img> or <video> target.")
+        }
+        maskReveal = createMaskReveal(target, instance, mask!)
+      } else {
+        originalStyle = snapshotOwnedStyle(el)
+        applyStyle(el, idleStyle(effect))
+      }
 
       const delay = applyStaggerDelay(target)
 
@@ -130,8 +148,9 @@ export function reveal(options: RevealOptions = {}): ComicePlugin {
 
       const armReady = (): void => {
         // `ready` lifecycle event (spec §04): the media is decoded and the
-        // reveal is armed to play, never on a blank frame.
-        instance.ready('reveal')
+        // reveal is armed to play, never on a blank frame. The mask path
+        // reports its own ready/error from the GPU (mask.ts).
+        if (!maskReveal) instance.ready('reveal')
         if (delay > 0) {
           staggerTimer = setTimeout(start, delay)
         } else {
@@ -163,6 +182,8 @@ export function reveal(options: RevealOptions = {}): ComicePlugin {
       destroyed = true
       if (staggerTimer !== null) clearTimeout(staggerTimer)
       unsubscribe?.()
+      maskReveal?.destroy()
+      maskReveal = null
       if (el && originalStyle) {
         applyStyle(el, {
           clipPath: originalStyle.clipPath ?? '',
@@ -198,4 +219,5 @@ export function reveal(options: RevealOptions = {}): ComicePlugin {
 }
 
 export type { RevealEffect } from './effects.js'
+export type { RevealMaskSource } from './mask.js'
 export type { StaggerOptions } from './stagger.js'
