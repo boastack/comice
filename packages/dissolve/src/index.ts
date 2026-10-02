@@ -130,13 +130,14 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
       // Rides getSharedScheduler() — no private rAF loop, same discipline
       // every T1+ file in this package holds to. Gated on the target's
       // own connectedness, matching morph's own gate exactly.
-      // Render only when visible (spec §13): off-screen or in a hidden tab, this
+      // Render only when visible (spec §13): off-screen, in a hidden tab, or once
+      // the frame budget has dropped to a static poster (core's budget.ts), this
       // does zero work. `isConnected` alone kept every effect drawing while
       // scrolled away — particles off-screen held a whole page at 4fps.
       visibility = createVisibilityGate(target)
       unregisterFromScheduler = getSharedScheduler().add(
         () => renderFrame(),
-        () => !destroyed && !!target && target.isConnected && visibility!.isVisible(),
+        () => !destroyed && !!target && target.isConnected && visibility!.shouldDraw(),
       )
 
       unsubscribe = instance.on('*', (snapshot) => {

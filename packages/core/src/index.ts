@@ -28,6 +28,7 @@ export { createInstance } from './machine.js'
 export { createMapping } from './mapping.js'
 export { createScheduler, createVisibilityGate, getSharedScheduler } from './scheduler.js'
 export { prefersReducedMotion, snapForReducedMotion } from './motion.js'
+export { qualityLevel, resetQuality, setAdaptiveQuality, type QualityLevel } from './budget.js'
 export * from './types.js'
 export * from './drivers/index.js'
 

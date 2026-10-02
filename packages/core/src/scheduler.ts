@@ -19,6 +19,8 @@ export type Scheduler = {
   stop(): void
 }
 
+import { isPoster, recordFrame } from './budget.js'
+
 declare const process: { env: { NODE_ENV?: string } } | undefined
 const __DEV__ = typeof process === 'undefined' || process.env?.NODE_ENV !== 'production'
 
@@ -50,6 +52,9 @@ export function createScheduler(): Scheduler {
     const deltaMs = hasTicked ? timestamp - lastTimestamp : 16.67
     hasTicked = true
     lastTimestamp = timestamp
+    // Spec §13's frame clock: budget.ts steps quality down when frames keep
+    // missing their budget (see there).
+    recordFrame(deltaMs)
 
     // Every entry runs inside its own try/catch. This loop is SHARED
     // across every Comice instance, plugin and driver on the page — one
@@ -116,6 +121,9 @@ export function createScheduler(): Scheduler {
  */
 export function createVisibilityGate(target: Element): {
   isVisible(): boolean
+  /** isVisible(), and the frame budget has not dropped to a static poster
+   *  (budget.ts) — what every GPU-drawing loop should gate on. */
+  shouldDraw(): boolean
   destroy(): void
 } {
   let onScreen = false
@@ -136,6 +144,7 @@ export function createVisibilityGate(target: Element): {
 
   return {
     isVisible: () => onScreen && tabVisible,
+    shouldDraw: () => onScreen && tabVisible && !isPoster(),
     destroy(): void {
       observer.disconnect()
       document.removeEventListener('visibilitychange', onVisibilityChange)

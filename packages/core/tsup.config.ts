@@ -14,6 +14,12 @@ export default defineConfig({
   dts: { compilerOptions: { composite: false, incremental: false } },
   clean: true,
   sourcemap: false,
-  splitting: false,
+  // Shared chunks, not one inlined copy per entry: with `splitting: false`
+  // every entry (comice, comice/scheduler, comice/gl, comice/drivers)
+  // bundled its OWN copy of scheduler.ts — four "shared" schedulers, four
+  // rAF loops, and module state (the frame budget) that one entry wrote
+  // and another never saw. Found when the budget never stepped down in a
+  // real browser. tsup splits cjs too when this is set explicitly.
+  splitting: true,
   treeshake: true,
 })

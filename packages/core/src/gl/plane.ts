@@ -295,7 +295,7 @@ export function createPlane(context: GLContext | null, source: PlaneSource): Pla
     visibility = createVisibilityGate(source)
     unregisterFromScheduler = getSharedScheduler().add(
       () => upload(),
-      () => !destroyed && !source.paused && !source.ended && (!source.isConnected || visibility!.isVisible()),
+      () => !destroyed && !source.paused && !source.ended && (!source.isConnected || visibility!.shouldDraw()),
     )
   }
 

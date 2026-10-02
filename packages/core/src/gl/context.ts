@@ -21,6 +21,8 @@
  * shown it on its own).
  */
 
+import { renderScale } from '../budget.js'
+
 /** One WebGL2 context, shared by every Comice instance registered against
  *  the same root. Kept minimal on purpose — texture/program state lives in
  *  plane.ts, not here. */
@@ -92,7 +94,10 @@ const MAX_DPR = 2
  */
 export function effectiveDPR(): number {
   const raw = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
-  return Math.min(raw, MAX_DPR)
+  // Times the frame budget's resolution step (budget.ts): 1 normally, lower
+  // when the page keeps missing its frame budget. Every canvas, mask and
+  // feedback target reads this, so they all step down together.
+  return Math.min(raw, MAX_DPR) * renderScale()
 }
 export function createGLContext(
   root: Element,

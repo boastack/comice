@@ -149,13 +149,14 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
       resizeObserver = new ResizeObserver(() => renderFrame())
       resizeObserver.observe(target)
 
-      // Render only when visible (spec §13): off-screen or in a hidden tab, this
+      // Render only when visible (spec §13): off-screen, in a hidden tab, or once
+      // the frame budget has dropped to a static poster (core's budget.ts), this
       // does zero work. `isConnected` alone kept every effect drawing while
       // scrolled away — particles off-screen held a whole page at 4fps.
       visibility = createVisibilityGate(target)
       unregisterFromScheduler = getSharedScheduler().add(
         () => renderFrame(),
-        () => !destroyed && !!target && target.isConnected && visibility!.isVisible(),
+        () => !destroyed && !!target && target.isConnected && visibility!.shouldDraw(),
       )
 
       // instance.display.x/y carries the routed pointer position (see
