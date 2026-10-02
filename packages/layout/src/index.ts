@@ -37,8 +37,9 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
+import { focalCropPosition, parseAspect, type FocalPoint } from './crop.js'
 
-export type LayoutMode = 'wrap' | 'avoid' | 'anchor'
+export type LayoutMode = 'wrap' | 'avoid' | 'anchor' | 'crop'
 
 export type LayoutShapeKind = 'rect' | 'ellipse'
 
@@ -64,6 +65,13 @@ export type LayoutOptions = {
   edge?: 'top' | 'bottom' | 'left' | 'right'
   /** `anchor` mode only: offset from the chosen edge, px. Default 8. */
   offset?: number
+  /** For 'crop': the aspect ratio the media crops to — `'4/5'`, `'16/9'`
+   *  or a number. Default: the box's own shape. */
+  aspect?: string | number
+  /** For 'crop': the point (0..1 of the image) kept in frame — centred when
+   *  the image is large enough to. Default [0.5, 0.5]. `'subject'` needs
+   *  @comice/vision (not built yet). */
+  focal?: FocalPoint | 'subject'
 }
 
 type Uploadable = HTMLImageElement | HTMLVideoElement
@@ -86,16 +94,23 @@ function buildShapeOutside(shape: LayoutShapeKind, margin: number): string {
 }
 
 export function layout(options: LayoutOptions): ComicePlugin {
-  const { mode, shape = 'ellipse', float = 'left', margin = 16, target: targetSelector, edge = 'bottom', offset = 8 } = options
+  const { mode, shape = 'ellipse', float = 'left', margin = 16, target: targetSelector, edge = 'bottom', offset = 8, focal = [0.5, 0.5] } = options
 
   if (mode === 'anchor' && !targetSelector) {
     throw new Error("[comice] layout(): mode 'anchor' requires a `target` selector.")
+  }
+  if (mode === 'crop' && focal === 'subject') {
+    throw new Error("[comice] layout(): focal 'subject' needs @comice/vision, which isn't built yet. Pass a point, e.g. focal: [0.5, 0.3].")
+  }
+  const aspect = options.aspect === undefined ? null : parseAspect(options.aspect)
+  if (options.aspect !== undefined && !aspect) {
+    throw new Error(`[comice] layout(): aspect '${options.aspect}' is not a ratio — use e.g. '4/5', '16/9' or 1.5.`)
   }
 
   let mediaEl: HTMLElement | null = null
   let anchoredEl: HTMLElement | null = null
   let resizeObserver: ResizeObserver | null = null
-  let originalMediaStyle: { float: string; shapeOutside: string; shapeMargin: string; clipPath: string } | null = null
+  let originalMediaStyle: { float: string; shapeOutside: string; shapeMargin: string; clipPath: string; aspectRatio: string; objectFit: string; objectPosition: string } | null = null
   let originalAnchoredStyle: { position: string; top: string; left: string; right: string; bottom: string } | null = null
 
   function applyWrapOrAvoid(): void {
@@ -154,9 +169,28 @@ export function layout(options: LayoutOptions): ComicePlugin {
     }
   }
 
+  function applyCrop(): void {
+    if (!mediaEl) return
+    if (aspect) mediaEl.style.aspectRatio = aspect
+    mediaEl.style.objectFit = 'cover'
+    const point = focal as FocalPoint
+    const natural = mediaEl instanceof HTMLVideoElement ? [mediaEl.videoWidth, mediaEl.videoHeight] : [(mediaEl as HTMLImageElement).naturalWidth, (mediaEl as HTMLImageElement).naturalHeight]
+    const box = [mediaEl.clientWidth, mediaEl.clientHeight]
+    if (natural[0]! > 0 && natural[1]! > 0 && box[0]! > 0 && box[1]! > 0) {
+      const { x, y } = focalCropPosition(natural[0]!, natural[1]!, box[0]!, box[1]!, point)
+      mediaEl.style.objectPosition = `${x}px ${y}px`
+    } else {
+      // Size not known yet (still loading): percentages at least keep the
+      // focal point in frame; the load listener re-centres it exactly.
+      mediaEl.style.objectPosition = `${point[0] * 100}% ${point[1] * 100}%`
+    }
+  }
+
   function render(): void {
     if (mode === 'anchor') {
       applyAnchor()
+    } else if (mode === 'crop') {
+      applyCrop()
     } else {
       applyWrapOrAvoid()
     }
@@ -176,6 +210,9 @@ export function layout(options: LayoutOptions): ComicePlugin {
         shapeOutside: mediaEl.style.shapeOutside,
         shapeMargin: mediaEl.style.shapeMargin,
         clipPath: mediaEl.style.clipPath,
+        aspectRatio: mediaEl.style.aspectRatio,
+        objectFit: mediaEl.style.objectFit,
+        objectPosition: mediaEl.style.objectPosition,
       }
 
       if (mode === 'anchor') {
@@ -196,6 +233,9 @@ export function layout(options: LayoutOptions): ComicePlugin {
 
       resizeObserver = new ResizeObserver(() => render())
       resizeObserver.observe(mediaEl)
+      // The natural size arrives with the media; re-centre then.
+      mediaEl.addEventListener('load', render)
+      mediaEl.addEventListener('loadedmetadata', render)
       // `ready` lifecycle event (spec §04): no GPU work to wait for, so this
       // plugin's effect is in place once setup has run.
       instance.ready('layout')
@@ -203,7 +243,12 @@ export function layout(options: LayoutOptions): ComicePlugin {
 
     teardown() {
       resizeObserver?.disconnect()
+      mediaEl?.removeEventListener('load', render)
+      mediaEl?.removeEventListener('loadedmetadata', render)
       if (mediaEl && originalMediaStyle) {
+        mediaEl.style.aspectRatio = originalMediaStyle.aspectRatio
+        mediaEl.style.objectFit = originalMediaStyle.objectFit
+        mediaEl.style.objectPosition = originalMediaStyle.objectPosition
         mediaEl.style.float = originalMediaStyle.float
         mediaEl.style.shapeOutside = originalMediaStyle.shapeOutside
         mediaEl.style.shapeMargin = originalMediaStyle.shapeMargin

@@ -39,7 +39,7 @@ The natural setup is GSAP (or Motion, or Lenis) drives, Comice renders: a timeli
 
 ## Status
 
-**Pre-release.** The state machine, all seven drivers, the Driver → Signal → Mapping → Plugin Parameter layer, the full WebGL2 pipeline (texture-on-plane, multi-texture residency, the mask field, temporal feedback, the noise/displacement library), and fourteen plugins are built and tested — `reveal`, `morph`, `dissolve`, `distort`, `spotlight`, `rail`, `color`, `seed`, `mosaic`, `ascii`, `aura`, `type`, `layout`, `particles`. Every plugin ships either its complete spec card or a documented, tested subset — never a placeholder. Not yet published to npm. See [`ROADMAP.md`](./ROADMAP.md) for the full per-file status and what's next (it's gitignored, internal notes, read it locally rather than on GitHub).
+**Pre-release.** The state machine, all seven drivers, the Driver → Signal → Mapping → Plugin Parameter layer, the full WebGL2 pipeline (texture-on-plane, multi-texture residency, the mask field, temporal feedback, the noise/displacement library), and fifteen plugins are built and tested — `reveal`, `morph`, `dissolve`, `distort`, `spotlight`, `rail`, `color`, `seed`, `mosaic`, `ascii`, `aura`, `type`, `layout`, `particles`, `persist`. Each implements its full spec card, except three options that need `vision` (on-device depth and subject detection, not built yet): color's `dof`, seed's `focal: 'subject'`, and layout's `focal: 'subject'` / `shape: 'contour'` — each throws a clear error rather than faking it. Not yet published to npm. See [`ROADMAP.md`](./ROADMAP.md) for the full per-file status and what's next (it's gitignored, internal notes, read it locally rather than on GitHub).
 
 ---
 
@@ -101,6 +101,20 @@ Every plugin reduces to one of five operations: **merge** (many pieces become on
 3. **Degrade, never disappear.** No GPU, reduced motion, a weak phone, a failed load: the media still shows.
 4. **The page stays real.** Real text, real links, real layout underneath. The canvas mirrors the page, it never replaces it.
 5. **States, not durations.** Every interactive plugin is a state machine driven by real events, interrupt-safe by construction.
+6. **Presets are data, not code.** Anything a preset does, a user can write by hand and change halfway through.
+7. **Say no in public.** The list below is what Comice will never do — it protects the core from the catalogue.
+
+### What Comice will never do
+
+The line isn't file formats, it's whether media is involved. SVG, text, canvas and the DOM all take part — as masks, sources, companions or targets — but if a feature still makes sense with no image or video present, it belongs somewhere else.
+
+- **Not general animation.** If it animates something that isn't media, GSAP and Motion already do it well. Comice works alongside them: GSAP drives, Comice renders.
+- **Not a 3D engine.** Flat planes with clever shaders. Meshes, lights and cameras belong to Three.js.
+- **Not AI image generation.** Reading an image with ML — depth, subject, colour — is in scope. Rewriting it is a different product.
+- **Not scroll fades.** Browsers do scroll-linked fades natively now, on the compositor. A JavaScript version would be worse.
+- **Not a video player.** No controls, captions UI, HLS or DRM. Comice takes a video element someone else configured and gives it a GPU surface.
+- **Not an effect gallery.** The plugin catalogue documents what the engine reaches; it is not an inventory owed to anyone.
+- **No fake fallbacks.** Without a GPU, with reduced motion, on a weak phone or after a failed load, the original media shows — never a CSS imitation of an effect that can't run.
 
 ---
 
