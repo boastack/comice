@@ -1,7 +1,7 @@
 {
   "name": "comice",
   "version": "0.1.0",
-  "description": "A state machine and event system for images and video interaction.",
+  "description": "A GPU interaction engine for images and video.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -44,7 +44,11 @@
     }
   },
   "sideEffects": false,
-  "files": ["dist/", "README.md", "LICENSE"],
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit --composite false --incremental false"
@@ -62,5 +66,15 @@
   "license": "MIT",
   "publishConfig": {
     "access": "public"
+  },
+  "author": "Olawale Balo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/boastack/comice.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/boastack/comice/tree/main/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/boastack/comice/issues"
   }
 }

@@ -1,0 +1,40 @@
+# @comice/distort
+
+Field distortion that follows an input — bulge, lens, glass, the cursor as a force in a field.
+
+A plugin for [Comice](https://github.com/boastack/comice), a GPU interaction engine for images and video.
+
+## Install
+
+```bash
+npm install comice @comice/distort
+```
+
+## Use
+
+Target: an `<img>` or `<video>`.
+
+```js
+import { comice, pointer } from 'comice'
+import { distort } from '@comice/distort'
+
+comice('.hero img')
+  .use(distort({ effect: 'bulge', radius: 200, strength: 0.5 }))
+  .driver(pointer())
+```
+
+## Options
+
+| Option | Type | |
+|---|---|---|
+| `effect` | `'bulge'` \| `'lens'` \| `'glass'` | Default `'bulge'`. |
+| `radius` | number | Field radius in px. Default 160. |
+| `strength` | number | Default 0.5. |
+| `refraction` | number | Chromatic split, for `'glass'`. |
+| `falloff` | `'linear'` \| `'smooth'` \| `'exp'` | Default `'smooth'`. |
+
+Does no work while off screen or in a hidden tab, and steps down resolution on devices that can't keep up. Without WebGL2 the original media shows, unchanged. With `prefers-reduced-motion` the field stays off and the media shows undistorted.
+
+## License
+
+MIT © Olawale Balo

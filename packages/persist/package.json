@@ -14,20 +14,39 @@
     }
   },
   "sideEffects": false,
-  "files": ["dist/", "README.md"],
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit --composite false --incremental false"
   },
   "peerDependencies": {
-    "comice": "workspace:*"
+    "comice": "workspace:^"
   },
   "devDependencies": {
     "comice": "workspace:*"
   },
-  "keywords": ["media", "persist", "navigation", "comice-plugin"],
+  "keywords": [
+    "media",
+    "persist",
+    "navigation",
+    "comice-plugin"
+  ],
   "license": "MIT",
   "publishConfig": {
     "access": "public"
+  },
+  "author": "Olawale Balo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/boastack/comice.git",
+    "directory": "packages/persist"
+  },
+  "homepage": "https://github.com/boastack/comice/tree/main/packages/persist#readme",
+  "bugs": {
+    "url": "https://github.com/boastack/comice/issues"
   }
 }

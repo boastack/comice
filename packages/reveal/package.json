@@ -14,20 +14,38 @@
     }
   },
   "sideEffects": false,
-  "files": ["dist/", "README.md"],
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit --composite false --incremental false"
   },
   "peerDependencies": {
-    "comice": "workspace:*"
+    "comice": "workspace:^"
   },
   "devDependencies": {
     "comice": "workspace:*"
   },
-  "keywords": ["media", "reveal", "comice-plugin"],
+  "keywords": [
+    "media",
+    "reveal",
+    "comice-plugin"
+  ],
   "license": "MIT",
   "publishConfig": {
     "access": "public"
+  },
+  "author": "Olawale Balo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/boastack/comice.git",
+    "directory": "packages/reveal"
+  },
+  "homepage": "https://github.com/boastack/comice/tree/main/packages/reveal#readme",
+  "bugs": {
+    "url": "https://github.com/boastack/comice/issues"
   }
 }
