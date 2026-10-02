@@ -145,6 +145,29 @@ describe('click() through a real instance — the stuck-in-entering bug', () => 
     expect(seen.some(([state, p]) => state === 'entering' && p >= 0.4 && p <= 0.6)).toBe(true)
   })
 
+  it('on a slow device (frames 250ms apart) the in-between progress still reaches plugins', () => {
+    // The first frame's progress used to be set in 'idle', then wiped to 0
+    // by the transition to 'entering' in the same task — never painted. On
+    // a 4fps page the whole 400ms animation is two frames, so a progress-
+    // reading effect (type's melt) never showed at all.
+    const seen: Array<[string, number]> = []
+    handle.on('*', (s) => seen.push([s.state, +s.progress.toFixed(2)]))
+
+    el.click()
+    for (let i = 0; i < 3; i++) {
+      now += 250
+      const pending = queued
+      queued = []
+      pending.forEach((cb) => cb(now))
+    }
+
+    // After every event of a frame settles, 'entering' holds the driver's
+    // real mid-animation value — not 0.
+    expect(seen.some(([state, p]) => state === 'entering' && p > 0 && p < 1)).toBe(true)
+    expect(handle.state).toBe('active')
+    expect(handle.progress).toBe(1)
+  })
+
   it('a second click goes all the way back to idle (not stuck in leaving)', () => {
     el.click()
     frames(1)

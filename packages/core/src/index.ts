@@ -129,6 +129,17 @@ function wrap(target: Element): ComiceHandle {
           instance.transition('idle')
         }
 
+        // A transition resets progress to 0 (machine.ts), which threw away
+        // the driver's real progress for the rest of this frame: a click
+        // animation's first frame set 0.63 in 'idle', the transition to
+        // 'entering' reset it to 0, and both happened in one task, so the
+        // in-between value was never painted. At 60fps the next frames
+        // recover; on a slow device, where 400ms is two frames, the melt
+        // never showed at all (seen on harness/site/). The driver's
+        // progress is the progress — re-apply it. A no-op when nothing
+        // transitioned (setProgress ignores an unchanged value).
+        instance.setProgress(signal.progress)
+
         // signal.pointer (DriverSignal's optional field, types.ts)
         // previously had no path to a plugin at all — pointer() reports
         // it, but a plain Driver never flows through .map() (that's
