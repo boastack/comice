@@ -50,6 +50,12 @@ export type MosaicShaderOptions = {
    *  job to turn into a uniform array; this shader only needs the count
    *  to build its GLSL loop bound). Default 2. */
   paletteCount?: number
+  /** True when the caller gave an explicit colour LIST (spec's "brand
+   *  colours"), not just a count: the shader then reads `u_palette`
+   *  (sRGB, sorted darkest to lightest) instead of greys / the media's own
+   *  colours. Previously the list was accepted and silently ignored — only
+   *  its length was used. Default false. */
+  paletteColors?: boolean
   /** Number of tile sources available for `fill: 'images'` — bounds the
    *  shader's own sampler array declaration. Ignored for every other
    *  fill. Default 0. */
@@ -82,19 +88,63 @@ float bayerThreshold(vec2 cell) {
   return bayer4x4[y * 4 + x] / 16.0;
 }`
 
-function buildDitherGLSL(paletteCount: number): string {
+// Brand-colour helpers (spec §10: palette fills interpolate in OKLCH by
+// default). Palette colours arrive as sRGB; blends and distances happen in
+// OKLab, through linear light, so a dot's edge between two brand colours
+// never dips through grey.
+const PALETTE_GLSL = `
+vec3 srgbToLinear(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
+vec3 linearToSrgb(vec3 c) { c = max(c, 0.0); return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+vec3 toOklab(vec3 srgb) {
+  vec3 c = srgbToLinear(srgb);
+  float l = 0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b;
+  float m = 0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b;
+  float s = 0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b;
+  vec3 lms = pow(max(vec3(l, m, s), 0.0), vec3(1.0 / 3.0));
+  return vec3(
+    0.2104542553 * lms.x + 0.7936177850 * lms.y - 0.0040720468 * lms.z,
+    1.9779984951 * lms.x - 2.4285922050 * lms.y + 0.4505937099 * lms.z,
+    0.0259040371 * lms.x + 0.7827717662 * lms.y - 0.8086757660 * lms.z
+  );
+}
+vec3 fromOklab(vec3 c) {
+  float l_ = c.x + 0.3963377774 * c.y + 0.2158037573 * c.z;
+  float m_ = c.x - 0.1055613458 * c.y - 0.0638541728 * c.z;
+  float s_ = c.x - 0.0894841775 * c.y - 1.2914855480 * c.z;
+  vec3 lms = vec3(l_ * l_ * l_, m_ * m_ * m_, s_ * s_ * s_);
+  return linearToSrgb(vec3(
+    4.0767416621 * lms.x - 3.3077115913 * lms.y + 0.2309699292 * lms.z,
+    -1.2684380046 * lms.x + 2.6097574011 * lms.y - 0.3413193965 * lms.z,
+    -0.0041960863 * lms.x - 0.7034186147 * lms.y + 1.7076147010 * lms.z
+  ));
+}
+vec3 paletteMix(vec3 a, vec3 b, float t) { return fromOklab(mix(toOklab(a), toOklab(b), t)); }`
+
+function buildDitherGLSL(paletteCount: number, paletteColors: boolean): string {
+  // With brand colours each quantization level IS one of them, darkest to
+  // lightest; without, the levels are greys, as before.
+  const out = paletteColors
+    ? `int level = int(clamp(floor(luma * (levels - 1.0) + threshold), 0.0, levels - 1.0));
+    color.rgb = u_palette[level];`
+    : `float quantized = floor(luma * (levels - 1.0) + threshold) / (levels - 1.0);
+    color.rgb = vec3(clamp(quantized, 0.0, 1.0));`
+  // One brightness per CELL, read at its centre — the threshold is per
+  // cell, so reading brightness per pixel split cells wherever it crossed
+  // the threshold mid-cell: broken specks and jagged fragments (seen in
+  // Chromium, with or without a palette).
   return `
   {
     vec2 cell = floor(gl_FragCoord.xy / u_cell);
     float threshold = bayerThreshold(cell);
-    float luma = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
+    vec2 cellUv = (cell * u_cell + u_cell * 0.5) / u_resolution;
+    vec3 cellColor = texture(u_media, clamp(cellUv, 0.0, 1.0)).rgb;
+    float luma = dot(cellColor, vec3(0.2126, 0.7152, 0.0722));
     float levels = max(2.0, ${paletteCount.toFixed(1)});
-    float quantized = floor(luma * (levels - 1.0) + threshold) / (levels - 1.0);
-    color.rgb = vec3(clamp(quantized, 0.0, 1.0));
+    ${out}
   }`
 }
 
-function buildHalftoneGLSL(): string {
+function buildHalftoneGLSL(paletteCount: number, paletteColors: boolean): string {
   // Classic CMYK-style halftone: each cell draws a dot whose radius
   // scales with that cell's own luminance (darker = bigger dot), sampled
   // via a per-cell radial distance field rather than a texture lookup —
@@ -108,7 +158,8 @@ function buildHalftoneGLSL(): string {
     float radius = (1.0 - luma) * (u_cell * 0.5);
     float dist = length(cellCoord);
     float dot = 1.0 - smoothstep(radius - 1.0, radius + 1.0, dist);
-    color.rgb = vec3(1.0 - dot);
+    ${paletteColors ? `// Two-colour print: darkest brand colour is the ink, lightest the paper.
+    color.rgb = paletteMix(u_palette[${paletteCount - 1}], u_palette[0], dot);` : 'color.rgb = vec3(1.0 - dot);'}
   }`
 }
 
@@ -136,15 +187,28 @@ float risoDot(vec2 fragCoord, vec2 cellSize, float channelValue, float angleOffs
   return 1.0 - smoothstep(radius - 1.0, radius + 1.0, dist);
 }`
 
-function buildPixelateGLSL(): string {
+function buildPixelateGLSL(paletteCount: number, paletteColors: boolean): string {
+  // With brand colours each cell snaps to the NEAREST one, measured in
+  // OKLab (perceptual distance), not RGB.
+  const snap = paletteColors
+    ? `
+    vec3 lab = toOklab(color.rgb);
+    vec3 best = u_palette[0];
+    float bestDist = 1e9;
+    for (int i = 0; i < ${paletteCount}; i++) {
+      float d = distance(lab, toOklab(u_palette[i]));
+      if (d < bestDist) { bestDist = d; best = u_palette[i]; }
+    }
+    color.rgb = best;`
+    : ''
   return `
   {
     vec2 cellUv = (floor(gl_FragCoord.xy / u_cell) * u_cell + u_cell * 0.5) / u_resolution;
-    color = texture(u_media, clamp(cellUv, 0.0, 1.0));
+    color = texture(u_media, clamp(cellUv, 0.0, 1.0));${snap}
   }`
 }
 
-function buildCrosshatchGLSL(): string {
+function buildCrosshatchGLSL(paletteCount: number, paletteColors: boolean): string {
   // Two diagonal line families, each family's density gated by luminance
   // — darker regions get both families (dense crosshatch), lighter
   // regions get none, matching real pen crosshatch shading.
@@ -157,13 +221,18 @@ function buildCrosshatchGLSL(): string {
     float hatchA = step(linesA, 1.0 - luma);
     float hatchB = step(linesB, 1.0 - luma * 1.6);
     float ink = max(hatchA, hatchB);
-    color.rgb = mix(color.rgb, vec3(1.0) - ink * vec3(0.9), 0.85);
+    ${paletteColors ? `// Pen on paper in brand colours: darkest is the ink, lightest the paper.
+    color.rgb = paletteMix(u_palette[${paletteCount - 1}], u_palette[0], ink);` : 'color.rgb = mix(color.rgb, vec3(1.0) - ink * vec3(0.9), 0.85);'}
   }`
 }
 
 /** Builds the fragment shader for one MosaicShaderOptions configuration. */
 export function buildFragmentShader(options: MosaicShaderOptions): string {
   const { fill, cell = 12, paletteCount = 2, sourceCount = 0 } = options
+  // riso's look IS its three RGB ink drums, and images draws tiles: an
+  // explicit palette doesn't apply to either.
+  const paletteColors = !!options.paletteColors && fill !== 'riso' && fill !== 'images'
+  const paletteUniform = paletteColors ? `uniform vec3 u_palette[${paletteCount}];` : ''
 
   let extraSamplers = ''
   let bodyGLSL: string
@@ -172,20 +241,20 @@ export function buildFragmentShader(options: MosaicShaderOptions): string {
   switch (fill) {
     case 'dither':
       helperGLSL = BAYER_GLSL
-      bodyGLSL = buildDitherGLSL(paletteCount)
+      bodyGLSL = buildDitherGLSL(paletteCount, paletteColors)
       break
     case 'halftone':
-      bodyGLSL = buildHalftoneGLSL()
+      bodyGLSL = buildHalftoneGLSL(paletteCount, paletteColors)
       break
     case 'riso':
       helperGLSL = RISO_HELPER_GLSL
       bodyGLSL = buildRisoGLSL()
       break
     case 'pixelate':
-      bodyGLSL = buildPixelateGLSL()
+      bodyGLSL = buildPixelateGLSL(paletteCount, paletteColors)
       break
     case 'crosshatch':
-      bodyGLSL = buildCrosshatchGLSL()
+      bodyGLSL = buildCrosshatchGLSL(paletteCount, paletteColors)
       break
     case 'images': {
       const count = Math.max(1, sourceCount)
@@ -209,6 +278,7 @@ precision mediump float;
 
 uniform sampler2D u_media;
 ${extraSamplers}
+${paletteUniform}
 uniform vec2 u_resolution;
 uniform float u_cell;
 
@@ -216,6 +286,7 @@ in vec2 v_uv;
 out vec4 outColor;
 
 ${helperGLSL}
+${paletteColors ? PALETTE_GLSL : ''}
 
 void main() {
   vec4 color = texture(u_media, v_uv);
@@ -244,6 +315,8 @@ export type MosaicProgram = {
   uCell: WebGLUniformLocation | null
   uSources: WebGLUniformLocation | null
   sourceCount: number
+  /** Present only when the program was built for an explicit colour list. */
+  uPalette: WebGLUniformLocation | null
 }
 
 const PROGRAM_CACHE = new WeakMap<WebGL2RenderingContext, Map<string, MosaicProgram | null>>()
@@ -262,8 +335,8 @@ const PROGRAM_CACHE = new WeakMap<WebGL2RenderingContext, Map<string, MosaicProg
 const REFCOUNTS = new WeakMap<WebGL2RenderingContext, Map<string, number>>()
 
 function cacheKey(options: MosaicShaderOptions): string {
-  const { fill, cell = 12, paletteCount = 2, sourceCount = 0 } = options
-  return `${fill}:${cell}:${paletteCount}:${sourceCount}`
+  const { fill, cell = 12, paletteCount = 2, sourceCount = 0, paletteColors = false } = options
+  return `${fill}:${cell}:${paletteCount}:${sourceCount}:${paletteColors}`
 }
 
 export function compileMosaicProgram(gl: WebGL2RenderingContext, options: MosaicShaderOptions): MosaicProgram | null {
@@ -343,6 +416,7 @@ export function compileMosaicProgram(gl: WebGL2RenderingContext, options: Mosaic
     uCell: gl.getUniformLocation(program, 'u_cell'),
     uSources: options.fill === 'images' ? gl.getUniformLocation(program, 'u_sources') : null,
     sourceCount: options.fill === 'images' ? Math.max(1, options.sourceCount ?? 0) : 0,
+    uPalette: options.paletteColors && options.fill !== 'riso' && options.fill !== 'images' ? gl.getUniformLocation(program, 'u_palette') : null,
   }
   byConfig.set(key, result)
   refcounts.set(key, 1) // this compile call is itself the first live reference
@@ -384,6 +458,8 @@ export type MosaicDrawState = {
   resolutionWidth: number
   resolutionHeight: number
   cell: number
+  /** Brand colours as flat sRGB triples, darkest first. */
+  palette?: Float32Array
 }
 
 /**
@@ -428,6 +504,9 @@ export function drawMosaic(context: GLContext, mosaicProgram: MosaicProgram, med
   gl.uniform1f(mosaicProgram.uCell, Math.max(1, state.cell))
   if (mosaicProgram.uSources && sourceUnits.length > 0) {
     gl.uniform1iv(mosaicProgram.uSources, sourceUnits)
+  }
+  if (mosaicProgram.uPalette && state.palette) {
+    gl.uniform3fv(mosaicProgram.uPalette, state.palette)
   }
 
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)

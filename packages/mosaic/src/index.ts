@@ -28,6 +28,7 @@
 import type { ComiceInstance, ComicePlugin } from 'comice'
 import { createGLContext, createPlane, getResidencyPool, mountCanvas, type CanvasMount, type GLContext, type Plane } from 'comice/gl'
 import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
+import { buildPalette } from './palette.js'
 import { compileMosaicProgram, destroyMosaicProgram, drawMosaic, type MosaicFill, type MosaicProgram } from './shader.js'
 
 export type MosaicOptions = {
@@ -35,12 +36,14 @@ export type MosaicOptions = {
   fill: MosaicFill
   /** Cell size, px. Default 12. */
   cell?: number
-  /** Brand colours, or a count. Matches spec's own `string[] | number`
-   *  exactly — an explicit palette array is accepted for API fidelity
-   *  and future color-remap work, but this pass's shader only consumes
-   *  the COUNT (see shader.ts's own header) for `dither`'s quantization
-   *  levels and `images`'s bucket count; a caller-supplied color list
-   *  does not yet drive per-bucket recoloring. Default 2. */
+  /** Brand colours, or a count. Default 2. A colour LIST (any CSS colours,
+   *  at least two) recolours the fills in those colours: `dither` levels
+   *  become them darkest to lightest, `halftone`/`crosshatch` print the
+   *  darkest as ink on the lightest as paper, `pixelate` snaps each cell to
+   *  the nearest one (perceptually, in OKLab). `riso` (its look is its RGB
+   *  ink drums) and `images` (tiles) don't use colours. A COUNT sets
+   *  `dither`'s grey levels and `images`'s buckets. The list used to be
+   *  accepted and silently ignored — only its length reached the shader. */
   palette?: readonly string[] | number
   /** Tile pool for `fill: 'images'`. Ignored for every other fill.
    *  Required (throws at construction) when `fill: 'images'`. */
@@ -65,6 +68,9 @@ export function mosaic(options: MosaicOptions): ComicePlugin {
   if (fill === 'images' && sources.length === 0) {
     throw new Error("[comice] mosaic(): fill 'images' requires a non-empty `sources` array.")
   }
+  // Parsed once, at construction: a bad colour is a programmer error and
+  // fails here, loudly, rather than drawing something unexpected.
+  const paletteColors = Array.isArray(palette) ? buildPalette(palette) : null
 
   let target: Uploadable | null = null
   let glContext: GLContext | null = null
@@ -90,6 +96,7 @@ export function mosaic(options: MosaicOptions): ComicePlugin {
       resolutionWidth: cssWidth,
       resolutionHeight: cssHeight,
       cell: cellSize,
+      palette: paletteColors ?? undefined,
     })
   }
 
@@ -118,6 +125,7 @@ export function mosaic(options: MosaicOptions): ComicePlugin {
           fill,
           cell: cellSize,
           paletteCount: paletteCount(palette),
+          paletteColors: paletteColors !== null,
           sourceCount: sources.length,
         })
         // A failed compile would otherwise leave the media hidden behind an

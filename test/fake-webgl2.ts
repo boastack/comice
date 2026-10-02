@@ -241,6 +241,7 @@ export function createFakeGL2(
     ) {},
 
     uniform1f(_loc: WebGLUniformLocation | null, _v: number) {},
+    uniform3fv(_loc: WebGLUniformLocation | null, _v: Float32Array | number[]) {},
     uniformMatrix3fv(_loc: WebGLUniformLocation | null, _transpose: boolean, _value: Float32Array | number[]) {},
 
     activeTexture(_unit: number) {},

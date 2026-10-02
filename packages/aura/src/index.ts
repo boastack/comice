@@ -125,7 +125,18 @@ export function aura(options: AuraOptions = {}): ComicePlugin {
     }
 
     if (glow && glowEl) {
-      glowEl.style.background = `radial-gradient(circle, ${rgbToCss(clamped[0]!)}66 0%, transparent 70%)`
+      const [r, g, b] = clamped[0]!
+      // The colour at 40% alpha, written properly. This used to append a
+      // hex alpha to rgb() -- `rgb(143, 116, 178)66` -- which is invalid
+      // CSS, so the browser dropped the whole background: the glow, one of
+      // aura's three outputs, never rendered (happy-dom accepts any string,
+      // so no test saw it).
+      const stop = `rgb(${r} ${g} ${b} / 0.4) 0%, transparent 70%`
+      // Spec §10: blend in OKLCH by default. Set the plain gradient first:
+      // a browser without `in oklch` ignores the second assignment and
+      // keeps the first, rather than losing the glow altogether.
+      glowEl.style.background = `radial-gradient(circle, ${stop})`
+      glowEl.style.background = `radial-gradient(in oklch circle, ${stop})`
     }
 
     onSample?.(clamped)

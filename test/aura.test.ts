@@ -181,6 +181,41 @@ describe('aura — with a real WebGL2 context (faked)', () => {
     expect(img.previousElementSibling).not.toBeNull()
   })
 
+  it('glow paints valid CSS: an sRGB fallback first, then the OKLCH blend — real bug: the glow never rendered', () => {
+    // It appended a hex alpha to rgb() — `rgb(143, 116, 178)66` — invalid
+    // CSS that a real browser drops entirely (happy-dom accepts anything,
+    // so this records what is assigned rather than reading it back).
+    getSharedScheduler().stop()
+    const original = globalThis.requestAnimationFrame
+    let pending: FrameRequestCallback | null = null
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      pending = cb
+      return 1
+    }) as typeof requestAnimationFrame
+    try {
+      handle = comice(img) as ComiceHandle
+      handle.use(aura({ glow: true, sample: 'edges' }))
+      const glowEl = img.previousElementSibling as HTMLElement
+      const assigned: string[] = []
+      // happy-dom's style is a Proxy that refuses property redefinition, so
+      // the element gets a recording stand-in (a sample only writes background).
+      const recorder = {
+        set background(v: string) {
+          assigned.push(v)
+        },
+      }
+      Object.defineProperty(glowEl, 'style', { configurable: true, value: recorder })
+      pending!(16)
+
+      expect(assigned).toHaveLength(2)
+      expect(assigned[0]).toMatch(/^radial-gradient\(circle, rgb\(\d+ \d+ \d+ \/ 0\.4\) 0%, transparent 70%\)$/)
+      expect(assigned[1]).toMatch(/^radial-gradient\(in oklch circle, rgb\(\d+ \d+ \d+ \/ 0\.4\) 0%, transparent 70%\)$/)
+      expect(assigned.join()).not.toMatch(/\)\d/) // no `rgb(...)66`
+    } finally {
+      globalThis.requestAnimationFrame = original
+    }
+  })
+
   it('glow: true sets the parent to position: relative if it was static', () => {
     const parent = img.parentElement!
     parent.style.position = 'static'
