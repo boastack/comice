@@ -25,7 +25,8 @@
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
-import { snapForReducedMotion } from 'comice'
+import { prefersReducedMotion, snapForReducedMotion } from 'comice'
+import { getSharedScheduler } from 'comice/scheduler'
 import { computeEffectStyle, type RevealEffect } from './effects.js'
 import { computeStaggerDelay, type StaggerOptions } from './stagger.js'
 import { waitForMediaReady } from './decode.js'
@@ -46,7 +47,13 @@ export type RevealOptions = {
    *  reveal at its 'idle' appearance until the real decode/loadeddata
    *  event fires, rather than a guessed delay. Default true. */
   waitForDecode?: boolean
+  /** With no driver, how long reveal takes to play itself when the element
+   *  comes into view, ms. Default 800. */
+  duration?: number
 }
+
+/** With no driver, reveal plays once the element is this far into view. */
+const PLAY_THRESHOLD = 0.15
 
 const DEFAULT_CSS_EFFECT: RevealEffect = 'scale'
 
@@ -80,7 +87,7 @@ function idleStyle(effect: RevealEffect): ReturnType<typeof computeEffectStyle> 
 }
 
 export function reveal(options: RevealOptions = {}): ComicePlugin {
-  const { stagger, waitForDecode = true, mask } = options
+  const { stagger, waitForDecode = true, mask, duration = 800 } = options
   const effect = options.effect ?? (mask !== undefined ? 'mask' : DEFAULT_CSS_EFFECT)
   if (effect === 'mask') validateMaskSource(mask)
 
@@ -93,6 +100,52 @@ export function reveal(options: RevealOptions = {}): ComicePlugin {
   let staggerTimer: ReturnType<typeof setTimeout> | null = null
   let destroyed = false
   let maskReveal: MaskReveal | null = null
+  let viewObserver: IntersectionObserver | null = null
+  let stopPlaying: (() => void) | null = null
+
+  /** No driver: entering -> active over `duration`, eased out. */
+  function play(instance: ComiceInstance): void {
+    if (destroyed || instance.driven || instance.state !== 'idle') return
+    instance.transition('entering')
+    if (prefersReducedMotion()) {
+      instance.transition('active')
+      return
+    }
+    let start: number | null = null
+    stopPlaying = getSharedScheduler().add(
+      (deltaMs, timestamp) => {
+        start ??= timestamp - Math.min(deltaMs, 16.67)
+        const t = Math.min(1, (timestamp - start) / duration)
+        instance.setProgress(1 - (1 - t) ** 3)
+        if (t >= 1) {
+          stopPlaying?.()
+          stopPlaying = null
+          instance.transition('active')
+        }
+      },
+      () => !destroyed,
+    )
+  }
+
+  /** No driver: wait for the element to come into view, then its stagger
+   *  delay, then play — so a grid's stagger runs as the grid scrolls in. */
+  function playOnView(target: Element, instance: ComiceInstance, delay: number): void {
+    const go = () => {
+      if (delay > 0) staggerTimer = setTimeout(() => play(instance), delay)
+      else play(instance)
+    }
+    if (typeof IntersectionObserver === 'undefined') return go()
+    viewObserver = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        viewObserver?.disconnect()
+        viewObserver = null
+        go()
+      },
+      { threshold: PLAY_THRESHOLD },
+    )
+    viewObserver.observe(target)
+  }
 
   function render(progress: number): void {
     // Reduced motion: jump to whichever end state is closer, never animate between.
@@ -154,11 +207,22 @@ export function reveal(options: RevealOptions = {}): ComicePlugin {
         // reveal is armed to play, never on a blank frame. The mask path
         // reports its own ready/error from the GPU (mask.ts).
         if (!maskReveal) instance.ready('reveal')
-        if (delay > 0) {
-          staggerTimer = setTimeout(start, delay)
-        } else {
-          start()
-        }
+        // .driver() is chained after .use(): by the next microtask it has
+        // run. With a driver, it sets the timing, as it always did. With
+        // none, reveal plays itself on entering view — "media entering" is
+        // what it owns. It used to stay hidden forever: the spec's own
+        // `comice('.grid figure').use(reveal({ effect: 'blinds', ... }))`
+        // was a blank grid.
+        if (delay === 0) start() // armed at once; only the play decision waits
+        queueMicrotask(() => {
+          if (destroyed) return
+          if (!instance.driven) {
+            if (delay > 0) start()
+            playOnView(target, instance, delay)
+          } else if (delay > 0) {
+            staggerTimer = setTimeout(start, delay)
+          }
+        })
       }
 
       if (waitForDecode) {
@@ -184,6 +248,8 @@ export function reveal(options: RevealOptions = {}): ComicePlugin {
     teardown() {
       destroyed = true
       if (staggerTimer !== null) clearTimeout(staggerTimer)
+      viewObserver?.disconnect()
+      stopPlaying?.()
       unsubscribe?.()
       maskReveal?.destroy()
       maskReveal = null

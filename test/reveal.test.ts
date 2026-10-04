@@ -279,7 +279,7 @@ describe('reveal — stagger, exercised against real sibling elements', () => {
   it('later siblings start rendering after an earlier one, per the stagger delay', async () => {
     const handles = items.map((item) => comice(item) as ComiceHandle)
     handles.forEach((handle) =>
-      handle.use(reveal({ effect: 'scale', waitForDecode: false, stagger: { each: 10 } })),
+      handle.use(reveal({ effect: 'scale', waitForDecode: false, stagger: { each: 0.01 } })),
     )
     handles.forEach((handle) => {
       handle.transition('entering')

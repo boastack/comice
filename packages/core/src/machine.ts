@@ -306,6 +306,8 @@ export function createInstance(options: ComiceOptions = {}): ComiceInstance {
   // ─────────────────────────────────────────────────────────────────────────
 
   return {
+    // Set by the handle's .driver() (index.ts); plain data, no event.
+    driven: false,
     get state(): ComiceState {
       return state.state
     },

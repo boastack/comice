@@ -361,6 +361,14 @@ describe('comice() — many elements, one chainable handle (spec §04)', () => {
     expect(heard).toBe(3)
   })
 
+  it('driven: false until .driver(); true for every element after', () => {
+    const handle = comice('.card')
+    expect(handle.driven).toBe(false)
+    handle.driver(fakeDriver())
+    expect([handle.driven, ...handle.handles.map((h) => h.driven)]).toEqual([true, true, true, true])
+    expect(comice('.none-at-all-here').driven).toBe(false)
+  })
+
   it('state, progress and transforms read from the first element; setters reach all', () => {
     const handle = comice('.card')
     expect(handle.transition('entering')).toBe('entering')

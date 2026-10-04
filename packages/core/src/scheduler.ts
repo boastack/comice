@@ -126,16 +126,22 @@ export function createVisibilityGate(target: Element): {
   shouldDraw(): boolean
   destroy(): void
 } {
-  let onScreen = false
   let tabVisible = !document.hidden
+  // No IntersectionObserver (some embedded webviews, test DOMs): treat the
+  // element as on screen and keep drawing, rather than throwing — it used
+  // to, from inside comice(el) itself.
+  const canObserve = typeof IntersectionObserver !== 'undefined'
+  let onScreen = !canObserve
 
-  const observer = new IntersectionObserver(
-    ([entry]) => {
-      onScreen = entry.isIntersecting
-    },
-    { threshold: 0 },
-  )
-  observer.observe(target)
+  const observer = canObserve
+    ? new IntersectionObserver(
+        ([entry]) => {
+          onScreen = entry.isIntersecting
+        },
+        { threshold: 0 },
+      )
+    : null
+  observer?.observe(target)
 
   function onVisibilityChange(): void {
     tabVisible = !document.hidden
@@ -146,7 +152,7 @@ export function createVisibilityGate(target: Element): {
     isVisible: () => onScreen && tabVisible,
     shouldDraw: () => onScreen && tabVisible && !isPoster(),
     destroy(): void {
-      observer.disconnect()
+      observer?.disconnect()
       document.removeEventListener('visibilitychange', onVisibilityChange)
     },
   }

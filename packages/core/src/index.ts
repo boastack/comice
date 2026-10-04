@@ -133,6 +133,7 @@ function wrap(target: Element): ComiceHandle {
   }
 
   handle.driver = (driver: Driver | NamedSignalDriver): ComiceHandle => {
+    ;(instance as { driven: boolean }).driven = true
     if (typeof driver.attach === 'function') {
       const teardown = driver.attach(target, (signal: DriverSignal) => {
         instance.setProgress(signal.progress)
@@ -308,6 +309,9 @@ function group(handles: ComiceHandle[]): ComiceHandle {
     },
     get progress() {
       return first?.progress ?? 0
+    },
+    get driven() {
+      return first?.driven ?? false
     },
     get rest() {
       return first?.rest ?? { ...identity }

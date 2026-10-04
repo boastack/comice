@@ -65,6 +65,10 @@ export type ComiceInstance = {
   readonly progress: number
   readonly rest: Transform
   readonly display: Transform
+  /** True once a driver is attached (`.driver()`). A plugin that would
+   *  otherwise play itself — reveal, entering when it comes into view —
+   *  leaves the timing to the driver. */
+  readonly driven: boolean
 
   transition(next: ComiceState): ComiceState
   setProgress(value: number): void
