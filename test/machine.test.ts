@@ -69,12 +69,21 @@ describe('createInstance — legal transitions', () => {
     expect(listener).not.toHaveBeenCalled()
   })
 
-  it('resets progress to 0 on every state transition', () => {
+  it('lands progress where the state means it: active 1, idle 0, entering/leaving carry it over', () => {
+    // It used to reset to 0 on every transition, so a forced
+    // transition('active') rendered every effect at rest.
     const instance = createInstance()
     instance.transition('entering')
     instance.setProgress(0.75)
-    expect(instance.progress).toBe(0.75)
     instance.transition('active')
+    expect(instance.progress).toBe(1)
+    instance.transition('leaving')
+    expect(instance.progress).toBe(1) // leaving starts from fully in
+    instance.setProgress(0.4)
+    instance.transition('entering') // interrupted leave re-enters from where it was
+    expect(instance.progress).toBe(0.4)
+    instance.transition('leaving')
+    instance.transition('idle')
     expect(instance.progress).toBe(0)
   })
 })

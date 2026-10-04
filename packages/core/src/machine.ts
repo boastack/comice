@@ -189,8 +189,15 @@ export function createInstance(options: ComiceOptions = {}): ComiceInstance {
       return from
     }
 
+    // Progress lands where the state means it to be: active is fully in (1),
+    // idle fully out (0). It used to reset to 0 on every transition, so a
+    // forced transition('active') showed the effect at rest. entering and
+    // leaving keep the current progress, so an interrupted leave re-enters
+    // from where it was. Drivers re-apply their own progress straight after
+    // (index.ts), so driven instances are unaffected.
+    const progress = next === 'active' ? 1 : next === 'idle' ? 0 : state.progress
     return applyState(
-      { state: next, progress: 0 },
+      { state: next, progress },
       { type: next, from, to: next },
     )
   }

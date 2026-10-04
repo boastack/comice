@@ -26,6 +26,16 @@
  * revealed must be reachable by keyboard and touch, which is why reveal
  * targets real DOM."
  *
+ * PEERS ARE SHARED: with `.project` spotlighting `.project` peers, every
+ * card is every other card's peer, so peer styling goes through peers.ts
+ * (each peer recedes by the strongest spotlight on it), never written
+ * directly by one instance.
+ *
+ * EXPAND: the active item takes more of its row — the expanding-gallery
+ * pattern. Unlike `lift` (a transform, nothing else moves), this is a
+ * layout change: in a flex row, the target's flex-grow rises and its peers
+ * give up the space.
+ *
  * `wake`/`lift` (the two named effects on the target itself, per the
  * card's own Effects chip row alongside "peers dim/blur" and "reveal
  * caption") are implemented as the target's own progress-driven transform:
@@ -35,6 +45,7 @@
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
 import { snapForReducedMotion } from 'comice'
+import { contribute, setEmphasis, withdraw } from './peers.js'
 
 export type SpotlightPeersOptions = {
   /** Selector matching sibling elements to dim/blur while this instance is
@@ -51,14 +62,20 @@ export type SpotlightOptions = {
   /** Siblings to dim/blur while this instance is emphasised. `false`
    *  disables peer response entirely — spotlight then only affects the
    *  target itself. Default false (spec's own type is `object | false`,
-   *  no default peers config makes sense without a selector). */
-  peers?: SpotlightPeersOptions | false
+   *  no default peers config makes sense without a selector). A string is
+   *  shorthand for `{ selector }`. */
+  peers?: SpotlightPeersOptions | string | false
   /** Selector for caption children (relative to the target) to reveal.
    *  Stays real DOM — see the file header. Undefined reveals nothing. */
   reveal?: string
   /** How far the target lifts (scale + translateY) at full active
    *  progress. 0 disables the lift entirely. Default 0.04 (a 4% scale). */
   lift?: number
+  /** The flex-grow the target reaches at full progress, for an item in a
+   *  flex row: the active one widens and its neighbours give up the space.
+   *  E.g. `expand: 3` on items with `flex: 1` grows the active one to three
+   *  shares. Needs a flex container; off by default. */
+  expand?: number
 }
 
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value))
@@ -66,28 +83,29 @@ const clamp01 = (value: number): number => Math.max(0, Math.min(1, value))
 /** Reads the inline style properties this plugin owns on one element, so
  *  teardown() can restore them cleanly — same pattern reveal's own
  *  snapshotOwnedStyle() uses. */
-function snapshotOwnedStyle(el: HTMLElement): { transform: string; filter: string; opacity: string } {
+function snapshotOwnedStyle(el: HTMLElement): { transform: string; flexGrow: string } {
   return {
     transform: el.style.transform,
-    filter: el.style.filter,
-    opacity: el.style.opacity,
+    flexGrow: el.style.flexGrow,
   }
 }
 
-function restoreStyle(el: HTMLElement, snapshot: { transform: string; filter: string; opacity: string }): void {
+function restoreStyle(el: HTMLElement, snapshot: { transform: string; flexGrow: string }): void {
   el.style.transform = snapshot.transform
-  el.style.filter = snapshot.filter
-  el.style.opacity = snapshot.opacity
+  el.style.flexGrow = snapshot.flexGrow
 }
 
 export function spotlight(options: SpotlightOptions = {}): ComicePlugin {
-  const { peers = false, reveal, lift = 0.04 } = options
+  const { reveal, lift = 0.04, expand } = options
+  const peers: SpotlightPeersOptions | false = typeof options.peers === 'string' ? { selector: options.peers } : (options.peers ?? false)
+  // This instance's identity in the shared peer registry.
+  const owner = {}
 
   let target: HTMLElement | null = null
   let unsubscribe: (() => void) | null = null
-  let originalTargetStyle: { transform: string; filter: string; opacity: string } | null = null
+  let originalTargetStyle: { transform: string; flexGrow: string } | null = null
+  let restingGrow = 0
   let peerElements: HTMLElement[] = []
-  let peerOriginalStyle: WeakMap<HTMLElement, { filter: string; opacity: string }> = new WeakMap()
   let revealElements: HTMLElement[] = []
   let revealOriginalStyle: WeakMap<HTMLElement, { visibility: string; opacity: string }> = new WeakMap()
   let currentProgress = 0
@@ -108,18 +126,14 @@ export function spotlight(options: SpotlightOptions = {}): ComicePlugin {
     const scale = 1 + lift * p
     const liftPx = -lift * 20 * p // a small upward drift alongside the scale, same direction reveal's own expand() lifts toward
     target.style.transform = lift !== 0 ? `translateY(${liftPx}px) scale(${scale})` : ''
+    if (expand !== undefined) target.style.flexGrow = `${restingGrow + (expand - restingGrow) * p}`
+    setEmphasis(target, p)
   }
 
   function renderPeers(progress: number): void {
     if (!peers) return
-    const p = clamp01(progress)
-    const blurPx = (peers.blur ?? 4) * p
-    const dimTo = peers.dim ?? 0.4
-    const opacity = 1 - (1 - dimTo) * p
-    peerElements.forEach((el) => {
-      el.style.filter = blurPx > 0 ? `blur(${blurPx}px)` : ''
-      el.style.opacity = `${opacity}`
-    })
+    const contribution = { progress: clamp01(progress), blur: peers.blur ?? 4, dim: peers.dim ?? 0.4 }
+    peerElements.forEach((el) => contribute(owner, el, contribution))
   }
 
   function renderReveal(progress: number): void {
@@ -157,9 +171,7 @@ export function spotlight(options: SpotlightOptions = {}): ComicePlugin {
       originalTargetStyle = snapshotOwnedStyle(target)
 
       peerElements = resolvePeers()
-      peerElements.forEach((el) => {
-        peerOriginalStyle.set(el, { filter: el.style.filter, opacity: el.style.opacity })
-      })
+      if (expand !== undefined) restingGrow = Number.parseFloat(getComputedStyle(target).flexGrow) || 0
 
       if (reveal) {
         revealElements = Array.from(target.querySelectorAll<HTMLElement>(reveal))
@@ -186,13 +198,8 @@ export function spotlight(options: SpotlightOptions = {}): ComicePlugin {
     teardown() {
       unsubscribe?.()
       if (target && originalTargetStyle) restoreStyle(target, originalTargetStyle)
-      peerElements.forEach((el) => {
-        const original = peerOriginalStyle.get(el)
-        if (original) {
-          el.style.filter = original.filter
-          el.style.opacity = original.opacity
-        }
-      })
+      if (target) setEmphasis(target, 0)
+      peerElements.forEach((el) => withdraw(owner, el))
       revealElements.forEach((el) => {
         const original = revealOriginalStyle.get(el)
         if (original) {
@@ -204,7 +211,6 @@ export function spotlight(options: SpotlightOptions = {}): ComicePlugin {
       originalTargetStyle = null
       peerElements = []
       revealElements = []
-      peerOriginalStyle = new WeakMap()
       revealOriginalStyle = new WeakMap()
     },
 

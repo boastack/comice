@@ -229,3 +229,84 @@ describe('spotlight — driven by hover()', () => {
     container.remove()
   })
 })
+
+describe('spotlight — the spec example: every .project spotlights .project peers', () => {
+  it("peers: '.project' is shorthand for { selector: '.project' }", () => {
+    const { container, cards } = makeGrid()
+    const handle = comice(cards[0]!).use(spotlight({ peers: '.project' }))
+    handle.setProgress(1)
+    expect(cards[1]!.style.filter).toBe('blur(4px)')
+    expect(Number.parseFloat(cards[1]!.style.opacity)).toBeCloseTo(0.4)
+    handle.destroy()
+    container.remove()
+  })
+
+  it('moving from A to B: C stays receded whichever tween writes last; B is never dimmed by A', () => {
+    const { container, cards } = makeGrid()
+    const [a, b, c] = comice('.project').use(spotlight({ peers: '.project' })).handles
+    a!.setProgress(1)
+    // A leaves while B enters; B finishes first, then A's last frame lands.
+    a!.setProgress(0.5)
+    b!.setProgress(1)
+    expect(cards[1]!.style.opacity).toBe('') // B: spotlighted, A's 0.5 cancelled by B's own 1
+    a!.setProgress(0) // used to write C back to opacity 1 here
+    expect(Number.parseFloat(cards[2]!.style.opacity)).toBeCloseTo(0.4)
+    expect(Number.parseFloat(cards[0]!.style.opacity)).toBeCloseTo(0.4) // A is now B's peer
+    expect(c!.progress).toBe(0)
+    container.remove()
+  })
+
+  it('a peer recedes by the strongest spotlight on it, and is restored once the last one is gone', () => {
+    const { container, cards } = makeGrid()
+    cards[2]!.style.opacity = '0.9'
+    const group = comice([cards[0]!, cards[1]!] as unknown as NodeListOf<Element>)
+    group.use(spotlight({ peers: { selector: '.project', dim: 0 } }))
+    const [a, b] = group.handles
+    a!.setProgress(0.3)
+    b!.setProgress(0.6)
+    expect(Number.parseFloat(cards[2]!.style.opacity)).toBeCloseTo(0.4)
+    a!.destroy()
+    expect(Number.parseFloat(cards[2]!.style.opacity)).toBeCloseTo(0.4) // B still holds it
+    b!.destroy()
+    expect(cards[2]!.style.opacity).toBe('0.9')
+    container.remove()
+  })
+
+  it('forced transition("active") shows the effect fully (it used to render at rest)', () => {
+    const { container, cards } = makeGrid()
+    const card = comice(cards[0]!).use(spotlight({ peers: '.project' }))
+    card.transition('entering')
+    card.transition('active')
+    expect(Number.parseFloat(cards[1]!.style.opacity)).toBeCloseTo(0.4)
+    card.destroy()
+    container.remove()
+  })
+})
+
+describe('spotlight — expand', () => {
+  it('grows the target\'s flex-grow from its resting value to `expand`, and restores it', () => {
+    const { container, cards } = makeGrid()
+    container.style.display = 'flex'
+    cards.forEach((card) => (card.style.flexGrow = '1'))
+    const handle = comice(cards[0]!).use(spotlight({ expand: 3 }))
+    expect(cards[0]!.style.flexGrow).toBe('1')
+    handle.setProgress(0.5)
+    expect(cards[0]!.style.flexGrow).toBe('2')
+    handle.setProgress(1)
+    expect(cards[0]!.style.flexGrow).toBe('3')
+    handle.destroy()
+    expect(cards[0]!.style.flexGrow).toBe('1')
+    container.remove()
+  })
+
+  it('an item with no flex-grow expands from 0; without expand, flex-grow is never touched', () => {
+    const { container, cards } = makeGrid()
+    const handle = comice(cards[0]!).use(spotlight({ expand: 2 }))
+    handle.setProgress(0.5)
+    expect(cards[0]!.style.flexGrow).toBe('1')
+    const other = comice(cards[1]!).use(spotlight())
+    other.setProgress(1)
+    expect(cards[1]!.style.flexGrow).toBe('')
+    container.remove()
+  })
+})
