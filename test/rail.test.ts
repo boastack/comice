@@ -486,3 +486,45 @@ describe('rail — teardown', () => {
     expect(() => container.dispatchEvent(makePointerEvent('pointerup', -50, 1, 32))).not.toThrow()
   })
 })
+
+describe('rail — phones and images (found running the spec example on emulated phones)', () => {
+  afterEach(() => getSharedScheduler().stop())
+
+  it("claims horizontal swipes with touch-action: pan-y, restoring the page's own on teardown", () => {
+    const { container } = makeCollection()
+    container.style.touchAction = 'manipulation'
+    const handle = comice(container).use(rail({ mode: 'coverflow' }))
+    expect(container.style.touchAction).toBe('pan-y')
+    handle.destroy()
+    expect(container.style.touchAction).toBe('manipulation')
+    container.remove()
+  })
+
+  it("cancels the browser's own image drag, which swallowed the pointer stream (Safari)", () => {
+    const { container } = makeCollection()
+    const handle = comice(container).use(rail({ mode: 'coverflow' }))
+    const drag = new Event('dragstart', { bubbles: true, cancelable: true })
+    container.firstElementChild!.dispatchEvent(drag)
+    expect(drag.defaultPrevented).toBe(true)
+    handle.destroy()
+    const after = new Event('dragstart', { bubbles: true, cancelable: true })
+    container.firstElementChild!.dispatchEvent(after)
+    expect(after.defaultPrevented).toBe(false)
+    container.remove()
+  })
+
+  it('a pointer capture the browser refuses does not break the drag', () => {
+    const { container, items } = makeCollection()
+    Object.defineProperty(container, 'setPointerCapture', { value: () => { throw new DOMException('No active pointer', 'NotFoundError') } })
+    Object.defineProperty(container, 'releasePointerCapture', { value: () => { throw new DOMException('No active pointer', 'NotFoundError') } })
+    comice(container).use(rail({ mode: 'strip', snap: false }))
+    const before = items[0]!.style.transform
+    expect(() => {
+      container.dispatchEvent(makePointerEvent('pointerdown', 0, 1, 0))
+      container.dispatchEvent(makePointerEvent('pointermove', -320, 1, 16))
+      container.dispatchEvent(makePointerEvent('pointerup', -320, 1, 32))
+    }).not.toThrow()
+    expect(items[0]!.style.transform).not.toBe(before)
+    container.remove()
+  })
+})

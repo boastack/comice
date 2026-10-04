@@ -107,6 +107,7 @@ export function rail(options: RailOptions): ComicePlugin {
   let dragStartClientX = 0
   let dragStartPosition = 0
   let lastMoveTimestamp = 0
+  let originalTouchAction = ''
   let hasCaptured = false // true once movement has passed CAPTURE_THRESHOLD_PX and setPointerCapture was actually called
 
   function itemCount(): number {
@@ -242,7 +243,11 @@ export function rail(options: RailOptions): ComicePlugin {
       if (Math.abs(x - dragStartClientX) < CAPTURE_THRESHOLD_PX) return
       hasCaptured = true
       setState('dragging')
-      target?.setPointerCapture?.(event.pointerId)
+      // Capture can fail (the pointer already gone, a synthetic event);
+      // the drag works without it, it just stops tracking outside the rail.
+      try {
+        target?.setPointerCapture?.(event.pointerId)
+      } catch {}
     }
     const deltaItems = -(x - dragStartClientX) / AXIS_PX_PER_ITEM
     const now = event.timeStamp
@@ -255,13 +260,19 @@ export function rail(options: RailOptions): ComicePlugin {
     render()
   }
 
+  function preventNativeDrag(event: Event): void {
+    event.preventDefault()
+  }
+
   function endDrag(event: PointerEvent): void {
     if (!dragging || event.pointerId !== pointerId) return
     dragging = false
     pointerId = null
     if (!hasCaptured) return // never moved past the deadzone — this was a click, not a drag; nothing to settle/decay
     hasCaptured = false
-    target?.releasePointerCapture?.(event.pointerId)
+    try {
+      target?.releasePointerCapture?.(event.pointerId)
+    } catch {}
     // Same threshold physics.ts's own decayVelocity() snaps to — a
     // released velocity below this would settle on the very first
     // inertia frame anyway, so starting the decay loop for it at all is
@@ -349,6 +360,17 @@ export function rail(options: RailOptions): ComicePlugin {
         target.appendChild(liveRegion)
       }
 
+      // Horizontal swipes are the rail's; vertical ones still scroll the
+      // page. Without it a phone treats a sideways swipe as its own pan and
+      // cancels the pointer a few pixels in — the rail barely moved.
+      originalTouchAction = target.style.touchAction
+      target.style.touchAction = 'pan-y'
+
+      // Pressing on an <img> and moving starts the browser's own image drag
+      // (the ghost image), which swallows the pointer stream: in Safari a
+      // rail of images couldn't be dragged with a mouse at all.
+      target.addEventListener('dragstart', preventNativeDrag)
+
       target.addEventListener('pointerdown', onPointerDown as EventListener)
       target.addEventListener('pointermove', onPointerMove as EventListener)
       target.addEventListener('pointerup', endDrag as EventListener)
@@ -370,6 +392,8 @@ export function rail(options: RailOptions): ComicePlugin {
         target.removeEventListener('pointermove', onPointerMove as EventListener)
         target.removeEventListener('pointerup', endDrag as EventListener)
         target.removeEventListener('pointercancel', endDrag as EventListener)
+        target.removeEventListener('dragstart', preventNativeDrag)
+        target.style.touchAction = originalTouchAction
       }
       itemEls.forEach((el) => {
         el.style.position = ''

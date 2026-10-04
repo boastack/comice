@@ -16,7 +16,9 @@
     "test:coverage": "bun test --coverage",
     "dev": "turbo run build --watch",
     "size": "size-limit",
-    "harness": "pnpm build && python3 -m http.server 8743 --directory ."
+    "harness": "pnpm build && python3 -m http.server 8743 --directory .",
+    "acceptance:serve": "bun harness/acceptance/serve.ts",
+    "acceptance": "node harness/acceptance/run.mjs"
   },
   "size-limit": [
     {
@@ -30,6 +32,7 @@
     "@size-limit/preset-small-lib": "^11.0.0",
     "@types/bun": "^1.4.2",
     "comice": "workspace:*",
+    "playwright": "1.63.0",
     "size-limit": "^11.0.0",
     "tsup": "^8.0.0",
     "turbo": "^2.0.0",

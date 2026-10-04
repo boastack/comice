@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Comice acceptance example</title>
+<style>
+  :root { color-scheme: dark; --bg: #111114; --fg: #ece9e2; --muted: #8b8a86; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+  h1.title { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+  pre { background: #1b1b20; color: #cfcac0; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 12px; margin: 0 0 16px; }
+  #status { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  .row { display: flex; gap: 12px; }
+  .tile { flex: 1; height: 180px; border-radius: 10px; overflow: hidden; background: #2a2a31; display: grid; place-items: center; position: relative; }
+  .tile .meta { position: absolute; bottom: 8px; left: 10px; font-weight: 600; }
+  .box { width: 100%; max-width: 640px; aspect-ratio: 16 / 10; position: relative; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; max-width: 640px; }
+  .grid figure { margin: 0; aspect-ratio: 16 / 10; }
+  .rail { display: flex; gap: 16px; height: 220px; align-items: center; }
+  .slide { flex: 0 0 220px; height: 160px; border-radius: 10px; overflow: hidden; }
+  .project-name { font: 800 64px/1.1 Georgia, serif; margin: 24px 0; }
+  .pill { margin-top: 12px; border: 0; border-radius: 999px; padding: 10px 18px; color: #fff; font: inherit; }
+  #stage, #hero { max-width: 640px; color: #f2efe8; font-weight: 800; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "comice": "./comice-tap.js",
+    "comice/gl": "../../packages/core/dist/gl/index.js",
+    "comice/scheduler": "../../packages/core/dist/scheduler.js",
+    "comice/drivers": "../../packages/core/dist/drivers/index.js",
+    "comice/drivers/audio": "../../packages/core/dist/drivers/audio.js",
+    "@comice/spotlight": "../../packages/spotlight/dist/index.js",
+    "@comice/morph": "../../packages/morph/dist/index.js",
+    "@comice/reveal": "../../packages/reveal/dist/index.js",
+    "@comice/dissolve": "../../packages/dissolve/dist/index.js",
+    "@comice/rail": "../../packages/rail/dist/index.js",
+    "@comice/distort": "../../packages/distort/dist/index.js",
+    "@comice/aura": "../../packages/aura/dist/index.js",
+    "@comice/type": "../../packages/type/dist/index.js",
+    "@comice/particles": "../../packages/particles/dist/index.js",
+    "@comice/color": "../../packages/color/dist/index.js"
+  }
+}
+</script>
+</head>
+<body>
+<h1 class="title" id="title"></h1>
+<pre id="code"></pre>
+<div id="status">running…</div>
+<main id="stage-root"></main>
+<script type="module">
+  // Collected for the runner (run.mjs): errors, and every lifecycle event.
+  const result = (window.acceptance = { done: false, errors: [], events: [] })
+  addEventListener('error', (e) => result.errors.push(String(e.message)))
+  addEventListener('unhandledrejection', (e) => result.errors.push(String(e.reason?.message ?? e.reason)))
+
+  const id = new URLSearchParams(location.search).get('id')
+  const { examples } = await import('./examples.js')
+  const example = examples[id]
+  document.getElementById('title').textContent = `${id} · ${example.title}`
+  document.getElementById('code').textContent = example.run.toString().replace(/^(async )?run\(\) \{\n?|\}$/g, '').replace(/^ {6}/gm, '')
+  document.getElementById('stage-root').innerHTML = example.html
+  try {
+    await example.run()
+  } catch (err) {
+    result.errors.push(String(err?.message ?? err))
+  }
+  result.events = window.__events // filled by comice-tap.js as they happen
+  result.done = true
+  setTimeout(() => {
+    const ready = result.events.filter((e) => e.type === 'ready').length
+    document.getElementById('status').textContent = result.errors.length || result.events.some((e) => e.type === 'error')
+      ? `errors: ${[...result.errors, ...result.events.filter((e) => e.type === 'error').map((e) => e.message)].join(' · ')}`
+      : `ran · ${ready} ready`
+  }, 1500)
+</script>
+</body>
+</html>

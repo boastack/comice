@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Comice acceptance</title>
+<style>
+  :root { color-scheme: dark; --bg: #0c0c0e; --fg: #ece9e2; --muted: #8b8a86; --line: #26262c; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 1400px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p { color: var(--muted); margin: 0 0 20px; max-width: 70ch; }
+  .examples { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 640px), 1fr)); gap: 16px; }
+  iframe { width: 100%; height: 640px; border: 1px solid var(--line); border-radius: 12px; background: #111114; }
+  ul { color: var(--muted); padding-left: 18px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Comice acceptance</h1>
+  <p>Every runnable code example in comice.html, run as written, each in its own page. Scroll, hover and drag inside them. <code>node harness/acceptance/run.mjs</code> runs the same pages in Chromium, WebKit and Firefox and checks each one.</p>
+  <div class="examples" id="examples"></div>
+  <h2>Not run here</h2>
+  <ul id="not-run"></ul>
+</main>
+<script type="module">
+  // Only the ids and the not-run list: the examples themselves load in their frames.
+  const ids = ['0', '1', '4', '5a', '5b', '5c', '6a', '6b', '7', '8', '9', '10', '11', '13a', '13b', '14']
+  document.getElementById('examples').innerHTML = ids.map((id) => `<iframe loading="lazy" src="example.html?id=${id}" title="Example ${id}"></iframe>`).join('')
+  const notRun = {
+    2: 'MaskField and sampleMask(): a type and a GLSL signature, not a runnable example.',
+    3: '@comice/vision, not built yet.',
+    12: '@comice/vision and @comice/spatial, not built yet.',
+    15: '@comice/react, not built yet.',
+    16: 'Studio export and .load(), not built yet.',
+    17: 'The repository layout.',
+  }
+  document.getElementById('not-run').innerHTML = Object.entries(notRun).map(([block, why]) => `<li>Block ${block}: ${why}</li>`).join('')
+</script>
+</body>
+</html>

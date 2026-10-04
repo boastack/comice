@@ -62,23 +62,48 @@ export function hover(options: HoverOptions = {}): Driver {
       }
 
       function onMove(event: PointerEvent): void {
+        // A finger moving is a scroll, not a hover: it would light up every
+        // card it passes on the way down the page.
+        if (event.pointerType === 'touch') return
         const reaches = eventReachesTarget(target, event)
         if (reaches && !over) enter()
         else if (!reaches && over) leave()
       }
 
+      /** Touch has no hover: a tap on the element enters (at once — a tap
+       *  is already deliberate), a tap anywhere else leaves. Without this,
+       *  a hover()-driven spotlight never responded on a phone, and its
+       *  revealed captions were unreachable by touch, which the spec's
+       *  spotlight card rules out. */
+      function onDown(event: PointerEvent): void {
+        if (event.pointerType !== 'touch') return
+        if (eventReachesTarget(target, event)) {
+          if (entered || over) return
+          over = true
+          entered = true
+          tween.to(1)
+        } else if (over) {
+          leave()
+        }
+      }
+
       function onLeaveWindow(event: PointerEvent): void {
+        // A lifted finger "leaves" every element, the document included: not
+        // a hover ending (only a tap elsewhere ends it on touch).
+        if (event.pointerType === 'touch') return
         if (over && isWindowLeave(target, event)) leave()
       }
 
       const removeMove = listenOnDocument(target, 'pointermove', onMove)
       const removeLeave = listenOnDocument(target, 'pointerleave', onLeaveWindow)
+      const removeDown = listenOnDocument(target, 'pointerdown', onDown)
 
       return () => {
         if (enterTimer) clearTimeout(enterTimer)
         tween.stop()
         removeMove()
         removeLeave()
+        removeDown()
       }
     },
   }

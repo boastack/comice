@@ -242,3 +242,61 @@ describe('hover driver', () => {
     expect(onSignal).not.toHaveBeenCalled()
   })
 })
+
+describe('hover driver — touch (found on emulated phones)', () => {
+  let target: HTMLElement
+  let elsewhere: HTMLElement
+
+  beforeEach(() => {
+    target = document.body.appendChild(document.createElement('div'))
+    elsewhere = document.body.appendChild(document.createElement('div'))
+  })
+  afterEach(() => {
+    target.remove()
+    elsewhere.remove()
+  })
+
+  const touch = (el: Element, type: string) => el.dispatchEvent(new PointerEvent(type, { pointerType: 'touch', bubbles: true }))
+  const last = (onSignal: ReturnType<typeof mock>) => onSignal.mock.calls.at(-1)?.[0].progress
+
+  it('a tap enters at once (no intent wait); lifting the finger does not leave', () => {
+    const onSignal = mock()
+    const detach = hover({ intent: 500, duration: 0 }).attach(target, onSignal)
+    touch(target, 'pointerdown')
+    expect(last(onSignal)).toBe(1)
+    // A lifted finger "leaves" every element, the document included.
+    document.documentElement.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'touch' }))
+    expect(last(onSignal)).toBe(1)
+    touch(target, 'pointerdown') // tapping it again changes nothing
+    expect(onSignal.mock.calls.filter(([s]) => s.progress === 0)).toHaveLength(0)
+    detach()
+  })
+
+  it('a tap elsewhere leaves; a tap elsewhere while not entered does nothing', () => {
+    const onSignal = mock()
+    const detach = hover({ duration: 0 }).attach(target, onSignal)
+    touch(elsewhere, 'pointerdown')
+    expect(onSignal).not.toHaveBeenCalled()
+    touch(target, 'pointerdown')
+    touch(elsewhere, 'pointerdown')
+    expect(last(onSignal)).toBe(0)
+    detach()
+  })
+
+  it('a finger moving across the element (a scroll) never enters', async () => {
+    const onSignal = mock()
+    const detach = hover({ intent: 5, duration: 0 }).attach(target, onSignal)
+    touch(target, 'pointermove')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(onSignal).not.toHaveBeenCalled()
+    detach()
+  })
+
+  it('a mouse press does not count as a tap', () => {
+    const onSignal = mock()
+    const detach = hover({ intent: 500, duration: 0 }).attach(target, onSignal)
+    target.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'mouse', bubbles: true }))
+    expect(onSignal).not.toHaveBeenCalled()
+    detach()
+  })
+})

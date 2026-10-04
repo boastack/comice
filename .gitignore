@@ -19,3 +19,6 @@ legacy/assets/audio/
 
 # Internal planning doc, not meant to be public on GitHub.
 ROADMAP.md
+
+# Acceptance run output (screenshots, report.json).
+harness/acceptance/out/
