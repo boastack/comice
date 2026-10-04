@@ -251,6 +251,7 @@ uniform float u_bloomIntensity;
 uniform float u_aberrationAmount;
 uniform float u_grainAmount;
 uniform float u_grainSeed;
+uniform float u_shift; // hue rotation, turns
 
 in vec2 v_uv;
 out vec4 outColor;
@@ -261,6 +262,14 @@ ${HASH_GLSL}
 void main() {
   vec4 color = texture(u_media, v_uv);
   ${chunks.join('\n')}
+  // shift: the hue turned around OKLab's a/b plane, after everything else
+  // — lightness and chroma kept. Mappable (spec §04 maps audio into it).
+  if (u_shift != 0.0) {
+    vec3 lab = linearToOklab(color.rgb);
+    float angle = u_shift * 6.28318530718;
+    lab.yz = mat2(cos(angle), sin(angle), -sin(angle), cos(angle)) * lab.yz;
+    color.rgb = clamp(oklabToLinear(lab), 0.0, 1.0);
+  }
   outColor = color;
 }`
 }
@@ -288,6 +297,7 @@ export type ColorProgram = {
   uAberrationAmount: WebGLUniformLocation | null
   uGrainAmount: WebGLUniformLocation | null
   uGrainSeed: WebGLUniformLocation | null
+  uShift: WebGLUniformLocation | null
 }
 
 // Cached per-context, per-configuration — same reasoning as dissolve's/
@@ -383,6 +393,7 @@ export function compileColorProgram(gl: WebGL2RenderingContext, options: ColorSh
     uAberrationAmount: gl.getUniformLocation(program, 'u_aberrationAmount'),
     uGrainAmount: gl.getUniformLocation(program, 'u_grainAmount'),
     uGrainSeed: gl.getUniformLocation(program, 'u_grainSeed'),
+    uShift: gl.getUniformLocation(program, 'u_shift'),
   }
   byConfig.set(key, result)
   refcounts.set(key, 1) // this compile call is itself the first live reference
@@ -416,6 +427,8 @@ export type ColorDrawState = {
   aberrationAmount: number
   grainAmount: number
   grainSeed: number
+  /** Hue rotation, in turns (0..1 is 0..360°). */
+  shift?: number
 }
 
 /**
@@ -458,6 +471,7 @@ export function drawColor(context: GLContext, colorProgram: ColorProgram, mediaP
   gl.uniform1f(colorProgram.uAberrationAmount, state.aberrationAmount)
   gl.uniform1f(colorProgram.uGrainAmount, state.grainAmount)
   gl.uniform1f(colorProgram.uGrainSeed, state.grainSeed)
+  gl.uniform1f(colorProgram.uShift, state.shift ?? 0)
 
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
 

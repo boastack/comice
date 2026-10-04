@@ -18,6 +18,9 @@ let queued: FrameRequestCallback[]
 let now = 0
 
 beforeEach(() => {
+  // Another file can leave the shared loop waiting on a frame from ITS fake
+  // requestAnimationFrame, which never comes: start clean.
+  getSharedScheduler().stop()
   queued = []
   now = 0
   originalRAF = globalThis.requestAnimationFrame

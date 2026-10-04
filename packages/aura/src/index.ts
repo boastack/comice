@@ -60,6 +60,10 @@ export type AuraOptions = {
   /** How often to re-sample, in ms. Default 200 — frequent enough to
    *  track a playing video's mood, far below per-frame cost. */
   sampleIntervalMs?: number
+  /** How strongly the colour escapes the frame, 0..1: the glow's opacity,
+   *  and `--aura-intensity` for CSS reading the variables. Mappable —
+   *  spec §04 maps audio `energy` into it. Default 1. */
+  intensity?: number
 }
 
 function rgbToCss([r, g, b]: RGB): string {
@@ -94,6 +98,8 @@ function isUploadableSource(target: Element): target is Uploadable {
 
 export function aura(options: AuraOptions = {}): ComicePlugin {
   const { sample = 'edges', colors = 5, contrast = 4.5, glow = true, cssVariables = true, onSample, sampleIntervalMs = 200 } = options
+  const clamp01 = (value: number) => Math.max(0, Math.min(1, value))
+  let intensity = clamp01(options.intensity ?? 1)
 
   let target: Uploadable | null = null
   let glContext: GLContext | null = null
@@ -202,12 +208,14 @@ export function aura(options: AuraOptions = {}): ComicePlugin {
         glowEl.style.pointerEvents = 'none'
         glowEl.style.filter = 'blur(24px)'
         glowEl.style.transition = 'background 0.3s ease-out'
+        glowEl.style.opacity = `${intensity}`
         const parent = target.parentElement
         if (parent && getComputedStyle(parent).position === 'static') {
           parent.style.position = 'relative'
         }
         target.insertAdjacentElement('beforebegin', glowEl)
       }
+      if (cssVariables) target.style.setProperty('--aura-intensity', `${intensity}`)
 
       // Render only when visible (spec §13): off-screen, in a hidden tab, or once
       // the frame budget has dropped to a static poster (core's budget.ts), this
@@ -230,6 +238,7 @@ export function aura(options: AuraOptions = {}): ComicePlugin {
       glowEl?.remove()
       if (target && cssVariables) {
         target.style.removeProperty('--aura-color')
+        target.style.removeProperty('--aura-intensity')
         for (let i = 0; i < colors; i++) target.style.removeProperty(`--aura-color-${i}`)
       }
       target = null
@@ -237,6 +246,20 @@ export function aura(options: AuraOptions = {}): ComicePlugin {
       plane = null
       downsampler = null
       glowEl = null
+    },
+
+    // MappableTarget: `intensity` — applied at once (the glow's opacity and
+    // the CSS variable), not at the next sample, so it can follow audio.
+    params: {
+      getParam(name: string): number {
+        return name === 'intensity' ? intensity : 0
+      },
+      setParam(name: string, value: number): void {
+        if (name !== 'intensity') return
+        intensity = clamp01(value)
+        if (glowEl) glowEl.style.opacity = `${intensity}`
+        if (target && cssVariables) target.style.setProperty('--aura-intensity', `${intensity}`)
+      },
     },
   }
 }

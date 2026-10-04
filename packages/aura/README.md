@@ -35,6 +35,9 @@ comice('.hero img').use(aura({ sample: 'palette', colors: 3 }))
 | `cssVariables` | boolean | Write the colours as CSS variables. Default `true`. |
 | `onSample` | `(colors) => void` | Called with every new sample. |
 | `sampleIntervalMs` | number | How often to sample. Default 200. |
+| `intensity` | number | How strongly the colour escapes the frame, 0 to 1: the glow's opacity, and `--aura-intensity`. Default 1. |
+
+Mappable: `intensity`, e.g. `.map('energy').to(a, 'intensity')` from `audio()`.
 
 Reads the media without changing how it looks. Does no work while off screen. Without WebGL2 no colours are produced and nothing else changes.
 

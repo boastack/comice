@@ -69,7 +69,9 @@ function isUploadableSource(target: Element): target is Uploadable {
 }
 
 export function distort(options: DistortOptions = {}): ComicePlugin {
-  const { effect = 'bulge', radius = 160, strength = 0.5, refraction = 0, falloff = 'smooth' } = options
+  const { effect = 'bulge', falloff = 'smooth' } = options
+  // Live: mappable params (spec §04's `.map('bass').to(distort, 'strength')`).
+  let { radius = 160, strength = 0.5, refraction = 0 } = options
 
   let target: Uploadable | null = null
   let glContext: GLContext | null = null
@@ -270,6 +272,23 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
       plane = null
       distortProgram = null
       resizeObserver = null
+    },
+
+    // MappableTarget: the field's live numbers — spec §04's own example
+    // maps audio straight into `strength`. Each reaches the next frame;
+    // the shader reads them per draw. It had no params at all.
+    params: {
+      getParam(name: string): number {
+        if (name === 'strength') return strength
+        if (name === 'radius') return radius
+        if (name === 'refraction') return refraction
+        return 0
+      },
+      setParam(name: string, value: number): void {
+        if (name === 'strength') strength = value
+        else if (name === 'radius') radius = Math.max(0, value)
+        else if (name === 'refraction') refraction = value
+      },
     },
   }
 }

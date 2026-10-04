@@ -46,6 +46,10 @@ export type ColorOptions = {
   grain?: GrainOptions
   bloom?: BloomOptions
   aberration?: AberrationOptions
+  /** Hue rotation in OKLab, in turns: 0.5 turns every hue to its opposite.
+   *  Applied after every effect, and on its own with none. Mappable —
+   *  spec §04 maps audio `high` into it. Default 0. */
+  shift?: number
 }
 
 type Uploadable = HTMLImageElement | HTMLVideoElement
@@ -93,6 +97,7 @@ export function color(options: ColorOptions = {}): ComicePlugin {
   let bloomThreshold = bloom?.threshold ?? 0.7
   let aberrationAmount = aberration?.amount ?? 0.004
   let grainSeed = 0
+  let shift = options.shift ?? 0
 
   function renderFrame(): void {
     if (destroyed || !glContext || !plane || !colorProgram) return
@@ -110,6 +115,7 @@ export function color(options: ColorOptions = {}): ComicePlugin {
       aberrationAmount,
       grainAmount,
       grainSeed,
+      shift,
     }
     drawColor(glContext, colorProgram, plane, lutTexture, state)
     reporter?.afterDraw(plane)
@@ -256,6 +262,8 @@ export function color(options: ColorOptions = {}): ComicePlugin {
             return aberrationAmount
           case 'grainSeed':
             return grainSeed
+          case 'shift':
+            return shift
           default:
             return 0
         }
@@ -276,6 +284,9 @@ export function color(options: ColorOptions = {}): ComicePlugin {
             break
           case 'grainSeed':
             grainSeed = value
+            break
+          case 'shift':
+            shift = value
             break
           default:
             return

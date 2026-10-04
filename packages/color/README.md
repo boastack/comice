@@ -29,6 +29,9 @@ comice('.hero img').use(color({ effects: ['duotone', 'grain'] }))
 | `lut` | string | URL of a `.cube` file, for `'lut'`. |
 | `interpolate` | `'oklch'` \| `'rgb'` | Colour space for blends. Default `'oklch'`. |
 | `duotone`, `grain`, `bloom`, `aberration` | object | Per-effect settings. |
+| `shift` | number | Hue rotation in turns (0.5 turns every hue to its opposite), keeping lightness. Default 0. |
+
+Mappable: `shift`, `grainAmount`, `grainSeed`, `bloomIntensity`, `bloomThreshold`, `aberrationAmount`, e.g. `.map('high').to(c, 'shift')` from `audio()`.
 
 Does no work while off screen or in a hidden tab, and steps down resolution on devices that can't keep up. Without WebGL2 the original media shows, unchanged.
 

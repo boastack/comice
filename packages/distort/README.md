@@ -33,6 +33,8 @@ comice('.hero img')
 | `refraction` | number | Chromatic split, for `'glass'`. |
 | `falloff` | `'linear'` \| `'smooth'` \| `'exp'` | Default `'smooth'`. |
 
+Mappable: `strength`, `radius`, `refraction`, e.g. `.map('bass').to(d, 'strength', { output: [0, 0.8] })` from `audio()`.
+
 Does no work while off screen or in a hidden tab, and steps down resolution on devices that can't keep up. Without WebGL2 the original media shows, unchanged. With `prefers-reduced-motion` the field stays off and the media shows undistorted.
 
 ## License

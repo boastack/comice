@@ -72,7 +72,7 @@ Comice core ships with **zero effects**. Every visual effect is a plugin, regist
 | | |
 |---|---|
 | `comice(target)` | Wraps a CSS selector, an element, or a NodeList. Always returns one chainable handle: with several matches, each call applies to every element, and each element gets its own copy of every plugin. |
-| `.use(plugin)` | Attaches a plugin. Chainable. One GPU effect per element: a second shader plugin on the same element throws, naming both, instead of silently replacing the first. |
+| `.use(plugin)` | Attaches a plugin. Chainable. One GPU effect per element: a second shader plugin on the same element throws, naming both, instead of silently replacing the first. So the spec's stacked audio example (`.use(distort()).use(aura()).use(particles())` on one element) runs as one element per effect, each mapped from its own `audio()`. |
 | `.driver(driver)` | Attaches an input source, `scroll()`, `hover()`, `pointer()`, `audio()`, or a custom one. |
 | `.map(sourceKey).to(plugin, paramName, options)` | Routes one named signal from the most recently attached driver into one plugin parameter, through a clamp/remap/invert/multiplier/offset/easing/smoothing pipeline. |
 | `.set(props)` / `.set(plugin, props)` | Applies values immediately, no transition (like `gsap.set()`): plugin parameters by name, plus `progress`. Scoped to one plugin when two share a parameter name. |

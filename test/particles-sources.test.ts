@@ -64,6 +64,7 @@ beforeEach(() => {
     }
     return fake
   }
+  getSharedScheduler().stop() // no frame left pending from another file's fake
   queued = []
   now = 0
   originalRAF = globalThis.requestAnimationFrame
