@@ -100,8 +100,8 @@ export type MorphShaderOptions = {
   recomposeEnd?: number
   /** Spec §08's `thread` option: `{ width, pinch, sag, dissolve }`, a
    *  stretching/snapping bridge between each distribute target and the
-   *  point it merges toward. Ignored for 'mask' (mask has no distribute
-   *  targets to bridge). Undefined (the default) omits thread entirely —
+   *  point it merges toward; for 'mask', strands holding corner drops to
+   *  the collapsing frame (see maskThreadGLSL). Undefined (the default) omits thread entirely —
    *  no thread GLSL is composed in, matching every other optional feature
    *  in this shader (mask's own uniforms, recompose's pFinal) that only
    *  appears in the compiled source when actually requested. */
@@ -136,23 +136,22 @@ export function orderRanks(count: number, order: MorphOrder): number[] {
  *  optional with the defaults noted — `width` alone is enough to get a
  *  visible, undecorated (no sag, no pinch, no tear) connecting strand. */
 export type ThreadOptions = {
-  /** The strand's base half-thickness, in `st`-space units (the same
-   *  space every other size in this package's shaders is expressed in —
-   *  see sdf.ts's own primitives for the scale this sits alongside).
-   *  Default 0.02. */
+  /** The strand's half-thickness at its thickest, CSS px. Default 8. */
   width?: number
   /** 0..1, how much the strand narrows toward the point it's merging
    *  into, relative to `width`. Default 0.4. */
   pinch?: number
-  /** Droop under simulated gravity, scaled by both the strand's current
-   *  length and how separated its two ends are. 0 disables sag entirely.
-   *  Default 0.15. */
+  /** How far the strand droops at its middle when fully stretched, CSS px.
+   *  0 disables sag. Default 10. */
   sag?: number
-  /** 0..1, how torn/dotted (vs. a clean taper) the strand's edge reads as
-   *  separation increases. 0 disables dissolve entirely — a clean strand
-   *  that simply thins to nothing rather than visibly tearing. Default 0.3. */
+  /** How deeply the strand's edge tears as it stretches, CSS px — 0 is a
+   *  clean strand that simply thins to nothing. Default 3. */
   dissolve?: number
 }
+
+/** When each corner's strand snaps, in `mask` progress — staggered, so
+ *  they don't all go at once. */
+const MASK_THREAD_SNAPS = [0.5, 0.58, 0.54, 0.62]
 
 const VERTEX_SHADER = `#version 300 es
 in vec2 a_position;
@@ -196,7 +195,7 @@ function buildFragmentShader(options: MorphShaderOptions): string {
   const isMask = operation === 'mask'
   const isRecompose = operation === 'recompose'
   const usesLayout = !isMask // every operation except 'mask' needs layouts.ts's shape GLSL
-  const usesThread = usesLayout && !!thread
+  const usesThread = !!thread
 
   // mask has no distribute layout at all — dResult comes from the sampled
   // SDF texture instead of a shape union, so none of layouts.ts's GLSL (or
@@ -219,12 +218,13 @@ function buildFragmentShader(options: MorphShaderOptions): string {
   // Unioned into the SAME dShapes expression as the target shapes
   // themselves — a thread is one more smin/min operand, not a separate
   // draw or a separate blend stage.
-  const threadWidth = thread?.width ?? 0.02
-  const threadPinch = Math.max(0, Math.min(1, thread?.pinch ?? 0.4))
-  const threadSag = thread?.sag ?? 0.15
-  const threadDissolve = Math.max(0, Math.min(1, thread?.dissolve ?? 0.3))
+  // px in the options, st in the shader: `px` is one CSS pixel in st.
+  const threadWidth = `${Math.max(0, thread?.width ?? 8).toFixed(6)} * px`
+  const threadPinch = Math.max(0, Math.min(1, thread?.pinch ?? 0.4)).toFixed(6)
+  const threadSag = `${(thread?.sag ?? 10).toFixed(6)} * px`
+  const threadDissolve = `${Math.max(0, thread?.dissolve ?? 3).toFixed(6)} * px`
   let threadGLSL = ''
-  if (usesThread) {
+  if (usesThread && usesLayout) {
     const declarations = layoutShape!.targetPositions
       .map(
         ([x, y], index) => `
@@ -232,10 +232,10 @@ function buildFragmentShader(options: MorphShaderOptions): string {
     st,
     vec2(${x.toFixed(6)}, ${y.toFixed(6)}),
     vec2(0.0, 0.0),
-    ${threadWidth.toFixed(6)},
-    ${threadPinch.toFixed(6)},
-    ${threadSag.toFixed(6)},
-    ${threadDissolve.toFixed(6)},
+    ${threadWidth},
+    ${threadPinch},
+    ${threadSag},
+    ${threadDissolve},
     1.0 - pMerge
   );`,
       )
@@ -330,6 +330,31 @@ function buildFragmentShader(options: MorphShaderOptions): string {
   // mixes dShapes (or dShapesWithThread, when thread is active) into the
   // fixed finalShapeGLSL target, composing on top of the exact same shape
   // union merge/breakout/distribute already build, not replacing it.
+  // mask with a thread (the spec's own example: "the footage collapses
+  // into the client's logo, the connecting tissue stretches and visibly
+  // snaps"): a collapse has no separate pieces to bridge, so material at
+  // the frame's four corners lags behind as drops, each held to the
+  // shrinking body by a strand that stretches and tears as the body pulls
+  // away (sdThread, toward the centre — the part inside the shape is
+  // hidden by the union). At its own moment each strand snaps — gone in
+  // one step, not faded — and its drop evaporates.
+  const maskThreadGLSL =
+    isMask && usesThread
+      ? MASK_THREAD_SNAPS.map((snap, i) => {
+          const sx = i % 2 === 0 ? -1 : 1
+          const sy = i < 2 ? -1 : 1
+          return `
+  {
+    vec2 drop = vec2(${sx}.0 * aspect * 0.5, ${sy}.0 * 0.5) * 0.8 * (1.0 - 0.1 * p);
+    // Ends just below zero: a radius of exactly 0 still antialiases one speck.
+    float radius = mix(0.05, -0.01, smoothstep(${snap.toFixed(2)}, ${(snap + 0.12).toFixed(2)}, p));
+    dResult = sminMask(dResult, length(st - drop) - radius, 0.04);
+    if (p < ${snap.toFixed(2)}) {
+      dResult = min(dResult, sdThread(st, drop, vec2(0.0), ${threadWidth}, ${threadPinch}, ${threadSag}, ${threadDissolve}, clamp(p / ${snap.toFixed(2)}, 0.0, 1.0)));
+    }
+  }`
+        }).join('')
+      : ''
   const shapesExpr = usesThread ? 'dShapesWithThread' : 'dShapes'
   const dResultGLSL = isMask
     ? `
@@ -338,7 +363,7 @@ function buildFragmentShader(options: MorphShaderOptions): string {
   float dMask = (maskSample - 0.5) * 2.0 * u_maskScale;
   dMask = mix(0.18, dMask, maskBounds);
   float dFrame = sdRoundedBox(st, vec2(aspect * 0.5, 0.5) * 0.94, 0.045);
-  float dResult = mix(dFrame, dMask, p);`
+  float dResult = mix(dFrame, dMask, p);${maskThreadGLSL}`
     : isRecompose
       ? `
   float totalW = 1224.0 / 688.0;
@@ -368,6 +393,7 @@ out vec4 outColor;
 
 ${isMask ? SD_ROUNDED_BOX_GLSL : sdfGLSL}
 ${usesThread ? SD_THREAD_GLSL : ''}
+${isMask && usesThread ? 'float sminMask(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }' : ''}
 
 void main() {
   float aspect = u_resolution.x / u_resolution.y;
@@ -383,6 +409,7 @@ void main() {
   float pMerge = smoothstep(0.10, 0.90, ${pMergeExpr});
 ${pieceProgressGLSL}
   float blendK = ${blendKExpr};
+  float px = 1.0 / u_resolution.y; // one CSS pixel, in st
   ${dResultGLSL}
 
   float morphEnergy = sin(p * 3.14159265);
@@ -425,7 +452,13 @@ ${pieceProgressGLSL}
   );
   vec3 finalColor = refractedColor + vec3(0.92, 1.0, 0.96) * liquidSheen;
 
-  outColor = vec4(finalColor, mediaColor.a * alpha);
+  // Premultiplied: the canvas is (premultipliedAlpha: true). Unmultiplied,
+  // every pixel outside the shape (alpha 0) still added its full media
+  // colour over the page — every operation showed the whole frame, the
+  // shape only a slightly darker patch. Found running the spec's own
+  // mask example in Chromium.
+  float outAlpha = mediaColor.a * alpha;
+  outColor = vec4(finalColor * outAlpha, outAlpha);
 }`
 }
 

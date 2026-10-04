@@ -331,6 +331,7 @@ export function installFake2DContext(options: Fake2DOptions = {}): { callLog: Fa
       fill(_path: unknown) {
         callLog.filledPaths += 1
       },
+      setTransform(..._args: number[]) {},
       fillText(text: string, _x: number, _y: number) {
         callLog.filledTexts.push(text)
       },

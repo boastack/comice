@@ -179,7 +179,47 @@ function destroyRenderTarget(gl: WebGL2RenderingContext, target: RenderTarget | 
 // RASTERIZED: shape, text
 // ─────────────────────────────────────────────────────────────────────────
 
-export type RasterizedMaskSource = { type: 'shape'; path: Path2D | string } | { type: 'text'; text: string; font?: string }
+/** A shape is fitted into the box (centred, contained, with a margin): by
+ *  `viewBox` when given, else by the path's own bounds — so an icon path
+ *  drawn on a 24x24 grid ('M12 2L2 7…', spec §08) fills the media rather
+ *  than drawing at 24px in its corner, as it used to. A Path2D has no
+ *  readable bounds: without a viewBox it's drawn as is. Text is centred
+ *  and sized to fit. */
+export type RasterizedMaskSource =
+  | { type: 'shape'; path: Path2D | string; viewBox?: readonly [number, number, number, number] }
+  | { type: 'text'; text: string; font?: string }
+
+/** How much of the box a fitted shape or text fills. */
+const FIT = 0.8
+
+const SVG_NS = 'http://www.w3.org/2000/svg'
+
+/** A path string's bounds, measured by the browser's own SVG engine
+ *  (null where there's none, or the path is empty). */
+export function pathBounds(doc: Document, d: string): [number, number, number, number] | null {
+  const svg = doc.createElementNS(SVG_NS, 'svg')
+  svg.setAttribute('style', 'position:absolute;width:0;height:0;overflow:hidden;visibility:hidden')
+  const path = doc.createElementNS(SVG_NS, 'path') as SVGPathElement
+  path.setAttribute('d', d)
+  svg.appendChild(path)
+  doc.body.appendChild(svg)
+  try {
+    const box = typeof path.getBBox === 'function' ? path.getBBox() : null
+    return box && box.width > 0 && box.height > 0 ? [box.x, box.y, box.width, box.height] : null
+  } catch {
+    return null
+  } finally {
+    svg.remove()
+  }
+}
+
+/** The transform [scale, x, y] that fits `bounds` into width x height,
+ *  centred, filling FIT of it. */
+export function fitTransform(bounds: readonly [number, number, number, number], width: number, height: number): [number, number, number] {
+  const [x, y, w, h] = bounds
+  const scale = Math.min((width * FIT) / w, (height * FIT) / h)
+  return [scale, width / 2 - (x + w / 2) * scale, height / 2 - (y + h / 2) * scale]
+}
 
 export type RasterizeOptions = {
   /**
@@ -356,11 +396,25 @@ export function createRasterizedMask(context: GLContext | null): RasterizedMask 
     ctx2d.fillStyle = '#fff'
     if (source.type === 'shape') {
       const path = typeof source.path === 'string' ? new Path2D(source.path) : source.path
+      const bounds = source.viewBox ?? (typeof source.path === 'string' ? pathBounds(canvas.ownerDocument!, source.path) : null)
+      if (bounds) {
+        const [scale, x, y] = fitTransform(bounds, width, height)
+        ctx2d.setTransform(scale, 0, 0, scale, x, y)
+      }
       ctx2d.fill(path)
+      ctx2d.setTransform(1, 0, 0, 1, 0, 0)
     } else {
-      ctx2d.font = source.font ?? `${Math.round(height * 0.8)}px sans-serif`
+      // Centred, as large as fits FIT of the box (it used to be drawn
+      // left-aligned at 80% of the height, running off a narrow box).
+      const fontAt = (size: number) => source.font ?? `${size}px sans-serif`
+      let size = Math.round(height * 0.6)
+      ctx2d.font = fontAt(size)
+      const measured = ctx2d.measureText(source.text).width
+      if (!source.font && measured > width * FIT) size = Math.max(1, Math.floor((size * width * FIT) / measured))
+      ctx2d.font = fontAt(size)
+      ctx2d.textAlign = 'center'
       ctx2d.textBaseline = 'middle'
-      ctx2d.fillText(source.text, 0, height / 2)
+      ctx2d.fillText(source.text, width / 2, height / 2)
     }
 
     target = createOrResizeRenderTarget(gl, cssWidth, cssHeight, target)

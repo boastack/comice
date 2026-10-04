@@ -72,8 +72,7 @@ const MASK_BAKE_MAX_DISTANCE = 96
 export type MorphOptions = {
   /** Which of the five spec operations this instance performs. Required —
    *  matches spec §08's `operation` option, "Required." on the real card.
-   *  All five are implemented; `thread` (the stretching-bridge option) is
-   *  not — see shader.ts's file header. */
+   *  All five are implemented. */
   operation: MorphOperation
   /** Which concrete target arrangement to morph toward/from. Ignored
    *  (and not required) when `operation` is 'mask'. Required for
@@ -81,12 +80,20 @@ export type MorphOptions = {
    *  cards (legacy's cardDeck-style layout); the others mirror legacy's
    *  remaining layouts 1:1 — see layouts.ts. Default 'shelf'. */
   layout?: LayoutName
-  /** Required when `operation` is 'mask', ignored otherwise. The shape or
-   *  text media morphs into, in the exact vocabulary gl/mask.ts's
-   *  `createRasterizedMask()` already uses (spec §08's `into: 'svg',
-   *  path: '...'` maps to `{ type: 'shape', path: '...' }` here — same
-   *  concept, this package's own option shape rather than re-deriving a
-   *  separate one). */
+  /** For 'mask': what the media morphs into, in the spec's own words —
+   *  `into: 'svg', path: 'M12 2L2 7…'`, or `into: 'text', text: 'ACME'`.
+   *  The shape is fitted to the media (centred, by the path's own bounds or
+   *  `viewBox`). */
+  into?: 'svg' | 'text'
+  /** The SVG path data for `into: 'svg'`. */
+  path?: string
+  /** The path's coordinate box `[x, y, width, height]`, e.g. `[0, 0, 24,
+   *  24]` for an icon; measured from the path when left out. */
+  viewBox?: readonly [number, number, number, number]
+  /** The text for `into: 'text'`. */
+  text?: string
+  /** The same thing as `into`, in core's mask vocabulary: `{ type:
+   *  'shape', path }` or `{ type: 'text', text }`. */
   mask?: RasterizedMaskSource
   /** smin blend amount, 0 to 1, matching spec §08's `liquid` option
    *  exactly. Default 0.5. */
@@ -106,11 +113,11 @@ export type MorphOptions = {
   /** Only meaningful for `operation: 'recompose'`. Legacy's
    *  `finalBlendEnd`. Default 1.0, matching legacy exactly. */
   recomposeEnd?: number
-  /** Spec §08's `{ width, pinch, sag, dissolve }` option — a stretching,
-   *  sagging, snapping bridge between each distribute target and the
-   *  point it's merging toward. Ignored for `operation: 'mask'` (mask has
-   *  no distribute targets to bridge). Omitted (the default) means no
-   *  thread at all — see shader.ts/thread.ts for the actual math. */
+  /** Spec §08's `{ width, pinch, sag, dissolve }` (px; pinch 0..1) — a
+   *  stretching, sagging bridge that tears and snaps: between each piece
+   *  and the point it merges toward, or for 'mask', holding drops at the
+   *  frame's corners to the shape it collapses into. Omitted (the
+   *  default) means no thread — see shader.ts/thread.ts. */
   thread?: ThreadOptions
   /** The order the pieces move in: 'sequence' (default) one after another,
    *  'alternate' dealt either side of the centre. Spec §08. */
@@ -127,7 +134,6 @@ export function morph(options: MorphOptions): ComicePlugin {
   const {
     operation,
     layout = 'shelf',
-    mask,
     liquid = 0.5,
     count,
     recomposeTarget = 'frame',
@@ -137,11 +143,24 @@ export function morph(options: MorphOptions): ComicePlugin {
     order = 'sequence',
   } = options
 
+  if (options.into === 'svg' && !options.path) {
+    throw new Error("[comice] morph({ into: 'svg' }) needs a `path`.")
+  }
+  if (options.into === 'text' && !options.text) {
+    throw new Error("[comice] morph({ into: 'text' }) needs a `text`.")
+  }
+  const mask: RasterizedMaskSource | undefined =
+    options.into === 'svg'
+      ? { type: 'shape', path: options.path!, viewBox: options.viewBox }
+      : options.into === 'text'
+        ? { type: 'text', text: options.text! }
+        : options.mask
+
   if (operation === 'mask' && !mask) {
     // Same "fail loudly on a programmer error" discipline setup()'s
     // target-type check uses below — operation: 'mask' with no mask
     // source is a configuration error, not something to silently no-op.
-    throw new Error('[comice] morph({ operation: \'mask\' }) requires a `mask` source.')
+    throw new Error("[comice] morph({ operation: 'mask' }) needs a shape to morph into: `into: 'svg', path` (or `into: 'text', text`).")
   }
 
   let target: Uploadable | null = null

@@ -24,19 +24,22 @@
  * and thins, sags and breaks up as they approach:
  *
  *   - `width`: the strand's base half-thickness at its thickest (the
- *     `from` end), in the same `st`-space units every other SDF in this
- *     package uses.
+ *     `from` end), CSS px.
  *   - `pinch`: 0..1, how much the strand narrows toward its `to` end
  *     relative to `width` — a thread that's about to detach reads as
  *     "thinning toward where it's pulling free," not a uniform-width bar.
- *   - `sag`: droop under simulated gravity, a parabolic vertical offset
- *     peaking at the strand's midpoint, scaled by how far apart `from`
- *     and `to` currently are (a fully-collapsed thread has nothing to
- *     sag).
- *   - `dissolve`: 0..1, how broken-up the strand's edge is as separation
- *     increases — 0 is a clean, solid strand; near 1 the strand reads as
- *     torn/dotted rather than a smooth taper, the "snap" spec's own
- *     description asks for rather than a fade.
+ *   - `sag`: droop under simulated gravity, CSS px at the strand's
+ *     midpoint when fully stretched, scaled by how far apart `from` and
+ *     `to` currently are (a fully-collapsed thread has nothing to sag).
+ *   - `dissolve`: how deeply the strand's edge tears as it stretches, CSS
+ *     px — 0 is a clean strand that simply thins; more reads as torn and
+ *     dotted, the "snap" spec's own description asks for rather than a
+ *     fade.
+ *
+ * UNITS: px, because that's how the spec's own example reads (`thread: {
+ * sag: 6, dissolve: 4 }`). They used to be unitless factors with dissolve
+ * clamped to 0..1: that example drooped by 1.5x the strand's length and
+ * clamped its tear. shader.ts converts px to st (1 / u_resolution.y).
  *
  * `sdThread()` returns a signed distance exactly like every function in
  * sdf.ts, so a consumer unions it into an existing shape union
@@ -77,7 +80,7 @@ float sdThread(vec2 p, vec2 from, vec2 to, float width, float pinch, float sag, 
   // strand's own direction, so it reads as "hanging," not a shape
   // distortion along the strand's length.
   vec2 perp = vec2(-spanDir.y, spanDir.x);
-  float sagAmount = sag * separation * spanLength * 4.0 * t * (1.0 - t);
+  float sagAmount = sag * separation * 4.0 * t * (1.0 - t);
 
   vec2 centerLine = from + spanDir * along + perp * sagAmount;
   float distToLine = length(p - centerLine);
@@ -97,7 +100,7 @@ float sdThread(vec2 p, vec2 from, vec2 to, float width, float pinch, float sag, 
   // field; a dedicated cheap function here avoids pulling gl/noise.ts's
   // whole library into every distribute layout that never uses threads.
   float tearNoise = sin(t * 47.0 + p.x * 23.0) * sin(t * 31.0 - p.y * 19.0);
-  float tearAmount = dissolve * separation * (width * 1.5);
+  float tearAmount = dissolve * separation;
   d += tearNoise * tearAmount;
 
   return d;

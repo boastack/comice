@@ -705,7 +705,7 @@ describe('morph — thread option', () => {
     }
   })
 
-  it('is accepted (and ignored) for operation: "mask" without throwing', () => {
+  it('is accepted for operation: "mask" without throwing (corner drops; see morph-spec.test.ts)', () => {
     handle = comice(img) as ComiceHandle
     expect(() =>
       handle!.use(morph({ operation: 'mask', mask: { type: 'shape', path: 'M0 0L1 1Z' }, thread: {} })),
