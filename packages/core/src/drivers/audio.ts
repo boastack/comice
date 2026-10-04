@@ -141,6 +141,29 @@ function bandEdges(bandCount: number, sampleRate: number, fftSize: number): numb
   return edges
 }
 
+/**
+ * One AudioContext for every audio() driver on the page. Each attachment
+ * used to make its own, but a media element can be wrapped in a source
+ * node only once, and that node is tied to the context that made it: the
+ * second element of `comice('.cards').driver(audio({ source: '#track' }))`
+ * connected it to an analyser from ANOTHER context, which throws, so every
+ * element after the first got no signals (silently — the shared loop
+ * isolates the throw). Browsers also cap how many contexts a page may hold.
+ */
+let sharedContext: AudioContext | null = null
+function getSharedAudioContext(): AudioContext | null {
+  if (sharedContext) return sharedContext
+  const AudioContextCtor = (window as any).AudioContext ?? (window as any).webkitAudioContext
+  if (!AudioContextCtor) return null // Web Audio unsupported; driver goes silent, never throws
+  sharedContext = new AudioContextCtor() as AudioContext
+  return sharedContext
+}
+
+/** Test seam: forget the shared context. */
+export function resetSharedAudioContext(): void {
+  sharedContext = null
+}
+
 export function audio(options: AudioOptions = {}): NamedSignalDriver {
   const {
     source,
@@ -153,6 +176,10 @@ export function audio(options: AudioOptions = {}): NamedSignalDriver {
   } = options
 
   const listeners = new Map<string, Set<(payload?: unknown) => void>>()
+  // One driver attached to many elements (a group handle) hears the same
+  // audio N times: beat/onset/drop come from the first live attachment
+  // only, or onBeat would run N times a beat.
+  const attachments = new Set<object>()
 
   // Every .on() listener is notified in isolation, same discipline as
   // machine.ts's emit(). This driver's detectOnsets() calls emit()
@@ -178,6 +205,9 @@ export function audio(options: AudioOptions = {}): NamedSignalDriver {
     // should map `energy` or listen for 'beat' instead.
 
     attachSignals(target, onSignals) {
+      const token = {}
+      attachments.add(token)
+      const leads = () => attachments.values().next().value === token
       let context: AudioContext | null = null
       let analyser: AnalyserNode | null = null
       let sourceNode: AudioNode | null = null
@@ -229,7 +259,7 @@ export function audio(options: AudioOptions = {}): NamedSignalDriver {
         rollingEnergy.push(energy)
         rollingSum += energy
 
-        if (average <= 0) return // rolling window not warmed up yet
+        if (average <= 0 || !leads()) return // not warmed up yet, or another attachment reports
 
         const ratio = energy / average
 
@@ -254,11 +284,8 @@ export function audio(options: AudioOptions = {}): NamedSignalDriver {
 
       function ensureContext(): boolean {
         if (context) return true
-        const AudioContextCtor =
-          (window as any).AudioContext ?? (window as any).webkitAudioContext
-        if (!AudioContextCtor) return false // Web Audio unsupported; driver goes silent, never throws
-
-        const newContext: AudioContext = new AudioContextCtor()
+        const newContext = getSharedAudioContext()
+        if (!newContext) return false
         const newSourceNode = resolveSourceNode(source, target, newContext)
         if (!newSourceNode) return false
 
@@ -353,7 +380,10 @@ export function audio(options: AudioOptions = {}): NamedSignalDriver {
         unregisterFromScheduler()
         visibility.destroy()
         analyser?.disconnect()
-        listeners.clear()
+        attachments.delete(token)
+        // .on() listeners belong to the driver: kept while any element
+        // still uses it.
+        if (attachments.size === 0) listeners.clear()
       }
 
       return () => {

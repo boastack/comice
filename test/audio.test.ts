@@ -13,7 +13,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
-import { audio } from '../packages/core/src/drivers/audio.js'
+import { audio, resetSharedAudioContext } from '../packages/core/src/drivers/audio.js'
 import { getSharedScheduler } from '../packages/core/src/scheduler.js'
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -50,13 +50,17 @@ class FakeAudioContext {
   sampleRate = 44100
   destination = {}
   analyser: FakeAnalyserNode | null = null
+  analysers: FakeAnalyserNode[] = []
+  sourcesCreated = 0
 
   createAnalyser(): FakeAnalyserNode {
     this.analyser = new FakeAnalyserNode()
+    this.analysers.push(this.analyser)
     return this.analyser
   }
 
   createMediaElementSource(_el: HTMLMediaElement): FakeMediaElementAudioSourceNode {
+    this.sourcesCreated++
     return new FakeMediaElementAudioSourceNode()
   }
 
@@ -134,6 +138,7 @@ describe('audio driver', () => {
   let raf: ReturnType<typeof installFakeRaf>
 
   beforeEach(() => {
+    resetSharedAudioContext() // each test installs its own fake AudioContext
     installFakeWebAudio()
     installFakeIntersectionObserver()
     target = document.createElement('div')
@@ -330,6 +335,7 @@ describe('audio driver — beat/onset/drop events', () => {
   let raf: ReturnType<typeof installFakeRaf>
 
   beforeEach(() => {
+    resetSharedAudioContext() // each test installs its own fake AudioContext
     installFakeWebAudio()
     installFakeIntersectionObserver()
     target = document.createElement('div')
@@ -471,5 +477,95 @@ describe('audio driver — beat/onset/drop events', () => {
 
     expect(throwing).toHaveBeenCalled()
     expect(healthy).toHaveBeenCalled()
+  })
+})
+
+describe('audio driver — one driver, many elements (a group handle)', () => {
+  let targets: HTMLElement[]
+  let raf: ReturnType<typeof installFakeRaf>
+  let contexts: number
+
+  beforeEach(() => {
+    resetSharedAudioContext()
+    installFakeWebAudio()
+    contexts = 0
+    const Base = (globalThis as any).AudioContext
+    ;(globalThis as any).AudioContext = class extends Base {
+      constructor() {
+        super()
+        contexts++
+      }
+    }
+    installFakeIntersectionObserver()
+    const track = document.createElement('audio')
+    track.id = 'track'
+    document.body.appendChild(track)
+    targets = [0, 1, 2].map(() => document.body.appendChild(document.createElement('div')))
+    raf = installFakeRaf()
+  })
+
+  afterEach(() => {
+    getSharedScheduler().stop()
+    document.body.innerHTML = ''
+    uninstallFakeWebAudio()
+    uninstallFakeIntersectionObserver()
+  })
+
+  const feed = (level: number) => lastContext!.analysers.forEach((a) => a.setFrequencyData(new Array(512).fill(level)))
+
+  it('every element gets signals, from ONE AudioContext and one source node', () => {
+    // Each attachment used to make its own context; the cached source node
+    // belonged to the first, so connecting it to the second's analyser threw.
+    const driver = audio({ source: '#track' })
+    const received = targets.map(() => mock())
+    targets.forEach((t, i) => driver.attachSignals!(t, received[i]!))
+    raf.flush(16)
+    feed(200)
+    raf.flush(32)
+    expect(contexts).toBe(1)
+    expect(lastContext!.sourcesCreated).toBe(1)
+    received.forEach((cb) => expect(cb.mock.calls.at(-1)![0].bass).toBeGreaterThan(0.5))
+  })
+
+  it('a beat fires once, not once per element; when the leader detaches the next one reports', () => {
+    const onBeat = mock()
+    const driver = audio({ source: '#track', onBeat })
+    const heard = mock()
+    driver.on!('beat', heard)
+    const detach = targets.map((t) => driver.attachSignals!(t, mock()))
+    raf.flush(16)
+    // Warm up on a steady level (the first frames out of silence count as
+    // a beat themselves), then count only the spike.
+    const spike = (at: number) => {
+      for (let i = 0; i < 45; i++) {
+        feed(40)
+        raf.flush(at + 16 * i)
+      }
+      onBeat.mockClear()
+      heard.mockClear()
+      feed(220)
+      raf.flush(at + 2000)
+    }
+    spike(100)
+    expect(onBeat).toHaveBeenCalledTimes(1)
+    expect(heard).toHaveBeenCalledTimes(1)
+
+    detach[0]!() // listeners survive while other elements still use the driver
+    spike(10000)
+    expect(onBeat).toHaveBeenCalledTimes(1)
+    expect(heard).toHaveBeenCalledTimes(1)
+
+    detach[1]!()
+    detach[2]!()
+    spike(20000)
+    expect(heard).not.toHaveBeenCalled() // all gone: cleared
+  })
+
+  it('without Web Audio, every element stays silent', () => {
+    uninstallFakeWebAudio()
+    const received = mock()
+    audio({ source: '#track' }).attachSignals!(targets[0]!, received)
+    raf.flush(16)
+    expect(received).not.toHaveBeenCalled()
   })
 })
