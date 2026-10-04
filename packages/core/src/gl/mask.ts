@@ -492,6 +492,10 @@ export type DerivedMaskOptions = {
   threshold?: number
   /** Softness of the threshold edge, 0..1. Only meaningful for 'depth'. */
   softness?: number
+  /** For 'image'/'video': read brightness ('luminance', default) or
+   *  opacity ('alpha' — a silhouette on transparency, where a black logo
+   *  has no luminance to read). Spec §08: "sampled by luminance or alpha". */
+  channel?: 'luminance' | 'alpha'
 }
 
 const REDUCE_VERTEX_SHADER = `#version 300 es
@@ -511,7 +515,7 @@ const REDUCE_FRAGMENT_SHADER = `#version 300 es
 precision mediump float;
 in vec2 v_uv;
 uniform sampler2D u_source;
-uniform int u_kind;        // 0 = image/video (luminance), 1 = subject (passthrough), 2 = depth (threshold)
+uniform int u_kind;        // 0 = image/video (luminance), 1 = subject (passthrough), 2 = depth (threshold), 3 = image/video (alpha)
 uniform float u_threshold;
 uniform float u_softness;
 out vec4 outColor;
@@ -519,7 +523,9 @@ out vec4 outColor;
 void main() {
   vec4 src = texture(u_source, v_uv);
   float value;
-  if (u_kind == 1) {
+  if (u_kind == 3) {
+    value = src.a; // image/video by alpha: its silhouette
+  } else if (u_kind == 1) {
     value = src.r; // subject: vision's alpha, already single-channel, passed through
   } else if (u_kind == 2) {
     // depth: threshold with a soft edge, owned here per §07 — never in vision.
@@ -606,10 +612,10 @@ function getReduceProgram(gl: WebGL2RenderingContext): ReduceProgram | null {
   return result
 }
 
-function kindToUniform(kind: DerivedMaskKind): number {
+function kindToUniform(kind: DerivedMaskKind, channel: DerivedMaskOptions['channel']): number {
   if (kind === 'subject') return 1
   if (kind === 'depth') return 2
-  return 0 // image, video
+  return channel === 'alpha' ? 3 : 0 // image, video
 }
 
 export type DerivedMask = {
@@ -681,7 +687,7 @@ export function createDerivedMask(
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, sourceTexture)
     gl.uniform1i(program.uSource, 0)
-    gl.uniform1i(program.uKind, kindToUniform(kind))
+    gl.uniform1i(program.uKind, kindToUniform(kind, options.channel))
     gl.uniform1f(program.uThreshold, threshold)
     gl.uniform1f(program.uSoftness, softness)
 

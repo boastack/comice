@@ -38,7 +38,7 @@ comice('.photo').use(reveal({ mask: { type: 'text', text: 'COMICE' } })).driver(
 | Option | Type | |
 |---|---|---|
 | `effect` | `'mask'` `'wipe'` `'scale'` `'blur'` `'blinds'` `'slats'` `'curtain'` `'expand'` | How the element enters. Default `'mask'` when a `mask` is given, otherwise `'scale'`. |
-| `mask` | cursor \| shape \| text \| `<img>` \| `<video>` | For `'mask'`: `{ type: 'cursor', radius, softness }`, `{ type: 'shape', path }`, `{ type: 'text', text }`, or another image/video read by brightness. Needs an `<img>`/`<video>` target. `'subject'`/`'depth'` need `@comice/vision` (not built yet). |
+| `mask` | cursor \| shape \| text \| `<img>` \| `<video>` | For `'mask'`: `{ type: 'cursor', radius, softness }`, `{ type: 'shape', path, viewBox? }` (fitted to the media), `{ type: 'text', text }` (centred), or another image or video: read by its alpha when it has transparency (a logo's silhouette), by brightness when it's opaque; `{ source, channel: 'luminance' | 'alpha' }` chooses. Needs an `<img>`/`<video>` target. `'subject'`/`'depth'` need `@comice/vision` (not built yet). |
 | `stagger` | object | Offsets for several elements entering together. |
 | `waitForDecode` | boolean | Never reveal a blank frame. Default `true`. |
 

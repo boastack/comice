@@ -52,11 +52,15 @@ export type RevealMaskSource =
   /** A soft circle following the pointer. `radius` in px (default 160),
    *  `softness` 0..1 of the radius (default 0.4). Drive with pointer(). */
   | { type: 'cursor'; radius?: number; softness?: number }
-  /** An SVG path, in the media's own CSS pixels. */
-  | { type: 'shape'; path: string | Path2D }
+  /** An SVG path, fitted to the media (by its own bounds, or `viewBox`). */
+  | { type: 'shape'; path: string | Path2D; viewBox?: readonly [number, number, number, number] }
   | { type: 'text'; text: string; font?: string }
-  /** Another image or video, read by luminance: brightest reveals first. */
+  /** Another image or video (spec: "sampled by luminance or alpha"). An
+   *  image with any transparency is read by alpha — its silhouette — and
+   *  an opaque one or a video by luminance, brightest first. */
   | Media
+  /** The same, choosing the channel. */
+  | { source: Media; channel: 'luminance' | 'alpha' }
   /** Need @comice/vision (not built yet) — throw. */
   | 'subject'
   | 'depth'
@@ -160,6 +164,25 @@ export type MaskReveal = {
   destroy(): void
 }
 
+/** Whether an image has any transparency, from a small sample (once). A
+ *  video, an image not decoded yet, or one that can't be read back
+ *  (cross-origin without CORS) counts as opaque. */
+export function hasTransparency(media: Media): boolean {
+  if (!(media instanceof HTMLImageElement) || !media.complete || !media.naturalWidth) return false
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 16
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return false
+    ctx.drawImage(media, 0, 0, 16, 16)
+    const { data } = ctx.getImageData(0, 0, 16, 16)
+    for (let i = 3; i < data.length; i += 4) if (data[i]! < 250) return true
+    return false
+  } catch {
+    return false
+  }
+}
+
 export function createMaskReveal(target: Media, instance: ComiceInstance, source: RevealMaskSource): MaskReveal {
   let progress = 0
   let destroyed = false
@@ -170,6 +193,10 @@ export function createMaskReveal(target: Media, instance: ComiceInstance, source
   let derived: DerivedMask | null = null
   let unregister: (() => void) | null = null
   let resizeObserver: ResizeObserver | null = null
+
+  const maskMedia: Media | null =
+    source instanceof HTMLImageElement || source instanceof HTMLVideoElement ? source : typeof source === 'object' && 'source' in source ? source.source : null
+  const explicitChannel = typeof source === 'object' && 'channel' in source ? source.channel : undefined
 
   const glContext: GLContext | null = createGLContext(target)
   const reporter: GLReporter = createGLReporter(instance, 'reveal', () => mount?.release())
@@ -188,10 +215,11 @@ export function createMaskReveal(target: Media, instance: ComiceInstance, source
 
   if (glContext && program) {
     mount = mountCanvas(glContext, target, { owner: 'reveal', hideTarget: true })
-    if (source instanceof HTMLImageElement || source instanceof HTMLVideoElement) {
-      maskPlane = createPlane(glContext, source)
-      derived = createDerivedMask(glContext, source instanceof HTMLVideoElement ? 'video' : 'image')
-    } else if (typeof source === 'object' && source.type === 'cursor') {
+    if (maskMedia) {
+      // The derived mask is made at the first draw with the mask image
+      // decoded, so 'auto' can look at its pixels.
+      maskPlane = createPlane(glContext, maskMedia)
+    } else if (typeof source === 'object' && 'type' in source && source.type === 'cursor') {
       cursor = createCursorMask({ falloff: 'smooth' })
     } else {
       rasterized = createRasterizedMask(glContext)
@@ -219,6 +247,10 @@ export function createMaskReveal(target: Media, instance: ComiceInstance, source
       cursor.setCenter((instance.display.x / width) * aspect, 1 - instance.display.y / height)
       cursor.setRadius(radius)
       cursor.setSoftness(radius * Math.max(0, Math.min(1, source.softness ?? 0.4)))
+    }
+    if (!derived && maskMedia && maskPlane?.texture) {
+      const channel = explicitChannel ?? (hasTransparency(maskMedia) ? 'alpha' : 'luminance')
+      derived = createDerivedMask(glContext, maskMedia instanceof HTMLVideoElement ? 'video' : 'image', { channel })
     }
     if (derived && maskPlane?.texture) derived.reduce(maskPlane.texture, width, height)
 
