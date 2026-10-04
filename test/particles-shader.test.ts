@@ -1,250 +1,79 @@
 /**
- * test/particles-shader.test — packages/particles/src/shader.ts
+ * test/particles-shader — packages/particles/src/shader.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Runs against happy-dom plus test/fake-webgl2.ts, including its new
- * drawArraysInstanced/vertexAttribDivisor/uniform1iv fakes
- * (added this pass — see fake-webgl2.ts's own comments).
+ * Both modes render in Chromium (verified with screenshots); these pin the
+ * GLSL that matters and the GL wiring, against test/fake-webgl2.ts.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { compileParticlesProgram, destroyParticlesProgram, drawParticles, uploadParticleBuffers, type ParticlesMode } from '../packages/particles/src/shader.js'
+import { describe, expect, it } from 'bun:test'
+import { compileParticlesProgram, createSourceTexture, destroyParticlesProgram, drawParticles, uploadParticleBuffers, uploadSourceTexture, type ParticlesMode } from '../packages/particles/src/shader.js'
 import { createFakeGLContext } from './fake-webgl2.js'
 
 const MODES: ParticlesMode[] = ['cloud', 'shatter']
 
+function compiled(mode: ParticlesMode) {
+  const context = createFakeGLContext(document.createElement('canvas'))
+  const sources: string[] = []
+  const shaderSource = context.gl.shaderSource.bind(context.gl)
+  context.gl.shaderSource = (shader: WebGLShader, source: string) => {
+    sources.push(source)
+    shaderSource(shader, source)
+  }
+  const program = compileParticlesProgram(context.gl, mode)
+  return { context, program, vertex: sources[0]!, fragment: sources[1]! }
+}
+
 describe('compileParticlesProgram', () => {
-  let canvas: HTMLCanvasElement
-
-  beforeEach(() => {
-    canvas = document.createElement('canvas')
-    document.body.appendChild(canvas)
-  })
-
-  afterEach(() => {
-    canvas.remove()
-  })
-
-  it.each(MODES)('compiles successfully for mode "%s"', (mode) => {
-    const context = createFakeGLContext(canvas)
-    expect(compileParticlesProgram(context.gl, { mode })).not.toBeNull()
-  })
-
-  it('mode "cloud" does not throw on attribute setup even though a_baseVertex is unused in its own vertex shader', () => {
-    // Regression test for a real bug found against an actual browser's
-    // WebGL2 implementation (not this fake — see this exact fix's own
-    // commit, and fake-webgl2.ts's getAttribLocation()/
-    // enableVertexAttribArray() comments for the full story): a GLSL `in`
-    // attribute that's declared but never READ anywhere in a shader's
-    // main() may be optimized away entirely by a spec-compliant
-    // compiler, making getAttribLocation() return -1.
-    // packages/particles/src/shader.ts's shared vertex-shader header
-    // declares `a_baseVertex` for both modes, but 'cloud' mode's own
-    // main() never references it (only 'shatter' does) — compiling AND
-    // fully setting up 'cloud' mode's vertex attributes, all the way
-    // through to a non-null program, is what proves the -1 guard around
-    // enableVertexAttribArray/vertexAttribPointer actually works, not
-    // just that compilation itself succeeded.
-    const context = createFakeGLContext(canvas)
-    const program = compileParticlesProgram(context.gl, { mode: 'cloud' })
+  it.each(MODES)('%s compiles, with every uniform', (mode) => {
+    const { program } = compiled(mode)
     expect(program).not.toBeNull()
+    expect(Object.keys(program!.uniforms).sort()).toEqual(['cell', 'from', 'noiseAmount', 'pointSize', 'progress', 'resolution', 'scatter', 'time', 'to'])
+    expect(program!.baseVertexCount).toBe(mode === 'cloud' ? 1 : 4)
   })
 
-  it.each(MODES)('compiles successfully with fluid motion enabled for mode "%s"', (mode) => {
-    const context = createFakeGLContext(canvas)
-    expect(compileParticlesProgram(context.gl, { mode, fluid: true })).not.toBeNull()
+  it('everything in flight is scaled by sin(pi * progress): both ends land exactly', () => {
+    const { vertex } = compiled('cloud')
+    expect(vertex).toContain('float flight = sin(3.14159265 * u_progress);')
+    expect(vertex).toContain('* reach * u_scatter * flight')
+    expect(vertex).toContain('flow.xy * u_noiseAmount * flight')
   })
 
-  it('caches by (mode, fluid) — same config returns the same program', () => {
-    const context = createFakeGLContext(canvas)
-    const a = compileParticlesProgram(context.gl, { mode: 'cloud', fluid: true })
-    const b = compileParticlesProgram(context.gl, { mode: 'cloud', fluid: true })
-    expect(a).toBe(b)
+  it('cloud colours each point from the source textures; shatter samples its own piece', () => {
+    expect(compiled('cloud').vertex).toContain('mix(textureLod(u_from, a_origin, 0.0), textureLod(u_to, a_target, 0.0), u_progress)')
+    const shatter = compiled('shatter')
+    expect(shatter.vertex).toContain('v_uvFrom = a_origin + a_baseVertex * u_cell;')
+    expect(shatter.fragment).toContain('texture(u_from, v_uvFrom)')
+    // Shares u_progress with the vertex shader: precisions must match, or
+    // the link fails (it did, in Chromium).
+    expect(shatter.fragment).toContain('precision highp float;')
   })
 
-  it('a different mode produces a different cached program', () => {
-    const context = createFakeGLContext(canvas)
-    const a = compileParticlesProgram(context.gl, { mode: 'cloud' })
-    const b = compileParticlesProgram(context.gl, { mode: 'shatter' })
-    expect(a).not.toBe(b)
-  })
-
-  it('cloud uses a single base vertex, shatter uses four (a unit quad)', () => {
-    const context = createFakeGLContext(canvas)
-    const cloud = compileParticlesProgram(context.gl, { mode: 'cloud' })!
-    const shatter = compileParticlesProgram(context.gl, { mode: 'shatter' })!
-    expect(cloud.baseVertexCount).toBe(1)
-    expect(shatter.baseVertexCount).toBe(4)
-  })
-
-  it('exposes every uniform location', () => {
-    const context = createFakeGLContext(canvas)
-    const program = compileParticlesProgram(context.gl, { mode: 'shatter' })!
-    expect(program.uProgress).not.toBeNull()
-    expect(program.uPointSize).not.toBeNull()
-    expect(program.uNoiseAmount).not.toBeNull()
-    expect(program.uTime).not.toBeNull()
-  })
-
-  it('returns null, never throws, when shader compilation fails', () => {
-    const context = createFakeGLContext(canvas, { failShaderCompile: true })
-    expect(compileParticlesProgram(context.gl, { mode: 'cloud' })).toBeNull()
-  })
-
-  it('returns null, never throws, when program linking fails', () => {
-    const context = createFakeGLContext(canvas, { failProgramLink: true })
-    expect(compileParticlesProgram(context.gl, { mode: 'cloud' })).toBeNull()
-  })
-
-  it('returns null, never throws, when createProgram() itself returns null', () => {
-    const context = createFakeGLContext(canvas, { failCreateProgram: true })
-    expect(compileParticlesProgram(context.gl, { mode: 'cloud' })).toBeNull()
-  })
-
-  it('a failed compile is also cached', () => {
-    const context = createFakeGLContext(canvas, { failShaderCompile: true })
-    const a = compileParticlesProgram(context.gl, { mode: 'cloud' })
-    const b = compileParticlesProgram(context.gl, { mode: 'cloud' })
-    expect(a).toBeNull()
-    expect(b).toBeNull()
-  })
-})
-
-describe('destroyParticlesProgram', () => {
-  it('does not throw', () => {
-    const canvas = document.createElement('canvas')
-    document.body.appendChild(canvas)
-    const context = createFakeGLContext(canvas)
-    const program = compileParticlesProgram(context.gl, { mode: 'cloud' })!
-    expect(() => destroyParticlesProgram(context.gl, program)).not.toThrow()
-    canvas.remove()
-  })
-
-  it('a program shared by two instances survives the FIRST destroy — real bug found running many particles() instances on one page', () => {
-    const canvas = document.createElement('canvas')
-    document.body.appendChild(canvas)
-    const context = createFakeGLContext(canvas)
-
-    const instanceA = compileParticlesProgram(context.gl, { mode: 'cloud', fluid: true })!
-    const instanceB = compileParticlesProgram(context.gl, { mode: 'cloud', fluid: true })!
-    expect(instanceA).toBe(instanceB) // same cached object, the whole point of the cache
-
-    destroyParticlesProgram(context.gl, instanceA) // instance A tears down first
-
-    // instanceB's own reference must still be usable — recompiling the
-    // SAME config while B is still alive must return B's own object
-    // unchanged (not a new one), proving the cache entry was never
-    // evicted out from under the still-live reference.
-    const stillCached = compileParticlesProgram(context.gl, { mode: 'cloud', fluid: true })
-    expect(stillCached).toBe(instanceB)
-
-    canvas.remove()
-  })
-
-  it('the underlying cache entry IS evicted once every reference has been released — a later compile genuinely recompiles', () => {
-    const canvas = document.createElement('canvas')
-    document.body.appendChild(canvas)
-    const context = createFakeGLContext(canvas)
-
-    const instanceA = compileParticlesProgram(context.gl, { mode: 'shatter' })!
-    const instanceB = compileParticlesProgram(context.gl, { mode: 'shatter' })!
-
-    destroyParticlesProgram(context.gl, instanceA)
-    destroyParticlesProgram(context.gl, instanceB) // last reference released
-
-    const recompiled = compileParticlesProgram(context.gl, { mode: 'shatter' })!
-    // A genuinely NEW object — proves the stale entry was actually
-    // evicted from the cache, not left dangling for a future compile to
-    // incorrectly reuse.
-    expect(recompiled).not.toBe(instanceA)
-    expect(recompiled).not.toBe(instanceB)
-
-    canvas.remove()
-  })
-
-  it('destroying more times than compiled for a config does not throw (defensive floor at 0)', () => {
-    const canvas = document.createElement('canvas')
-    document.body.appendChild(canvas)
-    const context = createFakeGLContext(canvas)
-    const program = compileParticlesProgram(context.gl, { mode: 'cloud' })!
-    destroyParticlesProgram(context.gl, program)
-    expect(() => destroyParticlesProgram(context.gl, program)).not.toThrow()
-    canvas.remove()
-  })
-
-  it('does not throw for a program that was never compiled through this cache at all', () => {
-    const canvas = document.createElement('canvas')
-    document.body.appendChild(canvas)
-    const context = createFakeGLContext(canvas)
-    const foreignProgram = {
-      program: {} as WebGLProgram,
-      vao: {} as WebGLVertexArrayObject,
-      baseVertexBuffer: {} as WebGLBuffer,
-      originBuffer: {} as WebGLBuffer,
-      targetBuffer: {} as WebGLBuffer,
-      colorBuffer: {} as WebGLBuffer,
-      uProgress: null,
-      uPointSize: null,
-      uNoiseAmount: null,
-      uTime: null,
-      uResolution: null,
-      mode: 'cloud' as const,
-      baseVertexCount: 1,
+  it('returns null, never throws, when compile, createProgram or link fails', () => {
+    for (const fail of ['failShaderCompile', 'failCreateProgram', 'failProgramLink'] as const) {
+      const context = createFakeGLContext(document.createElement('canvas'), { [fail]: true })
+      expect(compileParticlesProgram(context.gl, 'cloud')).toBeNull()
     }
-    expect(() => destroyParticlesProgram(context.gl, foreignProgram)).not.toThrow()
-    canvas.remove()
   })
 })
 
-describe('uploadParticleBuffers', () => {
-  it('does not throw for a non-trivial buffer set', () => {
-    const canvas = document.createElement('canvas')
-    document.body.appendChild(canvas)
-    const context = createFakeGLContext(canvas)
-    const program = compileParticlesProgram(context.gl, { mode: 'cloud' })!
-    const origins = new Float32Array([0.1, 0.2, 0.3, 0.4])
-    const targets = new Float32Array([0.5, 0.6, 0.7, 0.8])
-    const colors = new Float32Array([1, 0, 0, 1, 0, 1, 0, 1])
-    expect(() => uploadParticleBuffers(context.gl, program, origins, targets, colors)).not.toThrow()
-    canvas.remove()
-  })
-})
-
-describe('drawParticles', () => {
-  let canvas: HTMLCanvasElement
-
-  beforeEach(() => {
-    canvas = document.createElement('canvas')
-    document.body.appendChild(canvas)
-  })
-
-  afterEach(() => {
-    canvas.remove()
-  })
-
-  const baseState = { progress: 0.5, pointSize: 3, noiseAmount: 0.02, time: 1.2, resolutionWidth: 400, resolutionHeight: 300, instanceCount: 100 }
-
-  it.each(MODES)('draws without throwing for mode "%s"', (mode) => {
-    const context = createFakeGLContext(canvas)
-    const program = compileParticlesProgram(context.gl, { mode })!
-    expect(() => drawParticles(context, program, baseState)).not.toThrow()
-  })
-
-  it('does nothing (no throw) when instanceCount is 0', () => {
-    const context = createFakeGLContext(canvas)
-    const program = compileParticlesProgram(context.gl, { mode: 'cloud' })!
-    expect(() => drawParticles(context, program, { ...baseState, instanceCount: 0 })).not.toThrow()
-  })
-
-  it('does nothing (no throw) when instanceCount is negative', () => {
-    const context = createFakeGLContext(canvas)
-    const program = compileParticlesProgram(context.gl, { mode: 'cloud' })!
-    expect(() => drawParticles(context, program, { ...baseState, instanceCount: -5 })).not.toThrow()
-  })
-
-  it('draws without throwing at progress 0 and 1', () => {
-    const context = createFakeGLContext(canvas)
-    const program = compileParticlesProgram(context.gl, { mode: 'shatter' })!
-    expect(() => drawParticles(context, program, { ...baseState, progress: 0 })).not.toThrow()
-    expect(() => drawParticles(context, program, { ...baseState, progress: 1 })).not.toThrow()
+describe('buffers, textures and drawing', () => {
+  it('uploads, draws (clearing first) and destroys without throwing', () => {
+    for (const mode of MODES) {
+      const { context, program } = compiled(mode)
+      let clears = 0
+      const clear = context.gl.clear.bind(context.gl)
+      context.gl.clear = (mask: number) => {
+        clears++
+        clear(mask)
+      }
+      uploadParticleBuffers(context.gl, program!, new Float32Array([0.1, 0.2]), new Float32Array([0.3, 0.4]))
+      const texture = createSourceTexture(context.gl)!
+      uploadSourceTexture(context.gl, texture, document.createElement('canvas'))
+      const state = { progress: 0.5, pointSize: 3, noiseAmount: 0.03, scatter: 0.12, time: 1, cell: [0.1, 0.1] as const, resolutionWidth: 400, resolutionHeight: 300, instanceCount: 1, from: texture, to: texture }
+      expect(() => drawParticles(context, program!, state)).not.toThrow()
+      expect(() => drawParticles(context, program!, { ...state, instanceCount: 0 })).not.toThrow()
+      expect(clears).toBe(2) // a frame with nothing to draw still clears the last one
+      expect(() => destroyParticlesProgram(context.gl, program!)).not.toThrow()
+    }
   })
 })

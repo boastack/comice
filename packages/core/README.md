@@ -46,7 +46,7 @@ Every interactive element is a state machine — `idle`, `entering`, `active`, `
 
 ## Drivers
 
-`scroll()`, `pointer()`, `hover()`, `click()`, `drag()`, `time()` and `audio()`. No ScrollTrigger needed: scroll uses the browser's native ScrollTimeline where it exists. `click()` and `hover()` animate over a `duration` (default 400ms).
+`scroll()`, `pointer()`, `hover()`, `click()`, `drag()`, `time()` and `audio()`. No ScrollTrigger needed: `scroll()` runs 0 as the element enters the bottom of the viewport (or `root`) to 1 as it leaves the top, using the browser's native view timeline where it exists. `click()` and `hover()` animate over a `duration` (default 400ms).
 
 ## Built-in budgets
 

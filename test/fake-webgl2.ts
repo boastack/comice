@@ -334,6 +334,10 @@ export function installFake2DContext(options: Fake2DOptions = {}): { callLog: Fa
       fillText(text: string, _x: number, _y: number) {
         callLog.filledTexts.push(text)
       },
+      // measureText — @comice/particles fits { text } sources to the stage.
+      measureText(text: string) {
+        return { width: text.length * 10 } as TextMetrics
+      },
       getImageData(_x: number, _y: number, w: number, h: number) {
         const data = new Uint8ClampedArray(w * h * 4)
         for (let i = 0; i < w * h; i++) data[i * 4 + 3] = alpha

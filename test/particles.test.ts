@@ -17,6 +17,7 @@ function readyImage(): HTMLImageElement {
   const img = document.createElement('img')
   Object.defineProperty(img, 'complete', { value: true, configurable: true })
   Object.defineProperty(img, 'naturalWidth', { value: 800, configurable: true })
+  Object.defineProperty(img, 'naturalHeight', { value: 600, configurable: true })
   return img
 }
 

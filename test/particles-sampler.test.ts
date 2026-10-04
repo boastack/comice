@@ -1,147 +1,150 @@
 /**
- * test/particles-sampler.test — packages/particles/src/sampler.ts
+ * test/particles-sampler — packages/particles/src/sampler.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * sampleParticles()/resampleToCount() are pure (no DOM), tested directly
- * against synthetic ImageData-shaped input. sampleSource() rasterizes via
- * an offscreen 2D canvas, so those tests install the same
- * installFake2DContext() fake test/seed.test.ts uses (happy-dom has no
- * real 2D canvas — see that file's own header for why).
+ * Sources are drawn at the STAGE's aspect (cover-fitted, never stretched)
+ * and sampled to about `count` cells. They used to go into a fixed 128x128
+ * square: `count` capped near 16k (the spec asks 120,000) and wide stages
+ * squashed text.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { resampleToCount, sampleParticles, sampleSource } from '../packages/particles/src/sampler.js'
+import { afterEach, describe, expect, it } from 'bun:test'
+import { canvasSizeFor, coverRect, gridFor, rasterizeSource, resampleToCount, sampleGrid, type ParticleSample } from '../packages/particles/src/sampler.js'
 import { installFake2DContext } from './fake-webgl2.js'
 
-function makeImageData(width: number, height: number, fill: (x: number, y: number) => [number, number, number, number]): ImageData {
-  const data = new Uint8ClampedArray(width * height * 4)
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const [r, g, b, a] = fill(x, y)
-      const idx = (y * width + x) * 4
-      data[idx] = r
-      data[idx + 1] = g
-      data[idx + 2] = b
-      data[idx + 3] = a
-    }
+const style = { fontFamily: 'Inter', fontWeight: '800', color: 'rgb(242, 239, 232)' }
+
+/** A canvas whose 2D context records what was drawn. */
+function recordingCanvas(width: number, height: number, measured = 100) {
+  const calls: { drawImage?: unknown[]; font?: string; fillStyle?: string; text?: string } = {}
+  const ctx = {
+    font: '',
+    fillStyle: '',
+    textAlign: '',
+    textBaseline: '',
+    clearRect() {},
+    measureText: () => ({ width: measured }),
+    drawImage: (...args: unknown[]) => (calls.drawImage = args),
+    fillText(text: string) {
+      calls.text = text
+      calls.font = ctx.font
+      calls.fillStyle = ctx.fillStyle
+    },
   }
-  return { width, height, data } as unknown as ImageData
+  return { canvas: { width, height, getContext: () => ctx } as unknown as HTMLCanvasElement, calls }
 }
 
-describe('sampleParticles', () => {
-  it('samples one particle per non-transparent pixel when count >= total pixels', () => {
-    const imageData = makeImageData(4, 4, () => [255, 0, 0, 255])
-    const sample = sampleParticles(imageData, 100) // count far exceeds 16 pixels -> stride 1
-    expect(sample.count).toBe(16)
-    expect(sample.positions.length).toBe(32)
-    expect(sample.colors.length).toBe(64)
+function media(width: number, height: number): HTMLImageElement {
+  const img = document.createElement('img')
+  Object.defineProperty(img, 'naturalWidth', { value: width })
+  Object.defineProperty(img, 'naturalHeight', { value: height })
+  return img
+}
+
+describe('gridFor', () => {
+  it('about `count` cells, shaped like the stage', () => {
+    const { columns, rows } = gridFor(120000, 16 / 9)
+    expect(Math.abs(columns * rows - 120000) / 120000).toBeLessThan(0.01)
+    expect(columns / rows).toBeCloseTo(16 / 9, 1)
+    expect(gridFor(100, 1)).toEqual({ columns: 10, rows: 10 })
+    expect(gridFor(0, 1)).toEqual({ columns: 1, rows: 1 })
+  })
+})
+
+describe('coverRect', () => {
+  it('crops the sides of a wider source and the top/bottom of a taller one, centred', () => {
+    expect(coverRect(2000, 1000, 100, 100)).toEqual({ x: 500, y: 0, width: 1000, height: 1000 })
+    expect(coverRect(600, 750, 800, 450)).toEqual({ x: 0, y: 206.25, width: 600, height: 337.5 })
+  })
+})
+
+describe('canvasSizeFor', () => {
+  it('keeps the stage aspect, at most 1024 on the long side', () => {
+    expect(canvasSizeFor(800, 450)).toEqual({ width: 800, height: 450 })
+    expect(canvasSizeFor(4000, 1000)).toEqual({ width: 1024, height: 256 })
+    expect(canvasSizeFor(0, 0)).toEqual({ width: 1, height: 1 })
+  })
+})
+
+describe('rasterizeSource', () => {
+  it('cover-fits an image', () => {
+    const { canvas, calls } = recordingCanvas(100, 100)
+    expect(rasterizeSource(canvas, media(2000, 1000), style)).toBe(true)
+    expect(calls.drawImage!.slice(1)).toEqual([500, 0, 1000, 1000, 0, 0, 100, 100])
   })
 
-  it('skips fully-transparent pixels', () => {
-    const imageData = makeImageData(4, 4, (x) => (x < 2 ? [255, 0, 0, 255] : [0, 0, 0, 0]))
-    const sample = sampleParticles(imageData, 100)
-    expect(sample.count).toBe(8) // only the left half is opaque
+  it('reads a video by its video size', () => {
+    const { canvas, calls } = recordingCanvas(100, 100)
+    const video = document.createElement('video')
+    Object.defineProperty(video, 'videoWidth', { value: 100 })
+    Object.defineProperty(video, 'videoHeight', { value: 100 })
+    expect(rasterizeSource(canvas, video, style)).toBe(true)
+    expect(calls.drawImage!.slice(1, 5)).toEqual([0, 0, 100, 100])
   })
 
-  it('produces roughly `count` particles for a large, fully-opaque source', () => {
-    const imageData = makeImageData(64, 64, () => [1, 2, 3, 255])
-    const sample = sampleParticles(imageData, 100)
-    // Grid-stride sampling won't hit the count exactly, but should be in
-    // the right order of magnitude, never wildly over it.
-    expect(sample.count).toBeGreaterThan(0)
-    expect(sample.count).toBeLessThanOrEqual(64 * 64)
+  it("fits text in the stage's own font and colour, or the source's", () => {
+    const fits = recordingCanvas(800, 450, 100)
+    rasterizeSource(fits.canvas, { text: 'COMICE' }, style)
+    expect(fits.calls.font).toBe('800 315px Inter') // 70% of the height
+    expect(fits.calls.fillStyle).toBe(style.color)
+
+    const tooWide = recordingCanvas(800, 450, 1440) // twice the 720px allowed
+    rasterizeSource(tooWide.canvas, { text: 'COMICE', font: 'Georgia', color: '#f00' }, style)
+    expect(tooWide.calls.font).toBe('800 157px Georgia')
+    expect(tooWide.calls.fillStyle).toBe('#f00')
   })
 
-  it('positions are normalized to [0, 1) UV space', () => {
-    const imageData = makeImageData(8, 8, () => [10, 20, 30, 255])
-    const sample = sampleParticles(imageData, 100)
-    for (let i = 0; i < sample.positions.length; i++) {
-      expect(sample.positions[i]).toBeGreaterThanOrEqual(0)
-      expect(sample.positions[i]).toBeLessThan(1)
-    }
+  it('false for media with no size yet, or no 2D context', () => {
+    expect(rasterizeSource(recordingCanvas(10, 10).canvas, media(0, 0), style)).toBe(false)
+    const noContext = { width: 10, height: 10, getContext: () => null } as unknown as HTMLCanvasElement
+    expect(rasterizeSource(noContext, { text: 'x' }, style)).toBe(false)
+  })
+})
+
+describe('sampleGrid', () => {
+  let uninstall: () => void
+  afterEach(() => uninstall())
+
+  it('one particle per opaque cell, at cell centres — 120,000 is 120,000', () => {
+    ;({ uninstall } = installFake2DContext({ imageDataAlpha: 255 }))
+    const canvas = Object.assign(document.createElement('canvas'), { width: 800, height: 450 })
+    const big = sampleGrid(canvas, 120000)!
+    expect(big.count).toBe(big.columns * big.rows)
+    expect(Math.abs(big.count - 120000) / 120000).toBeLessThan(0.01)
+
+    const small = sampleGrid(Object.assign(document.createElement('canvas'), { width: 100, height: 100 }), 4)!
+    expect(Array.from(small.positions)).toEqual([0.25, 0.25, 0.75, 0.25, 0.25, 0.75, 0.75, 0.75])
   })
 
-  it('colors are normalized to [0, 1]', () => {
-    const imageData = makeImageData(4, 4, () => [255, 128, 0, 255])
-    const sample = sampleParticles(imageData, 100)
-    expect(sample.colors[0]).toBeCloseTo(1)
-    expect(sample.colors[1]).toBeCloseTo(0.5, 1)
-    expect(sample.colors[2]).toBeCloseTo(0)
-    expect(sample.colors[3]).toBeCloseTo(1)
+  it('transparent cells get none', () => {
+    ;({ uninstall } = installFake2DContext({ imageDataAlpha: 0 }))
+    expect(sampleGrid(Object.assign(document.createElement('canvas'), { width: 10, height: 10 }), 100)!.count).toBe(0)
   })
 
-  it('a fully transparent source samples zero particles', () => {
-    const imageData = makeImageData(4, 4, () => [0, 0, 0, 0])
-    const sample = sampleParticles(imageData, 100)
-    expect(sample.count).toBe(0)
+  it('null without a 2D context', () => {
+    ;({ uninstall } = installFake2DContext())
+    uninstall()
+    expect(sampleGrid(Object.assign(document.createElement('canvas'), { width: 10, height: 10 }), 100)).toBeNull()
+    ;({ uninstall } = installFake2DContext())
   })
 })
 
 describe('resampleToCount', () => {
-  it('returns the same sample object when count already matches', () => {
-    const sample = { positions: new Float32Array([0.1, 0.2]), colors: new Float32Array([1, 1, 1, 1]), count: 1 }
-    expect(resampleToCount(sample, 1)).toBe(sample)
+  const sample = (positions: number[]): ParticleSample => ({ positions: new Float32Array(positions), count: positions.length / 2, columns: 2, rows: 1 })
+
+  it('the same sample when it already fits; truncated when longer', () => {
+    const s = sample([0.1, 0.2, 0.3, 0.4])
+    expect(resampleToCount(s, 2)).toBe(s)
+    expect(Array.from(resampleToCount(s, 1).positions)).toEqual([0.1, 0.2].map(Math.fround))
   })
 
-  it('pads a shorter sample by repeating the last particle', () => {
-    const sample = { positions: new Float32Array([0.1, 0.2, 0.5, 0.5]), colors: new Float32Array([1, 0, 0, 1, 0, 1, 0, 1]), count: 2 }
-    const resampled = resampleToCount(sample, 4)
-    expect(resampled.count).toBe(4)
-    // Index 2 and 3 repeat index 1's (the last real particle's) position.
-    expect(resampled.positions[4]).toBeCloseTo(0.5)
-    expect(resampled.positions[5]).toBeCloseTo(0.5)
-    expect(resampled.positions[6]).toBeCloseTo(0.5)
-    expect(resampled.positions[7]).toBeCloseTo(0.5)
+  it('pads by cycling through the sample (not piling onto the last point)', () => {
+    const padded = resampleToCount(sample([0.1, 0.2, 0.3, 0.4]), 4)
+    expect(Array.from(padded.positions)).toEqual([0.1, 0.2, 0.3, 0.4, 0.1, 0.2, 0.3, 0.4].map(Math.fround))
+    expect(padded.columns).toBe(2)
   })
 
-  it('truncates a longer sample', () => {
-    const sample = { positions: new Float32Array([0.1, 0.1, 0.2, 0.2, 0.3, 0.3]), colors: new Float32Array(12), count: 3 }
-    const resampled = resampleToCount(sample, 2)
-    expect(resampled.count).toBe(2)
-    expect(resampled.positions.length).toBe(4)
-  })
-
-  it('a zero-count source resamples to zeroed positions at the target count', () => {
-    const sample = { positions: new Float32Array(0), colors: new Float32Array(0), count: 0 }
-    const resampled = resampleToCount(sample, 5)
-    expect(resampled.count).toBe(5)
-    expect(resampled.positions.length).toBe(10)
-    expect(Array.from(resampled.positions).every((v) => v === 0)).toBe(true)
+  it('an empty sample gathers at the centre', () => {
+    expect(Array.from(resampleToCount(sample([]), 2).positions)).toEqual([0.5, 0.5, 0.5, 0.5])
   })
 })
 
-describe('sampleSource', () => {
-  let uninstall2D: () => void
-
-  beforeEach(() => {
-    ;({ uninstall: uninstall2D } = installFake2DContext({ imageDataAlpha: 255 }))
-  })
-
-  afterEach(() => {
-    uninstall2D()
-  })
-
-  it('samples an <img> source without throwing', () => {
-    const img = document.createElement('img')
-    expect(() => sampleSource(img, 100)).not.toThrow()
-  })
-
-  it('samples a { text } source without throwing', () => {
-    expect(() => sampleSource({ text: 'COMICE' }, 100)).not.toThrow()
-  })
-
-  it('returns a ParticleSample with particles when the fake reports full alpha coverage', () => {
-    const img = document.createElement('img')
-    const sample = sampleSource(img, 200, 16)
-    expect(sample).not.toBeNull()
-    expect(sample!.count).toBeGreaterThan(0)
-  })
-
-  it('returns null when 2D canvas is unavailable', () => {
-    uninstall2D() // revert to happy-dom's real (null) getContext('2d')
-    const img = document.createElement('img')
-    expect(sampleSource(img, 100)).toBeNull()
-    // reinstall so afterEach's own uninstall call doesn't throw on a
-    // second, already-reverted teardown
-    ;({ uninstall: uninstall2D } = installFake2DContext())
-  })
-})

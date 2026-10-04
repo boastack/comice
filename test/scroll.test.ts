@@ -181,6 +181,28 @@ describe('scroll driver — fallback path (no native ScrollTimeline)', () => {
     detach2()
   })
 
+  it('root: measures against the scroll container and listens to ITS scroll (it used to be ignored)', () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    mockRect({ top: 300, height: 100 })
+    Object.defineProperty(root, 'getBoundingClientRect', { value: () => ({ top: 100, height: 400 }) as DOMRect }) // 200px into a 400px-tall container
+    const onSignal = mock()
+    const detach = scroll({ root }).attach(target, onSignal)
+    // start = 400, end = -100, top = 200: (400 - 200) / 500
+    expect(onSignal.mock.calls[0][0].progress).toBeCloseTo(0.4)
+    const original = globalThis.requestAnimationFrame
+    let queued: FrameRequestCallback | null = null
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => ((queued = cb), 1)) as typeof requestAnimationFrame
+    try {
+      root.dispatchEvent(new Event('scroll'))
+      expect(queued).not.toBeNull()
+    } finally {
+      globalThis.requestAnimationFrame = original
+      detach()
+      root.remove()
+    }
+  })
+
   it('detach removes the scroll and resize listeners and cancels a pending frame', () => {
     mockRect({ top: 400, height: 200 })
     const driver = scroll()
@@ -206,7 +228,7 @@ describe('scroll driver — fallback path (no native ScrollTimeline)', () => {
   })
 })
 
-describe('scroll driver — native ScrollTimeline path', () => {
+describe('scroll driver — native ViewTimeline path', () => {
   let target: HTMLElement
   let animateSpy: ReturnType<typeof mock>
   let cancelSpy: ReturnType<typeof mock>
@@ -215,8 +237,11 @@ describe('scroll driver — native ScrollTimeline path', () => {
     target = document.createElement('div')
     document.body.appendChild(target)
 
-    ;(globalThis as any).ScrollTimeline = class {
-      constructor(_opts: unknown) {}
+    ;(globalThis as any).ViewTimeline = class {
+      options: unknown
+      constructor(opts: unknown) {
+        this.options = opts
+      }
     }
 
     cancelSpy = mock()
@@ -228,16 +253,46 @@ describe('scroll driver — native ScrollTimeline path', () => {
   })
 
   afterEach(() => {
-    delete (globalThis as any).ScrollTimeline
+    delete (globalThis as any).ViewTimeline
     target.remove()
   })
 
-  it('uses target.animate() as a timing probe when ScrollTimeline is supported', () => {
+  it("probes a ViewTimeline on the TARGET over 'cover', with no keyframes", () => {
+    // It used to be a ScrollTimeline over the whole document (page scroll,
+    // not the element), probed by animating the target's opacity with
+    // fill: 'both' — which pinned any plugin's opacity on it to 1.
     const driver = scroll()
     const onSignal = mock()
     const detach = driver.attach(target, onSignal)
-    expect(animateSpy).toHaveBeenCalled()
+    const [keyframes, timing] = animateSpy.mock.calls[0] as [unknown[], { timeline: { options: { subject: Element } }; rangeStart: string; rangeEnd: string }]
+    expect(keyframes).toEqual([])
+    expect(timing.timeline.options.subject).toBe(target)
+    expect([timing.rangeStart, timing.rangeEnd]).toEqual(['cover 0%', 'cover 100%'])
     detach()
+  })
+
+  it('only reports a change: an element sitting still sends nothing new', () => {
+    const original = globalThis.requestAnimationFrame
+    const queue: FrameRequestCallback[] = []
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => queue.push(cb)) as typeof requestAnimationFrame
+    try {
+      const onSignal = mock()
+      const detach = scroll().attach(target, onSignal)
+      queue.shift()!(16)
+      queue.shift()!(32)
+      expect(onSignal).toHaveBeenCalledTimes(1)
+      detach()
+    } finally {
+      globalThis.requestAnimationFrame = original
+    }
+  })
+
+  it('threshold or offset use the fallback, which measures them', () => {
+    const detachA = scroll({ threshold: 0.2 }).attach(target, mock())
+    const detachB = scroll({ offset: 40 }).attach(target, mock())
+    expect(animateSpy).not.toHaveBeenCalled()
+    detachA()
+    detachB()
   })
 
   it('reports progress read from the probe animation on each polled frame', () => {
