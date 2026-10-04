@@ -18,7 +18,7 @@
  */
 
 import { comice } from 'comice'
-import { scroll, hover, pointer, click } from 'comice/drivers'
+import { scroll, hover, pointer } from 'comice/drivers'
 import { distort } from '@comice/distort'
 import { color } from '@comice/color'
 import { spotlight } from '@comice/spotlight'
@@ -229,8 +229,18 @@ async function boot() {
 
   // ── type (melt) + layout (wrap) in the about section ──
   try {
-    comice(document.getElementById('type-heading')).use(type({ mode: 'melt' })).driver(click({ toggle: true }))
-    log('type: melt mode on the about heading — mounted OK', 'ok')
+    // The spec's melt: change the text, and it melts from the old name into
+    // the new. Click the heading to step through the names.
+    const heading = document.getElementById('type-heading')
+    comice(heading).use(type({ mode: 'melt', melt: { blur: 14, threshold: [0.5, 18], hold: true } }))
+    const names = ['Studio Meridian', 'Atelier North', 'Basalt & Co']
+    let nameIndex = 0
+    heading.style.cursor = 'pointer'
+    heading.addEventListener('click', () => {
+      nameIndex = (nameIndex + 1) % names.length
+      heading.textContent = names[nameIndex]
+    })
+    log('type: melt on the about heading (click to change the name) — mounted OK', 'ok')
   } catch (err) {
     log(`type threw: ${err.message}`, 'fail')
   }

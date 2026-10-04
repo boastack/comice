@@ -1,68 +1,84 @@
 /**
  * @comice/type/gooey
  * ─────────────────────────────────────────────────────────────────────────────
- * Pure functions computing the CSS gooey (blur + contrast) filter chain
- * `melt` uses to morph word to word — spec's own words: "word to word
- * morphing via CSS filters... the text side twin of smin." This is the
- * well-known "gooey" CSS technique: blur two overlapping elements enough
- * that their edges bleed into each other, then apply a steep contrast
- * curve that snaps every blurred edge back to fully opaque or fully
- * transparent — which is exactly what smin's smooth-minimum blend does
- * for two SDF shapes, just expressed in CSS filter space instead of GLSL.
+ * The maths of `melt`, spec's "word to word morphing via CSS filters... the
+ * text side twin of smin". The well-known gooey text morph: the outgoing
+ * word fades while it blurs out, the incoming word fades in while it
+ * sharpens, and an alpha threshold over both (an SVG filter, applied with
+ * CSS `filter: url(#...)`) snaps the blurred overlap into one solid shape —
+ * smin's smooth minimum of two shapes, in filter space.
+ *
+ * It used to blur and `contrast()` ONE element while the caller swapped
+ * its text instantly: the two words never met, and contrast() changes
+ * colour, not alpha, so on a transparent background nothing snapped.
  *
  * Zero DOM here — index.ts applies these to real elements.
  */
 
+export type MeltCurve = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | ((t: number) => number)
+
 export type MeltOptions = {
-  /** Peak blur radius at the midpoint of the transition, px. Default 14,
-   *  matching spec's own example. */
+  /** Blur at the midpoint of the melt, px; each word blurs further as it
+   *  fades. Default 14, the spec's example. */
   blur?: number
-  /** [start, end] contrast curve — spec's own `[0.5, 18]` example: a
-   *  gentle contrast value blended toward a very steep one, snapping the
-   *  blurred blob back into crisp text by the end of the transition. */
+  /** `[cutoff, sharpness]` of the alpha threshold that welds the blurred
+   *  words into one shape: alpha below `cutoff` falls away, above it goes
+   *  solid, over a ramp `1 / sharpness` wide. Default `[0.5, 18]`, the
+   *  spec's example. */
   threshold?: readonly [number, number]
-  /** Keeps a word that DIDN'T change between two consecutive states
-   *  perfectly still (no blur/contrast applied at all) rather than
-   *  visibly "thickening" through the gooey filter for no reason — spec's
-   *  own explicit example. Default true. */
+  /** Easing over the melt. Default 'easeInOut'. */
+  curve?: MeltCurve
+  /** A word that doesn't change stays perfectly still instead of melting
+   *  into itself (the spec's "a project name that does not change between
+   *  two consecutive slides stays perfectly still instead of visibly
+   *  thickening"). Default true. */
   hold?: boolean
+  /** How long a melt takes when the text changes, ms. Default 600. */
+  duration?: number
 }
 
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value))
 
-/**
- * The blur radius at a given point in the transition — a triangle wave
- * peaking at progress 0.5 (maximum gooeyness exactly between the two
- * words) and returning to 0 at both ends (crisp text at rest, on both
- * sides of the transition).
- */
-export function meltBlur(progress: number, options: MeltOptions = {}): number {
-  const peak = options.blur ?? 14
-  const p = clamp01(progress)
-  const triangle = 1 - Math.abs(p * 2 - 1)
-  return peak * triangle
+/** `curve` applied to 0..1 progress. */
+export function ease(curve: MeltCurve | undefined, t: number): number {
+  const p = clamp01(t)
+  if (typeof curve === 'function') return clamp01(curve(p))
+  switch (curve ?? 'easeInOut') {
+    case 'linear':
+      return p
+    case 'easeIn':
+      return p * p * p
+    case 'easeOut':
+      return 1 - (1 - p) ** 3
+    default:
+      return p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2
+  }
 }
 
-/**
- * The contrast() filter value at a given point — interpolates from
- * `threshold[0]` (gentle, at rest) toward `threshold[1]` (steep, at the
- * midpoint) and back, the same triangle shape as meltBlur() but over the
- * CONTRAST curve rather than the blur radius, so peak blur and peak
- * contrast-snap happen at the same instant.
- */
-export function meltContrast(progress: number, options: MeltOptions = {}): number {
-  const [gentle, steep] = options.threshold ?? [0.5, 18]
-  const p = clamp01(progress)
-  const triangle = 1 - Math.abs(p * 2 - 1)
-  return gentle + (steep - gentle) * triangle
+export type WordFrame = { opacity: number; blur: number }
+
+/** Blur of a word at `presence` (0 gone .. 1 fully there): `blur` at half
+ *  presence, 0 when fully there, growing (capped) as it vanishes. */
+function wordFrame(presence: number, blur: number): WordFrame {
+  if (presence <= 0) return { opacity: 0, blur: 0 }
+  return { opacity: presence ** 0.4, blur: Math.min(blur * ((1 - presence) / presence), 100) }
 }
 
-/** The full CSS filter string for one melt frame — the standard gooey
- *  recipe (blur then contrast, in that order) as a single `filter`
- *  property value. */
-export function meltFilter(progress: number, options: MeltOptions = {}): string {
-  const blur = meltBlur(progress, options)
-  const contrast = meltContrast(progress, options)
-  if (blur <= 0.001) return 'none'
-  return `blur(${blur.toFixed(2)}px) contrast(${contrast.toFixed(2)})`
+/** Both words at one point of the melt (`progress` already eased). */
+export function meltFrame(progress: number, options: MeltOptions = {}): { from: WordFrame; to: WordFrame } {
+  const p = clamp01(progress)
+  const blur = options.blur ?? 14
+  return { from: wordFrame(1 - p, blur), to: wordFrame(p, blur) }
+}
+
+/** The feColorMatrix `values` for the alpha threshold: colour untouched,
+ *  alpha' = sharpness * (alpha - cutoff) + 0.5. */
+export function thresholdMatrix(threshold: readonly [number, number] = [0.5, 18]): string {
+  const [cutoff, sharpness] = threshold
+  return `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 ${sharpness} ${0.5 - sharpness * cutoff}`
+}
+
+/** The CSS `filter` for one word: its blur, or none. */
+export function wordFilter(frame: WordFrame): string {
+  return frame.blur > 0.01 ? `blur(${frame.blur.toFixed(2)}px)` : 'none'
 }

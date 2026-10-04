@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'bun:test'
 import { comice, type ComiceHandle } from '../packages/core/src/index.js'
-import { setMeltTarget, type } from '../packages/type/src/index.js'
+import { type } from '../packages/type/src/index.js'
 
 function makeTextAndMedia(): { textEl: HTMLHeadingElement; img: HTMLImageElement } {
   const img = document.createElement('img')
@@ -115,39 +115,8 @@ describe('type — mode: knockout', () => {
   })
 })
 
-describe('type — mode: melt', () => {
-  it('applies "none" filter at progress 0', () => {
-    const { textEl, img } = makeTextAndMedia()
-    const handle = comice(textEl) as ComiceHandle
-    handle.use(type({ mode: 'melt' }))
-    expect(textEl.style.filter).toBe('none')
-    textEl.remove()
-    img.remove()
-  })
-
-  it('applies a blur+contrast filter mid-transition', () => {
-    const { textEl, img } = makeTextAndMedia()
-    const handle = comice(textEl) as ComiceHandle
-    handle.use(type({ mode: 'melt' }))
-    handle.setProgress(0.5)
-    expect(textEl.style.filter).toContain('blur(')
-    expect(textEl.style.filter).toContain('contrast(')
-    textEl.remove()
-    img.remove()
-  })
-
-  it('respects custom melt options', () => {
-    const { textEl, img } = makeTextAndMedia()
-    const handle = comice(textEl) as ComiceHandle
-    handle.use(type({ mode: 'melt', melt: { blur: 30, threshold: [1, 25] } }))
-    handle.setProgress(0.5)
-    expect(textEl.style.filter).toContain('blur(30.00px)')
-    expect(textEl.style.filter).toContain('contrast(25.00)')
-    textEl.remove()
-    img.remove()
-  })
-
-  it('non-melt modes do not react to progress changes at all', () => {
+describe('type — non-melt modes', () => {
+  it('do not react to progress changes at all', () => {
     const { textEl, img } = makeTextAndMedia()
     const handle = comice(textEl) as ComiceHandle
     handle.use(type({ mode: 'fill', media: '#hero-media' }))
@@ -189,30 +158,5 @@ describe('type — params (MappableTarget)', () => {
     expect(() => plugin.params!.setParam('bogus', 1)).not.toThrow()
     textEl.remove()
     img.remove()
-  })
-})
-
-describe('setMeltTarget', () => {
-  it('swaps text content when it differs', () => {
-    const el = document.createElement('div')
-    el.textContent = 'old'
-    const changed = setMeltTarget(el, 'new')
-    expect(changed).toBe(true)
-    expect(el.textContent).toBe('new')
-  })
-
-  it('hold: true (default) skips the swap and returns false when text is identical', () => {
-    const el = document.createElement('div')
-    el.textContent = 'same'
-    const changed = setMeltTarget(el, 'same')
-    expect(changed).toBe(false)
-    expect(el.textContent).toBe('same')
-  })
-
-  it('hold: false always swaps, even for identical text', () => {
-    const el = document.createElement('div')
-    el.textContent = 'same'
-    const changed = setMeltTarget(el, 'same', false)
-    expect(changed).toBe(true)
   })
 })

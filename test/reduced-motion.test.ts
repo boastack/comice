@@ -119,18 +119,21 @@ describe('plugins under reduced motion', () => {
     el?.remove()
   })
 
-  it('type melt jumps to its end state instead of blurring through the middle', () => {
+  it('type melt jumps to its end state instead of blurring through the middle', async () => {
     el = document.createElement('h2')
+    el.textContent = 'Aurora'
     document.body.appendChild(el)
     handle = comice(el) as ComiceHandle
     handle.use(type({ mode: 'melt' }))
+    el.textContent = 'Basalt'
+    await new Promise((resolve) => setTimeout(resolve, 0)) // the text change reaches melt
 
-    handle.setProgress(0.5) // melt's blur peak
-    expect(el.style.filter).not.toBe('') // normally: mid-melt
+    handle.setProgress(0.5) // scrubbed to the middle of Aurora -> Basalt
+    expect(el.hasAttribute('data-comice-melt')).toBe(true)
 
     setReducedMotion(true)
     handle.setProgress(0.6) // a new value (an unchanged one is ignored by the state machine)
-    expect(el.style.filter).toBe('none') // snapped to the end: no blur in between
+    expect(el.hasAttribute('data-comice-melt')).toBe(false) // snapped to the end: no blur in between
   })
 
   it("a click goes straight to 'active' in one step", () => {

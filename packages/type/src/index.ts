@@ -24,16 +24,15 @@
  *   'knockout' — the text cuts a hole OUT of the media rather than being
  *                filled by it (mix-blend-mode: destination-out via a
  *                dedicated compositing layer), the inverse of 'fill'.
- *   'melt'     — see gooey.ts. Morphs between the CURRENT text content
- *                and `melt`'s own target content (index.ts's own
- *                `setText()` — a caller drives content changes, melt
- *                animates the transition between them) via the
- *                blur+contrast gooey filter chain.
+ *   'melt'     — melt.ts. Change the element's text and it melts from
+ *                the old word into the new (gooey cross-fade + alpha
+ *                threshold); driven progress scrubs the last pair.
  */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
 import { snapForReducedMotion } from 'comice'
-import { meltFilter, type MeltOptions } from './gooey.js'
+import type { MeltOptions } from './gooey.js'
+import { createMelt, type Melt } from './melt.js'
 
 export type TypeMode = 'fill' | 'behind' | 'knockout' | 'melt'
 
@@ -45,13 +44,9 @@ export type TypeOptions = {
    *  'melt' (melt operates on the text element alone, morphing between
    *  its own content states). */
   media?: string
-  /** { blur, threshold, curve, hold }. `curve` is accepted for API
-   *  fidelity with spec's own option shape but this pass's gooey.ts only
-   *  implements the triangle-wave shape every one of spec's own worked
-   *  examples describes ("blur then contrast, both peaking at the
-   *  midpoint") — a caller-selectable easing CURVE on top of that shape
-   *  is a smaller follow-up, not a blocked one. */
-  melt?: MeltOptions & { curve?: 'linear' | 'easeInOut' }
+  /** `{ blur, threshold, curve, hold, duration }` — see gooey.ts. Change
+   *  the element's text and it melts from the old word into the new. */
+  melt?: MeltOptions
 }
 
 function resolveMediaElement(selector: string | undefined): HTMLElement | null {
@@ -71,6 +66,7 @@ export function type(options: TypeOptions = {}): ComicePlugin {
   let unsubscribe: (() => void) | null = null
   let originalStyle: { backgroundImage: string; backgroundClip: string; webkitBackgroundClip: string; color: string; mixBlendMode: string; position: string; zIndex: string; filter: string } | null = null
   let currentProgress = 0
+  let melter: Melt | null = null
 
   function applyFill(): void {
     if (!target || !mediaEl) return
@@ -100,8 +96,7 @@ export function type(options: TypeOptions = {}): ComicePlugin {
   function render(progress: number): void {
     // Reduced motion: jump to whichever end state is closer, never animate between.
     currentProgress = Math.max(0, Math.min(1, snapForReducedMotion(progress)))
-    if (mode !== 'melt' || !target) return
-    target.style.filter = meltFilter(currentProgress, melt)
+    melter?.scrub(currentProgress)
   }
 
   return {
@@ -143,11 +138,14 @@ export function type(options: TypeOptions = {}): ComicePlugin {
           applyKnockout()
           break
         case 'melt':
-          render(instance.progress)
+          melter = createMelt(target, melt)
           break
       }
 
-      unsubscribe = instance.on('*', (snapshot) => {
+      // Driven progress scrubs the last melt; only real progress changes
+      // (not state or lifecycle events, which would snap it back to the
+      // old word).
+      unsubscribe = instance.on('progress', (snapshot) => {
         render(snapshot.progress)
       })
       // `ready` lifecycle event (spec §04): no GPU work to wait for, so this
@@ -157,6 +155,8 @@ export function type(options: TypeOptions = {}): ComicePlugin {
 
     teardown() {
       unsubscribe?.()
+      melter?.destroy()
+      melter = null
       if (target && originalStyle) {
         target.style.backgroundImage = originalStyle.backgroundImage
         target.style.backgroundClip = originalStyle.backgroundClip
@@ -190,28 +190,4 @@ export function type(options: TypeOptions = {}): ComicePlugin {
   }
 }
 
-/**
- * Sets the text content a 'melt'-mode instance should morph TOWARD as
- * progress advances to 1 — a caller drives the actual word swap (e.g. a
- * rail's onActive callback calling this on slide change) and lets melt's
- * own filter animate the visual transition. Exported standalone rather
- * than as a plugin method since ComicePlugin has no room for custom
- * methods beyond setup/teardown/params — mirrors how dissolve's own
- * `from`/`to` are construction-time options, not a runtime setter, but
- * melt's own "the target text CONTENT changes over time, unlike
- * dissolve's fixed two images" need is different enough to want one.
- *
- * `hold` (default true, matching MeltOptions.hold's own default): when
- * `nextText` is IDENTICAL to the target's current content, the swap is
- * skipped entirely and this returns `false` — the actual mechanism behind
- * spec's own "a project name that does not change... stays perfectly
- * still instead of visibly thickening" example. A caller checks the
- * return value to know whether it should still drive a melt progress
- * transition at all for this change (skip it when `false` — there is
- * nothing to visually morph between two identical strings).
- */
-export function setMeltTarget(target: HTMLElement, nextText: string, hold = true): boolean {
-  if (hold && target.textContent === nextText) return false
-  target.textContent = nextText
-  return true
-}
+export type { MeltCurve, MeltOptions } from './gooey.js'
