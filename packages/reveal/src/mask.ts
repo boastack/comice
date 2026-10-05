@@ -172,7 +172,7 @@ export function hasTransparency(media: Media): boolean {
   try {
     const canvas = document.createElement('canvas')
     canvas.width = canvas.height = 16
-    const ctx = canvas.getContext('2d')
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
     if (!ctx) return false
     ctx.drawImage(media, 0, 0, 16, 16)
     const { data } = ctx.getImageData(0, 0, 16, 16)

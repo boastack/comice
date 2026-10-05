@@ -58,6 +58,11 @@ export type DistortOptions = {
   /** Index-of-refraction bend, 'glass' only. Default 0, matching spec
    *  exactly ("Index-of-refraction bend, glass. Default 0."). */
   refraction?: number
+  /** Pins the field at [x, y] (0..1 across and down the image) and keeps
+   *  it on, instead of following the pointer — for distort driven by
+   *  something else, like audio: `.map('bass').to(d, 'strength')` with no
+   *  pointer had no field to strengthen. Unset: the field follows pointer(). */
+  anchor?: readonly [number, number]
   /** Edge falloff shape. Default 'smooth', matching spec exactly. */
   falloff?: 'linear' | 'smooth' | 'exp'
 }
@@ -93,7 +98,11 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
   // a redundant path to the same value — instance.on('*') is enough.
   let pointerX = 0
   let pointerY = 0
-  let pointerActive = false
+  let pointerActive = !!options.anchor && !prefersReducedMotion()
+  if (options.anchor) {
+    pointerX = options.anchor[0] * 2 - 1
+    pointerY = 1 - options.anchor[1] * 2
+  }
 
   // Per-frame motion state, advanced once per real frame in tick() — not
   // in renderFrame(), which events can call several times a frame.
@@ -237,6 +246,7 @@ export function distort(options: DistortOptions = {}): ComicePlugin {
       // pointer()'s own progress signal (1 inside radius, 0 outside) is
       // what pointerActive reads, not a separate hit-test of its own.
       unsubscribe = instance.on('*', (snapshot) => {
+        if (options.anchor) return renderFrame() // pinned: the pointer doesn't move it
         // pointer() reports CSS px from the target's top-left, y down; the
         // shader's u_pointer is -1..1 in the quad's own space, y UP (uv
         // v=0 is the bottom). Passing px straight through put the field

@@ -18,7 +18,8 @@
     "size": "size-limit",
     "harness": "pnpm build && python3 -m http.server 8743 --directory .",
     "acceptance:serve": "bun harness/acceptance/serve.ts",
-    "acceptance": "node harness/acceptance/run.mjs"
+    "acceptance": "node harness/acceptance/run.mjs",
+    "demo": "pnpm build && bun harness/acceptance/serve.ts"
   },
   "size-limit": [
     {

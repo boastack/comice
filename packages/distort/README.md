@@ -32,6 +32,7 @@ comice('.hero img')
 | `strength` | number | Default 0.5. |
 | `refraction` | number | Chromatic split, for `'glass'`. |
 | `falloff` | `'linear'` \| `'smooth'` \| `'exp'` | Default `'smooth'`. |
+| `anchor` | `[x, y]` | Pins the field at a spot (0 to 1 across and down) and keeps it on, for a driver that isn't the pointer, such as `audio()`. |
 
 Mappable: `strength`, `radius`, `refraction`, e.g. `.map('bass').to(d, 'strength', { output: [0, 0.8] })` from `audio()`.
 

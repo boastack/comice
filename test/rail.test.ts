@@ -150,9 +150,22 @@ describe('rail — DOM hit-testing stacking-context fix-up', () => {
     items.forEach((el) => {
       expect(el.style.position).toBe('absolute')
       expect(el.style.top).toBe('0px')
-      expect(el.style.left).toBe('0px')
+      expect(el.style.left).toBe('50%') // coverflow centres the active item
     })
     container.remove()
+  })
+
+  it("focus modes centre the active item; coverflow turns neighbours in depth, strip stays flat from the left", () => {
+    for (const mode of ['coverflow', 'arc', 'stack', 'strip'] as const) {
+      const { container, items } = makeCollection()
+      const handle = comice(container).use(rail({ mode }))
+      const centred = mode !== 'strip'
+      expect(items[1]!.style.left).toBe(centred ? '50%' : '0px')
+      expect(items[1]!.style.transform.startsWith('translateX(-50%)')).toBe(centred)
+      expect(items[1]!.style.transform.includes('rotateY(')).toBe(mode === 'coverflow')
+      handle.destroy()
+      container.remove()
+    }
   })
 
   it('every item\'s on-DOM z-index is offset to stay non-negative, even though physics.ts\'s own z can go negative', () => {

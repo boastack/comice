@@ -30,4 +30,5 @@ Bun.serve({
   },
 })
 
+console.log(`Comice demo:       http://localhost:${port}/demo/`)
 console.log(`Comice acceptance: http://localhost:${port}/harness/acceptance/`)

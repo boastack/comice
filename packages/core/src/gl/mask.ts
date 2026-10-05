@@ -389,7 +389,8 @@ export function createRasterizedMask(context: GLContext | null): RasterizedMask 
     const raster = canvas.ownerDocument!.createElement('canvas')
     raster.width = width
     raster.height = height
-    const ctx2d = raster.getContext('2d')
+    // Read back for an SDF bake: kept off the GPU, so getImageData doesn't stall it.
+    const ctx2d = raster.getContext('2d', { willReadFrequently: sdf })
     if (!ctx2d) return // degrade: leave the previous field (if any) as-is
 
     ctx2d.clearRect(0, 0, width, height)

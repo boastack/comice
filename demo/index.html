@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Comice — what it can do</title>
+<meta name="description" content="A tour of Comice, the GPU interaction engine for images and video." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,800&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0b0d;
+    --panel: #141418;
+    --line: #26262c;
+    --fg: #f1ede6;
+    --muted: #98958e;
+    --accent: #ffb547;
+    --code: #c9c3b8;
+    --gutter: clamp(16px, 4vw, 48px);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 Inter, system-ui, sans-serif; overflow-x: hidden; }
+  img { display: block; max-width: 100%; }
+  a { color: inherit; }
+
+  /* ── chrome ─────────────────────────────────────────────── */
+  .nav { position: fixed; inset: 0 0 auto; z-index: 50; display: flex; justify-content: space-between; align-items: center; padding: 14px var(--gutter); background: linear-gradient(var(--bg), transparent); pointer-events: none; }
+  .nav b { font: 800 18px Inter; letter-spacing: -0.02em; pointer-events: auto; }
+  .nav span { color: var(--muted); font-size: 13px; }
+  .section { padding: 18vh var(--gutter) 10vh; max-width: 1240px; margin: 0 auto; }
+  .eyebrow { font: 500 12px/1 'JetBrains Mono', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin: 0 0 14px; }
+  h2 { font: 800 clamp(34px, 6vw, 72px)/1.02 Fraunces, Georgia, serif; letter-spacing: -0.02em; margin: 0 0 16px; max-width: 16ch; }
+  .lede { color: var(--muted); max-width: 56ch; margin: 0 0 28px; font-size: 17px; }
+  pre { background: var(--panel); border: 1px solid var(--line); color: var(--code); padding: 14px 16px; border-radius: 10px; font: 13px/1.6 'JetBrains Mono', monospace; overflow-x: auto; margin: 0 0 32px; max-width: 760px; }
+  .hint { font-size: 13px; color: var(--muted); margin-top: 12px; }
+
+  /* ── pinned, scroll-driven sections ─────────────────────── */
+  .pin { height: 320vh; position: relative; }
+  .pin > .sticky { position: sticky; top: 0; height: 100vh; display: grid; grid-template-rows: auto 1fr; padding: 72px var(--gutter) 24px; max-width: 1240px; margin: 0 auto; }
+  .pin .stage { position: relative; min-height: 0; }
+  .meter { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--line); }
+  .meter i { display: block; height: 100%; width: 0; background: var(--accent); }
+
+  /* hero */
+  .hero h1 { font: 800 clamp(44px, 9vw, 120px)/0.95 Fraunces, Georgia, serif; letter-spacing: -0.03em; margin: 0; }
+  .hero p { color: var(--muted); max-width: 46ch; margin: 12px 0 0; }
+  #stage { position: absolute; inset: 0; color: var(--fg); font-family: Fraunces, Georgia, serif; font-weight: 800; }
+
+  #film { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 16px; }
+  #gallery { position: absolute; inset: 0; border-radius: 16px; overflow: hidden; }
+
+  /* distort */
+  .trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .trio figure { margin: 0; }
+  .trio img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 14px; }
+  .trio figcaption { font: 13px 'JetBrains Mono', monospace; color: var(--muted); margin-top: 10px; }
+
+  /* spotlight */
+  .projects { display: flex; gap: 14px; height: 420px; }
+  .project { flex: 1; position: relative; border-radius: 14px; overflow: hidden; min-width: 0; cursor: pointer; }
+  .project img { width: 100%; height: 100%; object-fit: cover; }
+  .project .meta { position: absolute; left: 16px; bottom: 14px; right: 16px; }
+  .project .meta b { display: block; font: 800 22px Fraunces, serif; }
+  .project .meta span { font-size: 13px; color: #ddd; }
+
+  /* rail + type */
+  .rail { display: flex; gap: 20px; height: 360px; align-items: center; user-select: none; }
+  .slide { width: 260px; height: 300px; border-radius: 14px; overflow: hidden; }
+  .slide img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+  .name { font: 800 clamp(40px, 7vw, 88px)/1 Fraunces, Georgia, serif; letter-spacing: -0.02em; margin: 8px 0 0; color: var(--fg); }
+
+  /* reveal */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .grid figure { margin: 0; }
+  .grid img { width: 100%; aspect-ratio: 16 / 11; object-fit: cover; border-radius: 12px; }
+
+  /* rebuilt */
+  .pair { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .pair img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; }
+  .control { display: flex; align-items: center; gap: 12px; margin-top: 20px; font: 13px 'JetBrains Mono', monospace; color: var(--muted); }
+  input[type=range] { accent-color: var(--accent); width: min(320px, 60vw); }
+
+  /* audio */
+  .play { border: 0; border-radius: 999px; padding: 12px 22px; background: var(--accent); color: #1a1206; font: 700 15px Inter; cursor: pointer; }
+  .bars { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 24px; }
+  .bars img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 12px; }
+
+  footer { padding: 12vh var(--gutter); text-align: center; color: var(--muted); }
+  footer b { display: block; font: 800 clamp(32px, 6vw, 64px) Fraunces, serif; color: var(--fg); margin-bottom: 8px; }
+
+  @media (max-width: 720px) {
+    .trio, .pair, .grid, .bars { grid-template-columns: 1fr 1fr; }
+    .trio figure:last-child, .pair img:last-child { display: none; }
+    .projects { height: 300px; }
+    .slide { width: 190px; height: 230px; }
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "comice": "../packages/core/dist/index.js",
+    "comice/gl": "../packages/core/dist/gl/index.js",
+    "comice/scheduler": "../packages/core/dist/scheduler.js",
+    "comice/drivers": "../packages/core/dist/drivers/index.js",
+    "comice/drivers/audio": "../packages/core/dist/drivers/audio.js",
+    "@comice/particles": "../packages/particles/dist/index.js",
+    "@comice/morph": "../packages/morph/dist/index.js",
+    "@comice/distort": "../packages/distort/dist/index.js",
+    "@comice/spotlight": "../packages/spotlight/dist/index.js",
+    "@comice/rail": "../packages/rail/dist/index.js",
+    "@comice/type": "../packages/type/dist/index.js",
+    "@comice/dissolve": "../packages/dissolve/dist/index.js",
+    "@comice/reveal": "../packages/reveal/dist/index.js",
+    "@comice/ascii": "../packages/ascii/dist/index.js",
+    "@comice/mosaic": "../packages/mosaic/dist/index.js",
+    "@comice/color": "../packages/color/dist/index.js"
+  }
+}
+</script>
+</head>
+<body>
+
+<nav class="nav"><b>Comice</b><span>A GPU interaction engine for images and video</span></nav>
+
+<!-- 1. particles -->
+<section class="pin" id="s-particles">
+  <div class="sticky hero">
+    <div>
+      <h1>Media that moves<br />like it's alive.</h1>
+      <p>Scroll. A portrait breaks into 120,000 points that drift and reassemble into a wordmark, then come back.</p>
+    </div>
+    <div class="stage"><div id="stage"></div><div class="meter"><i></i></div></div>
+  </div>
+</section>
+
+<!-- 2. morph -->
+<section class="pin" id="s-morph">
+  <div class="sticky">
+    <div>
+      <p class="eyebrow">morph</p>
+      <h2>Footage collapsing into a logo.</h2>
+    </div>
+    <div class="stage"><img id="film" src="../harness/acceptance/assets/photo-a.png" alt="A landscape" /><div class="meter"><i></i></div></div>
+  </div>
+</section>
+<div class="section" style="padding-top:4vh">
+  <p class="lede">The connecting tissue stretches and snaps, like honey or wax pulling apart, instead of fading.</p>
+  <pre>comice('#film').use(morph({
+  operation: 'mask', into: 'svg', path: 'M12 2L2 7l10 5 10-5-10-5z',
+  liquid: 0.7, thread: { sag: 6, dissolve: 4 },
+})).driver(scroll())</pre>
+</div>
+
+<!-- 3. distort -->
+<section class="section">
+  <p class="eyebrow">distort</p>
+  <h2>The cursor is a force in the field.</h2>
+  <p class="lede">Not a shape drawn at a point: the image itself bends around the pointer. Move over each one.</p>
+  <div class="trio">
+    <figure><img class="fx-glass" src="../harness/acceptance/assets/photo-b.png" alt="" /><figcaption>effect: 'glass'</figcaption></figure>
+    <figure><img class="fx-ripple" src="../harness/acceptance/assets/photo-a.png" alt="" /><figcaption>effect: 'ripple'</figcaption></figure>
+    <figure><img class="fx-liquid" src="../harness/acceptance/assets/founder.png" alt="" /><figcaption>effect: 'liquid'</figcaption></figure>
+  </div>
+  <pre style="margin-top:24px">comice('.fx-glass').use(distort({ effect: 'glass' })).driver(pointer())</pre>
+</section>
+
+<!-- 4. spotlight -->
+<section class="section">
+  <p class="eyebrow">spotlight</p>
+  <h2>One item emphasised, the rest recede.</h2>
+  <p class="lede">Hover (or tap) a project. It widens, its peers soften and dim, and a real, selectable caption appears.</p>
+  <div class="projects">
+    <div class="project"><img src="../harness/acceptance/assets/photo-a.png" alt="" /><div class="meta"><b>North</b><span>Landscape film, 2026</span></div></div>
+    <div class="project"><img src="../harness/acceptance/assets/photo-b.png" alt="" /><div class="meta"><b>Basalt</b><span>City at night</span></div></div>
+    <div class="project"><img src="../harness/acceptance/assets/founder.png" alt="" /><div class="meta"><b>Aurora</b><span>Portrait series</span></div></div>
+    <div class="project"><img src="../harness/acceptance/assets/photo-a.png" alt="" style="filter:hue-rotate(140deg)" /><div class="meta"><b>Meridian</b><span>Brand identity</span></div></div>
+  </div>
+  <pre style="margin-top:24px">comice('.project').use(spotlight({
+  peers: { selector: '.project', blur: 4, dim: 0.4 },
+  reveal: '.meta', expand: 2.4,
+})).driver(hover())</pre>
+</section>
+
+<!-- 5. rail + type -->
+<section class="section">
+  <p class="eyebrow">rail + type</p>
+  <h2>Drag through. Names melt into each other.</h2>
+  <p class="lede">Real momentum and a snap into place; arrow keys work, and screen readers hear which one is active. The name is live text that melts word to word.</p>
+  <div class="rail" id="rail">
+    <div class="slide"><img src="../harness/acceptance/assets/photo-a.png" alt="North" /></div>
+    <div class="slide"><img src="../harness/acceptance/assets/photo-b.png" alt="Basalt" /></div>
+    <div class="slide"><img src="../harness/acceptance/assets/founder.png" alt="Aurora" /></div>
+    <div class="slide"><img src="../harness/acceptance/assets/photo-b.png" alt="Meridian" style="filter:hue-rotate(200deg)" /></div>
+    <div class="slide"><img src="../harness/acceptance/assets/photo-a.png" alt="Atelier" style="filter:hue-rotate(90deg)" /></div>
+  </div>
+  <p class="name" id="name">North</p>
+  <pre style="margin-top:24px">comice('.name').use(type({ mode: 'melt', melt: { blur: 14, threshold: [0.5, 18] } }))
+comice('#rail').use(rail({
+  mode: 'coverflow', inertia: 0.94, snap: true,
+  onActive: (i) => (name.textContent = names[i]),
+}))</pre>
+</section>
+
+<!-- 6. dissolve -->
+<section class="pin" id="s-dissolve">
+  <div class="sticky">
+    <div>
+      <p class="eyebrow">dissolve</p>
+      <h2>A to B to C, regions crossing at their own time.</h2>
+    </div>
+    <div class="stage"><div id="gallery"></div><div class="meter"><i></i></div></div>
+  </div>
+</section>
+<div class="section" style="padding-top:4vh">
+  <pre>comice('#gallery').use(dissolve({
+  transition: 'noise', to: [landscape, city, portrait],
+  noise: { scale: 2, intensity: 1, softness: 0.2 },
+})).driver(scroll())</pre>
+</div>
+
+<!-- 7. reveal -->
+<section class="section">
+  <p class="eyebrow">reveal</p>
+  <h2>A grid opening as it arrives.</h2>
+  <p class="lede">No driver at all: each image slats open when it scrolls into view, as a wave from the corner. It never shows a blank frame: it waits for the image to decode.</p>
+  <div class="grid">
+    <figure><img src="../harness/acceptance/assets/photo-a.png" alt="" /></figure>
+    <figure><img src="../harness/acceptance/assets/photo-b.png" alt="" /></figure>
+    <figure><img src="../harness/acceptance/assets/founder.png" alt="" /></figure>
+    <figure><img src="../harness/acceptance/assets/photo-b.png" alt="" /></figure>
+    <figure><img src="../harness/acceptance/assets/founder.png" alt="" /></figure>
+    <figure><img src="../harness/acceptance/assets/photo-a.png" alt="" /></figure>
+  </div>
+  <pre style="margin-top:24px">comice('.grid figure').use(reveal({ effect: 'blinds', stagger: { each: 0.06, grid: 'auto' } }))</pre>
+</section>
+
+<!-- 8. rebuilt -->
+<section class="section">
+  <p class="eyebrow">ascii · mosaic · color</p>
+  <h2>The same picture, rebuilt live on the GPU.</h2>
+  <p class="lede">Characters, a halftone in brand colours, a duotone with film grain. Every parameter is live: drag the slider.</p>
+  <div class="pair">
+    <img id="as-ascii" src="../harness/acceptance/assets/founder.png" alt="" />
+    <img id="as-mosaic" src="../harness/acceptance/assets/founder.png" alt="" />
+    <img id="as-color" src="../harness/acceptance/assets/photo-a.png" alt="" />
+  </div>
+  <label class="control">cell <input id="cell" type="range" min="6" max="28" value="10" /> <output id="cell-out">10px</output></label>
+  <pre style="margin-top:24px">const art = ascii({ cell: 10 })
+comice('#as-ascii').use(art)
+slider.oninput = () => asciiHandle.set(art, { cell: slider.value })</pre>
+</section>
+
+<!-- 9. audio -->
+<section class="section">
+  <p class="eyebrow">signals → parameters</p>
+  <h2>Sound driving the picture.</h2>
+  <p class="lede">The bass pushes the lens, the highs turn the hue. Neither plugin knows audio exists: one line of mapping connects them.</p>
+  <button class="play" id="play">▶ Play the track</button>
+  <audio id="track" src="../harness/acceptance/assets/track.wav" loop></audio>
+  <div class="bars">
+    <img id="au-distort" src="../harness/acceptance/assets/photo-b.png" alt="" />
+    <img id="au-color" src="../harness/acceptance/assets/photo-a.png" alt="" />
+  </div>
+  <pre style="margin-top:24px">comice('#au-distort').use(lens).driver(audio({ source: '#track' }))
+  .map('bass').to(lens, 'strength', { output: [0, 0.9] })
+comice('#au-color').use(grade).driver(audio({ source: '#track' }))
+  .map('high').to(grade, 'shift')</pre>
+</section>
+
+<footer>
+  <b>comice</b>
+  Core is 5 kB. Every effect is a plugin you add only when you need it.
+</footer>
+
+<script type="module">
+  import { comice, pointer, hover, scroll } from 'comice'
+  import { audio } from 'comice/drivers/audio'
+  import { particles } from '@comice/particles'
+  import { morph } from '@comice/morph'
+  import { distort } from '@comice/distort'
+  import { spotlight } from '@comice/spotlight'
+  import { rail } from '@comice/rail'
+  import { type } from '@comice/type'
+  import { dissolve } from '@comice/dissolve'
+  import { reveal } from '@comice/reveal'
+  import { ascii } from '@comice/ascii'
+  import { mosaic } from '@comice/mosaic'
+  import { color } from '@comice/color'
+
+  const asset = (name) => `../harness/acceptance/assets/${name}.png`
+  const load = async (name) => {
+    const image = new Image()
+    image.src = asset(name)
+    await image.decode()
+    return image
+  }
+
+  // A driver is just an object: this one reports how far the page has
+  // scrolled through a pinned section, 0 at its start, 1 at its end.
+  const through = (section) => ({
+    name: 'through',
+    attach(_target, onSignal) {
+      const meter = section.querySelector('.meter i')
+      const measure = () => {
+        const rect = section.getBoundingClientRect()
+        const progress = Math.min(1, Math.max(0, -rect.top / (rect.height - innerHeight)))
+        if (meter) meter.style.width = `${progress * 100}%`
+        onSignal({ progress })
+      }
+      addEventListener('scroll', measure, { passive: true })
+      addEventListener('resize', measure)
+      measure()
+      return () => removeEventListener('scroll', measure)
+    },
+  })
+
+  // 1. particles: portrait -> wordmark -> back
+  comice('#stage').use(particles({
+    mode: 'cloud', from: { image: asset('founder') }, to: { text: 'COMICE' },
+    count: 120000, motion: { noise: 0.3 },
+  })).driver(through(document.getElementById('s-particles')))
+
+  // 2. morph: footage collapsing into a logo
+  comice('#film').use(morph({
+    operation: 'mask', into: 'svg', path: 'M12 2L2 7l10 5 10-5-10-5z',
+    liquid: 0.7, thread: { sag: 6, dissolve: 4 },
+  })).driver(through(document.getElementById('s-morph')))
+
+  // 3. distort: three fields following the pointer
+  for (const effect of ['glass', 'ripple', 'liquid']) {
+    comice(`.fx-${effect}`).use(distort({ effect, radius: 140, strength: 0.6 })).driver(pointer())
+  }
+
+  // 4. spotlight
+  comice('.project').use(spotlight({
+    peers: { selector: '.project', blur: 4, dim: 0.4 },
+    reveal: '.meta', expand: 2.4,
+  })).driver(hover())
+
+  // 5. rail + type melt
+  const names = ['North', 'Basalt', 'Aurora', 'Meridian', 'Atelier']
+  const name = document.getElementById('name')
+  comice('.name').use(type({ mode: 'melt', melt: { blur: 14, threshold: [0.5, 18] } }))
+  comice('#rail').use(rail({
+    mode: 'coverflow', inertia: 0.94, snap: true,
+    onActive: (i) => (name.textContent = names[i]),
+  }))
+
+  // 6. dissolve: a sequence of three, pinned
+  const [landscape, city, portrait] = await Promise.all(['photo-a', 'photo-b', 'founder'].map(load))
+  comice('#gallery').use(dissolve({
+    transition: 'noise', to: [landscape, city, portrait],
+    noise: { scale: 2, intensity: 1, softness: 0.2 },
+  })).driver(through(document.getElementById('s-dissolve')))
+
+  // 7. reveal: no driver, plays on view
+  comice('.grid figure').use(reveal({ effect: 'blinds', stagger: { each: 0.06, grid: 'auto' } }))
+
+  // 8. rebuilt, with a live parameter
+  const art = ascii({ cell: 10 })
+  const asciiHandle = comice('#as-ascii').use(art)
+  const print = mosaic({ fill: 'halftone', cell: 10, palette: ['#1a1206', '#ffb547'] })
+  const printHandle = comice('#as-mosaic').use(print)
+  comice('#as-color').use(color({ effects: ['duotone', 'grain'], duotone: { shadow: [0.08, 0.05, 0.2], highlight: [1, 0.78, 0.45] } }))
+  const slider = document.getElementById('cell')
+  slider.oninput = () => {
+    const cell = Number(slider.value)
+    asciiHandle.set(art, { cell })
+    printHandle.set(print, { cell })
+    document.getElementById('cell-out').textContent = `${cell}px`
+  }
+
+  // 9. audio -> parameters
+  const lens = distort({ effect: 'bulge', radius: 260, strength: 0, anchor: [0.5, 0.5] })
+  const grade = color({ effects: ['grain'] })
+  comice('#au-distort').use(lens).driver(audio({ source: '#track' }))
+    .map('bass').to(lens, 'strength', { output: [0, 0.9] })
+  comice('#au-color').use(grade).driver(audio({ source: '#track' }))
+    .map('high').to(grade, 'shift')
+  const track = document.getElementById('track')
+  document.getElementById('play').onclick = () => {
+    if (track.paused) track.play()
+    else track.pause()
+    document.getElementById('play').textContent = track.paused ? '▶ Play the track' : '❚❚ Pause'
+  }
+</script>
+</body>
+</html>

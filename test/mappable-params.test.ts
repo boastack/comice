@@ -115,3 +115,17 @@ describe("color: 'shift'", () => {
     expect(c.params!.getParam('shift')).toBe(0.5)
   })
 })
+
+describe('distort: anchor — a field with no pointer (audio)', () => {
+  it('pins the field and keeps it on; the pointer and state changes do not move it', () => {
+    // Without it, distort driven by audio() never left idle, so mapping
+    // bass into strength had no field to strengthen.
+    const img = document.createElement('img')
+    document.body.appendChild(img)
+    const d = distort({ anchor: [0.25, 0.75] })
+    const handle = comice(img).use(d)
+    expect(() => handle.setDisplay({ x: 400, y: 10 })).not.toThrow()
+    expect(() => handle.transition('entering')).not.toThrow()
+    expect(d.params!.getParam('strength')).toBe(0.5)
+  })
+})

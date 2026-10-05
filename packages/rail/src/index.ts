@@ -153,8 +153,14 @@ export function rail(options: RailOptions): ComicePlugin {
       // of this same class of bug).
       el.style.position = 'absolute'
       el.style.top = '0'
-      el.style.left = '0'
-      el.style.transform = `translateX(${px}px) scale(${t.scale}) rotate(${t.rotate}deg)`
+      // The focus modes (one item at the centre of attention) centre the
+      // active item in the rail; they used to pin it to the left edge.
+      // Coverflow turns its neighbours away in depth (rotateY, still plain
+      // CSS); it used to spin them flat on the screen, like tilted cards.
+      const centred = mode === 'coverflow' || mode === 'arc' || mode === 'stack'
+      el.style.left = centred ? '50%' : '0'
+      const turn = mode === 'coverflow' ? `perspective(1000px) rotateY(${t.rotate}deg)` : `rotate(${t.rotate}deg)`
+      el.style.transform = `${centred ? 'translateX(-50%) ' : ''}translateX(${px}px) scale(${t.scale}) ${turn}`
       el.style.opacity = `${t.opacity}`
       // physics.ts's own z values (stack/arc/coverflow) are relative
       // depth, some genuinely negative (the active item at 0, others

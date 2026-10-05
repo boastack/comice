@@ -105,7 +105,8 @@ export function sampleGrid(canvas: HTMLCanvasElement, count: number): ParticleSa
   const grid = document.createElement('canvas')
   grid.width = columns
   grid.height = rows
-  const ctx = grid.getContext('2d')
+  // Read back once: kept off the GPU, so getImageData doesn't stall it.
+  const ctx = grid.getContext('2d', { willReadFrequently: true })
   if (!ctx) return null
   ctx.drawImage(canvas, 0, 0, columns, rows) // averages each cell's pixels
   const { data } = ctx.getImageData(0, 0, columns, rows)
