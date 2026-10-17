@@ -1,0 +1,1497 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Comice</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:opsz,wght@9..40,400;9..40,500&display=swap">
+<style>
+  :root{
+    --ground:#0c0c0c;--surface:#151515;--surface-2:#1b1b1b;
+    --line:#272727;--line-soft:#1f1f1f;
+    --ink:#f4f4f4;--ink-mid:#a8a8a8;--ink-dim:#6e6e6e;
+    --accent:#00c65c;--accent-dim:#0b3d23;
+    --warn:#e0a020;--warn-dim:#3a2d12;
+    --risk:#d2523f;--blue:#6ba8d8;--blue-dim:#1d3547;
+    --display:"Familjen Grotesk","DM Sans",system-ui,sans-serif;
+    --body:"DM Sans",system-ui,-apple-system,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+    --r:10px;--r-sm:7px;--r-lg:14px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--ground);color:var(--ink);
+    font-family:var(--body);font-size:15px;line-height:1.65;
+    background-image:radial-gradient(circle,rgba(255,255,255,.04) 1px,transparent 1px);
+    background-size:18px 18px;
+  }
+  .wrap{max-width:1060px;margin:0 auto;padding-inline:20px;padding-block:0 110px}
+
+  header.mast{padding-block:64px 30px;border-bottom:1px solid var(--line)}
+  .eyebrow{
+    font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--accent);margin-bottom:14px;
+  }
+  h1.title{
+    font-family:var(--display);font-size:clamp(42px,8vw,76px);font-weight:700;
+    letter-spacing:-.04em;line-height:1;margin:0 0 14px;
+  }
+  .posline{
+    font-family:var(--display);font-size:clamp(18px,2.8vw,24px);font-weight:500;
+    letter-spacing:-.02em;color:var(--accent);margin:0 0 20px;max-width:46ch;
+  }
+  .standfirst{max-width:66ch;color:var(--ink-mid);font-size:16px;margin:0}
+
+  nav.toc{margin-top:30px;padding:16px 18px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+  nav.toc .tl{
+    font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--ink-dim);margin-bottom:11px;
+  }
+  nav.toc ol{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:2px 20px}
+  nav.toc li{font-size:13px;padding:2px 0}
+  nav.toc a{color:var(--ink-mid);text-decoration:none;display:flex;gap:8px}
+  nav.toc a:hover{color:var(--accent)}
+  nav.toc .n{font-family:var(--mono);font-size:10.5px;color:var(--ink-dim);min-width:20px}
+
+  section{padding-block:50px 0;scroll-margin-top:20px}
+  h2{
+    font-family:var(--display);font-size:clamp(25px,3.6vw,31px);font-weight:600;
+    letter-spacing:-.028em;margin:0 0 8px;
+  }
+  h2 .num{
+    font-family:var(--mono);font-size:12px;color:var(--accent);
+    font-weight:500;letter-spacing:.08em;margin-right:11px;
+  }
+  .sec-note{color:var(--ink-mid);font-size:15px;max-width:72ch;margin:0 0 24px}
+
+  h3.sub{
+    font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink);margin:34px 0 12px;padding-top:15px;
+    border-top:1px solid var(--line);
+  }
+
+  .plain{
+    border:1px solid var(--blue-dim);background:rgba(107,168,216,.05);border-radius:var(--r);
+    border-left:3px solid var(--blue);padding:15px 17px;margin:0 0 22px;
+  }
+  .plain .pl{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--blue);margin-bottom:7px}
+  .plain p{margin:0 0 9px;font-size:14px;color:var(--ink-mid);line-height:1.6}
+  .plain p:last-child{margin-bottom:0}
+  .plain b{color:var(--ink);font-weight:600}
+
+  .verdict{
+    border:1px solid var(--accent-dim);background:rgba(0,198,92,.045);border-radius:var(--r);
+    border-left:3px solid var(--accent);padding:18px;margin:20px 0;
+    font-size:14.5px;color:var(--ink-mid);
+  }
+  .verdict .vh{font-family:var(--display);font-size:18.5px;font-weight:600;letter-spacing:-.018em;color:var(--ink);margin-bottom:8px}
+  .verdict p{margin:0 0 10px}
+  .verdict p:last-child{margin-bottom:0}
+  .verdict b{color:var(--ink);font-weight:600}
+
+  .stack{display:grid;gap:10px}
+  .layer{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:16px 18px}
+  .layer.core{border-left:3px solid var(--accent)}
+  .layer.plug{border-left:3px solid var(--blue)}
+  .layer.show{border-left:3px solid var(--warn)}
+  .layer .lh{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;margin-bottom:7px}
+  .layer .lt{font-family:var(--display);font-size:17.5px;font-weight:600;letter-spacing:-.015em}
+  .layer .lk{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim)}
+  .layer p{margin:0;font-size:13.5px;color:var(--ink-mid);line-height:1.52}
+
+  .rows{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);overflow:hidden}
+  .row{display:grid;grid-template-columns:180px 1fr;gap:18px;padding:14px 16px;border-bottom:1px solid var(--line-soft)}
+  .row:last-child{border-bottom:0}
+  .row dt{font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);padding-top:2px}
+  .row.no dt{color:var(--risk)}
+  .row dd{margin:0;font-size:13.5px;color:var(--ink-mid);line-height:1.58}
+  .row dd b{color:var(--ink);font-weight:500}
+
+  .tbl-wrap{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);overflow:hidden;overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:540px}
+  th{
+    font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--ink-dim);text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);font-weight:500;
+  }
+  td{padding:11px 12px;border-bottom:1px solid var(--line-soft);color:var(--ink-mid);vertical-align:top}
+  td b{color:var(--ink);font-weight:500}
+  tr:last-child td{border-bottom:0}
+  .yes{color:var(--accent)}
+  .nope{color:var(--risk)}
+
+  .ps{border:1px solid var(--line);background:var(--surface);border-radius:var(--r-lg);margin-bottom:16px;overflow:hidden}
+  .ps > .ph{padding:16px 18px;border-bottom:1px solid var(--line-soft);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;background:var(--surface-2)}
+  .ps.t1{border-left:3px solid var(--accent)}
+  .ps.t2{border-left:3px solid var(--blue)}
+  .ps .pn{font-family:var(--display);font-size:20px;font-weight:600;letter-spacing:-.018em}
+  .ps .pk{font-family:var(--mono);font-size:11px;color:var(--accent)}
+  .ps .pv{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border:1px solid var(--line);border-radius:100px;color:var(--ink-dim);margin-left:auto}
+  .ps .pb{padding:17px 18px}
+  .ps .job{font-size:14px;color:var(--ink-mid);line-height:1.58;margin:0 0 15px;padding-bottom:13px;border-bottom:1px solid var(--line-soft)}
+  .ps .job b{color:var(--ink);font-weight:600}
+
+  .lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);margin:15px 0 8px}
+  .lbl:first-child{margin-top:0}
+
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-family:var(--mono);font-size:10.5px;padding:4px 9px;border:1px solid var(--line);border-radius:100px;background:var(--surface-2);color:var(--ink-mid)}
+
+  .opts{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:2px}
+  .opts td{padding:6px 9px 6px 0;vertical-align:top;color:var(--ink-mid);border-bottom:1px solid var(--line-soft)}
+  .opts tr:last-child td{border-bottom:0}
+  .opts td.o{font-family:var(--mono);color:var(--accent);white-space:nowrap;width:1%}
+  .opts td.ty{font-family:var(--mono);color:var(--ink-dim);white-space:nowrap;width:1%;font-size:11.5px}
+
+  .use{
+    background:rgba(0,198,92,.045);border:1px solid var(--accent-dim);border-radius:var(--r-sm);
+    padding:11px 13px;margin-top:10px;font-size:12.5px;color:var(--ink-mid);line-height:1.5;
+  }
+  .use b{color:var(--accent);font-weight:600}
+
+  .ex{
+    font-family:var(--mono);font-size:12px;line-height:1.6;color:#d6d6d6;
+    background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-sm);
+    border-left:3px solid var(--accent);padding:13px 15px;margin:2px 0 0;overflow-x:auto;
+  }
+  .ex .c{color:var(--ink-dim)}
+  .ex .k{color:var(--blue)}
+  .ex .s{color:var(--accent)}
+
+  .excl{font-size:12.5px;color:var(--ink-dim);line-height:1.5;margin:0}
+  .excl b{color:var(--ink-mid);font-weight:500}
+
+  pre{
+    background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);border-left:3px solid var(--accent);
+    padding:15px 17px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.62;
+    color:#d6d6d6;margin:16px 0;
+  }
+  pre .c{color:var(--ink-dim)}
+  pre .k{color:var(--blue)}
+  pre .s{color:var(--accent)}
+  code{font-family:var(--mono);font-size:.92em;color:var(--accent)}
+
+  .callout{border:1px solid var(--line);border-radius:var(--r);border-left:3px solid var(--warn);background:var(--surface);padding:15px 17px;margin:18px 0;font-size:13.5px;color:var(--ink-mid)}
+  .callout.good{border-left-color:var(--accent)}
+  .callout.risk{border-left-color:var(--risk)}
+  .callout b{color:var(--ink);font-weight:600}
+
+  .princ{display:grid;gap:9px}
+  .pr{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:14px 16px;display:grid;grid-template-columns:26px 1fr;gap:13px}
+  .pr .n{font-family:var(--mono);font-size:11px;color:var(--accent);padding-top:3px}
+  .pr b{font-family:var(--display);font-size:15px;letter-spacing:-.012em}
+  .pr p{margin:3px 0 0;font-size:13px;color:var(--ink-mid);line-height:1.5}
+
+  .phase{display:grid;grid-template-columns:96px 1fr;gap:18px;padding:16px 0;border-bottom:1px solid var(--line-soft)}
+  .phase:last-child{border-bottom:0}
+  .phase .tag-v{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.03em;color:var(--accent);padding-top:2px}
+  .phase h4{font-family:var(--display);font-size:15.5px;font-weight:600;letter-spacing:-.015em;margin:0 0 4px}
+  .phase p{margin:0;font-size:13px;color:var(--ink-mid)}
+
+  .sm{display:flex;align-items:center;flex-wrap:wrap;gap:9px;padding:20px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);margin:16px 0}
+  .sm .st{
+    font-family:var(--mono);font-size:12px;padding:8px 14px;border:1px solid var(--accent-dim);border-radius:100px;
+    background:rgba(0,198,92,.06);color:var(--accent);white-space:nowrap;
+  }
+  .sm .arrow{color:var(--ink-dim);font-size:14px}
+
+  .core-api{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);overflow:hidden}
+  .core-api .row2{display:grid;grid-template-columns:150px 1fr;gap:16px;padding:13px 16px;border-bottom:1px solid var(--line-soft)}
+  .core-api .row2:last-child{border-bottom:0}
+  .core-api dt{font-family:var(--mono);font-size:12px;color:var(--accent)}
+  .core-api dd{margin:0;font-size:13px;color:var(--ink-mid);line-height:1.5}
+
+  .srcs{font-size:12.5px;color:var(--ink-dim);line-height:1.95}
+  a{color:var(--accent)}
+
+  @media (max-width:560px){
+    .row{grid-template-columns:1fr;gap:5px}
+    .phase{grid-template-columns:1fr;gap:5px}
+    .pr{grid-template-columns:1fr;gap:4px}
+    .core-api .row2{grid-template-columns:1fr;gap:4px}
+    header.mast{padding-block:44px 26px}
+    nav.toc ol{grid-template-columns:1fr}
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <h1 class="title">Comice</h1>
+    <p class="posline">A GPU interaction engine for images and video.</p>
+    <p class="standfirst">
+      A small engine that puts images and video on the graphics card and keeps them locked to the page,
+      plus plugins for everything you would want them to do. No dependencies, native scroll and pointer
+      handling built in, and every plugin is a state machine driven by real events, not a timeline of
+      guessed durations. Everything runs on one path, a driver produces a signal, a mapping turns it
+      into a plugin parameter, and the parameter reaches the GPU.
+    </p>
+    <nav class="toc">
+      <div class="tl">Contents</div>
+      <ol>
+        <li><a href="#sec1"><span class="n">01</span> What Comice is</a></li>
+        <li><a href="#sec2"><span class="n">02</span> Where it stands next to GSAP</a></li>
+        <li><a href="#sec3"><span class="n">03</span> State machine, not timeline</a></li>
+        <li><a href="#sec4"><span class="n">04</span> Core API and native drivers</a></li>
+        <li><a href="#sec5"><span class="n">05</span> What is in and out</a></li>
+        <li><a href="#sec6"><span class="n">06</span> How it is put together</a></li>
+        <li><a href="#sec7"><span class="n">07</span> The shared GPU primitives</a></li>
+        <li><a href="#sec8"><span class="n">08</span> The 18 plugins</a></li>
+        <li><a href="#sec9"><span class="n">09</span> Where this actually stands</a></li>
+        <li><a href="#sec10"><span class="n">10</span> Color, OKLCH by default</a></li>
+        <li><a href="#sec11"><span class="n">11</span> Dependencies</a></li>
+        <li><a href="#sec12"><span class="n">12</span> Framework wrappers</a></li>
+        <li><a href="#sec13"><span class="n">13</span> Mobile</a></li>
+        <li><a href="#sec14"><span class="n">14</span> Studio, the visual editor</a></li>
+        <li><a href="#sec15"><span class="n">15</span> Licensing</a></li>
+        <li><a href="#sec16"><span class="n">16</span> The rules</a></li>
+        <li><a href="#sec17"><span class="n">17</span> The actual stack</a></li>
+        <li><a href="#sec18"><span class="n">18</span> Build order</a></li>
+      </ol>
+    </nav>
+  </header>
+
+  <!-- ============ 1 ============ -->
+  <section id="sec1">
+    <h2><span class="num">01</span>What Comice is</h2>
+
+    <div class="plain">
+      <div class="pl">In plain terms</div>
+      <p>
+        A web page normally draws an image by handing it to the browser and letting the browser paint
+        it. You get no say over individual pixels.
+      </p>
+      <p>
+        Comice takes that image or video and puts it on the graphics card instead, as a texture on a
+        flat rectangle that sits exactly where the original element was. Once it is there, a small
+        program runs over every pixel sixty times a second, and that program can react to scrolling,
+        the cursor, a drag, or what is actually in the picture.
+      </p>
+      <p>That is the whole idea. Everything else is plugins deciding what that per-pixel program does.</p>
+    </div>
+
+    <div class="verdict">
+      <div class="vh">A runtime, always on, not a one-time edit</div>
+      <p>
+        Comice runs on a live site, in a visitor's browser, responding to a person who is scrolling
+        right now. The output is never finished, it is different for every visitor, and it never
+        forgets how it was made because it is remaking it every frame.
+      </p>
+      <p>
+        The closest honest comparison is Lenis, small, doing one thing, invisible when it works
+        properly. Lenis owns scrolling. Comice owns media.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ 2 ============ -->
+  <section id="sec2">
+    <h2><span class="num">02</span>Where it stands next to GSAP</h2>
+
+    <div class="plain">
+      <div class="pl">In plain terms</div>
+      <p>
+        GSAP and Motion animate properties, move this to the left, fade that to half opacity, make this
+        number count up. They are excellent at it, and Comice is not trying to replace that.
+      </p>
+      <p>
+        A property is the whole element at once. Neither can reach inside a picture and change what
+        individual pixels are doing. So no animation library can turn a video into dots, cut a person
+        out of a photo, or make a headline sit behind someone's shoulder. That is not a weakness in
+        GSAP. It is a different machine, working one level deeper.
+      </p>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Capability</th><th>GSAP</th><th>Comice</th></tr></thead>
+        <tbody>
+          <tr><td><b>Per-pixel shaders</b></td><td class="nope">No</td><td class="yes">Core</td></tr>
+          <tr><td><b>Shape morphing media</b></td><td class="nope">No</td><td class="yes">morph</td></tr>
+          <tr><td><b>Depth from one photo</b></td><td class="nope">No</td><td class="yes">vision</td></tr>
+          <tr><td><b>Cut out the subject</b></td><td class="nope">No</td><td class="yes">vision</td></tr>
+          <tr><td><b>Chroma key</b></td><td class="nope">No</td><td class="yes">footage</td></tr>
+          <tr><td><b>Motion transfer from video</b></td><td class="nope">No</td><td class="yes">footage</td></tr>
+          <tr><td><b>Video across pages</b></td><td class="nope">No</td><td class="yes">persist</td></tr>
+          <tr><td><b>Native scroll, no dependency</b></td><td class="nope">Needs ScrollTrigger</td><td class="yes">Core</td></tr>
+          <tr><td>Timelines, tweening DOM properties</td><td class="yes">Core</td><td class="nope">Out of scope</td></tr>
+          <tr><td>Text splitting, UI motion</td><td class="yes">Plugins</td><td class="nope">Out of scope</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout good">
+      <b>They work together, put this on the landing page.</b> The natural setup is GSAP drives, Comice
+      renders. A GSAP timeline produces a number from 0 to 1, and Comice turns that number into
+      per-pixel work. Works with GSAP, Motion and Lenis removes the only real objection a developer has,
+      must I throw away what I already use.
+    </div>
+  </section>
+
+  <!-- ============ 3 ============ -->
+  <section id="sec3">
+    <h2><span class="num">03</span>State machine, not timeline</h2>
+
+    <div class="plain">
+      <div class="pl">In plain terms</div>
+      <p>
+        Most animation tools think in durations. Play this for 400ms, then that for 600ms. That works
+        for a fixed sequence, but it breaks the moment a real person interrupts it, moves the cursor
+        away mid hover, releases a drag early, scrolls back up before a reveal finished.
+      </p>
+      <p>
+        Comice plugins are not durations. They are states with rules for moving between them, and the
+        rules are driven by real events rather than a clock. A card does not play a 400ms hover
+        animation, it enters a hovered state and stays there until the pointer actually leaves, however
+        long that takes.
+      </p>
+    </div>
+
+    <div class="callout risk">
+      <b>Is this new? Honestly, not the idea itself.</b> XState has done formal state machines for
+      JavaScript for years, and is the standard answer for exactly this class of bug, invalid states
+      caused by interruption. Motion's whole model is declarative and state driven already, describe
+      what a component looks like in a given state and it figures out the transition. Neither claim
+      here is that state machines for UI are new. The actual gap is narrower and more specific, nobody
+      has wired a state machine into a WebGL render pipeline driving raw shader uniforms rather than
+      DOM properties. XState does not render anything. Motion animates CSS and transform, not a texture
+      on the GPU. That is the real, defensible difference, not the state machine idea on its own.
+    </div>
+
+    <div class="sm">
+      <span class="st">idle</span><span class="arrow">&rarr;</span>
+      <span class="st">entering</span><span class="arrow">&rarr;</span>
+      <span class="st">active</span><span class="arrow">&rarr;</span>
+      <span class="st">leaving</span><span class="arrow">&rarr;</span>
+      <span class="st">idle</span>
+    </div>
+
+    <p class="sec-note">
+      A generic shape every interactive plugin follows. Each state owns its own easing and duration,
+      and a transition only fires on a real event, pointer enter, drag release, scroll crossing a
+      threshold, never on a timer guessing when the last one probably finished.
+    </p>
+
+    <dl class="rows">
+      <div class="row">
+        <dt>Interrupt safe</dt>
+        <dd>Leaving mid enter reverses from wherever the animation actually is, not from a hardcoded start point. No snapping, no restart.</dd>
+      </div>
+      <div class="row">
+        <dt>Driver agnostic</dt>
+        <dd>The same state machine accepts events from scroll, pointer, drag, click or time. A spotlight built for hover works unmodified under a click driver.</dd>
+      </div>
+      <div class="row">
+        <dt>Composable</dt>
+        <dd>Plugins chained together share one state per element rather than fighting over separate timelines, so a morph and a color grade can both react to the same active state.</dd>
+      </div>
+      <div class="row">
+        <dt>Debuggable</dt>
+        <dd>A plugin instance always answers what state am I in right now, which a duration based tween cannot honestly answer mid flight.</dd>
+      </div>
+    </dl>
+
+<pre><span class="c">// Every interactive plugin exposes the same shape</span>
+<span class="k">const</span> card = comice(<span class="s">'.project'</span>).use(spotlight({ peers: <span class="s">'.project'</span> }))
+
+card.state              <span class="c">// 'idle' | 'entering' | 'active' | 'leaving'</span>
+card.on(<span class="s">'active'</span>, () => {})
+card.on(<span class="s">'leaving'</span>, () => {})
+card.transition(<span class="s">'active'</span>)   <span class="c">// force a state, same rules apply</span></pre>
+
+    <div class="callout good">
+      <b>Why it matters here specifically.</b> Most of the interaction bugs in hand built scroll and
+      hover effects come from exactly this gap, a timeline assumes nothing interrupts it, and everything
+      real eventually interrupts it. That problem is well understood for DOM state. It is not well
+      solved for GPU media state, where the thing being interrupted mid transition is a shader uniform,
+      not a CSS property, and existing state libraries have no opinion on that at all.
+    </div>
+  </section>
+
+  <!-- ============ 4 ============ -->
+  <section id="sec4">
+    <h2><span class="num">04</span>Core API and native drivers</h2>
+    <p class="sec-note">
+      What competing with GSAP in its own domain actually requires, a real top level API and its own
+      input handling, with zero dependency on GSAP, ScrollTrigger or anything else to get moving.
+    </p>
+
+    <h3 class="sub">Core methods</h3>
+    <div class="core-api">
+      <div class="row2"><dt>comice(target)</dt><dd>Wraps one or more elements, returns a chainable instance. Same shape whether target is a CSS selector, an element, or a NodeList.</dd></div>
+      <div class="row2"><dt>.use(plugin)</dt><dd>Attaches a plugin, chainable, order matters for the render pass list.</dd></div>
+      <div class="row2"><dt>.driver(driver)</dt><dd>Attaches an input source. Any plugin works with any driver without being rewritten.</dd></div>
+      <div class="row2"><dt>.set(props)</dt><dd>Applies immediately, no transition, matches gsap.set().</dd></div>
+      <div class="row2"><dt>.transition(state, opts)</dt><dd>Forces a state change through the normal interrupt-safe rules, matches gsap.to() but state-based rather than property-based.</dd></div>
+      <div class="row2"><dt>.on(event, fn) / .off()</dt><dd>State and lifecycle events, active, leaving, ready, error.</dd></div>
+      <div class="row2"><dt>.destroy()</dt><dd>Tears down the plugin chain and releases GPU resources for this instance.</dd></div>
+    </div>
+
+    <h3 class="sub">Native drivers, no dependency</h3>
+    <p class="sec-note">
+      Comice does not need ScrollTrigger. It reads native browser scroll-linked animation where
+      available and falls back to a lightweight IntersectionObserver and scroll listener where it is
+      not, entirely inside core.
+    </p>
+    <div class="core-api">
+      <div class="row2"><dt>scroll(opts)</dt><dd>{ threshold, root, offset }. Uses the native ScrollTimeline where the browser supports it, so scroll-linked plugins run on the compositor thread, not the main thread.</dd></div>
+      <div class="row2"><dt>pointer(opts)</dt><dd>{ radius, lag }. Raw pointer position and velocity, normalised against the element's bounds.</dd></div>
+      <div class="row2"><dt>hover(opts)</dt><dd>{ intent }. Enter and leave with a debounce so fast pass-overs do not fire a full state cycle.</dd></div>
+      <div class="row2"><dt>drag(opts)</dt><dd>{ axis, inertia }. Pointer and touch drag with momentum, feeding the same event shape as scroll.</dd></div>
+      <div class="row2"><dt>click(opts)</dt><dd>{ toggle }. A single discrete event, useful for state machines with only two states.</dd></div>
+      <div class="row2"><dt>time(opts)</dt><dd>{ duration, loop }. The one driver that behaves like a classic tween, for plugins that genuinely want a duration.</dd></div>
+    </div>
+
+<pre><span class="c">// Zero dependencies, this is the whole setup</span>
+<span class="k">import</span> { comice, scroll, hover } <span class="k">from</span> <span class="s">'comice'</span>
+<span class="k">import</span> { spotlight } <span class="k">from</span> <span class="s">'@comice/spotlight'</span>
+
+comice(<span class="s">'.card'</span>).use(spotlight()).driver(hover({ intent: 80 }))
+comice(<span class="s">'.hero'</span>).use(morph({ operation: <span class="s">'breakout'</span> })).driver(scroll({ threshold: 0.5 }))</pre>
+
+    <div class="callout good">
+      <b>The thing that actually makes this compete with GSAP.</b> Not more effects, GSAP has plenty.
+      It is that Comice ships a complete, native, dependency-free input layer of its own. Nobody has to
+      install ScrollTrigger to get scroll-linked media, and on browsers with native ScrollTimeline
+      support the scroll driver never touches the main thread at all.
+    </div>
+  </section>
+
+  <!-- ============ 5 ============ -->
+  <section id="sec5">
+    <h2><span class="num">05</span>What is in and out</h2>
+
+    <div class="plain">
+      <div class="pl">In plain terms</div>
+      <p>
+        The line is not file formats, it is whether media is involved. SVG, text, canvas and the DOM
+        are all legitimate participants, as masks, sources, companions or targets. If a feature still
+        makes sense with no image or video present, it belongs somewhere else, not here.
+      </p>
+    </div>
+
+    <dl class="rows">
+      <div class="row no"><dt>Not an effect gallery</dt><dd>The catalogue documents what the engine reaches, it is not an inventory owed to anyone.</dd></div>
+      <div class="row no"><dt>Not general animation</dt><dd>If it animates something that is not media, GSAP and Motion already do it well.</dd></div>
+      <div class="row no"><dt>Not a 3D engine</dt><dd>Flat planes with clever shaders. Meshes, lights and cameras belong to Three.js.</dd></div>
+      <div class="row no"><dt>Not AI image generation</dt><dd>Reading an image with ML, depth, subject, colour, is in scope. Rewriting it is a different product.</dd></div>
+      <div class="row no"><dt>Not scroll fades</dt><dd>Browsers do scroll linked fades natively now, on the compositor. A JavaScript version would be worse.</dd></div>
+      <div class="row no"><dt>Not a video player</dt><dd>No chrome, captions UI, HLS or DRM. Comice takes a video element someone else configured and gives it a GPU surface.</dd></div>
+    </dl>
+  </section>
+
+  <!-- ============ 6 ============ -->
+  <section id="sec6">
+    <h2><span class="num">06</span>How it is put together</h2>
+
+    <div class="plain">
+      <div class="pl">In plain terms</div>
+      <p>
+        Comice copies GSAP's shape. GSAP core changes a number over time, ScrollTrigger and SplitText
+        are separate add ons installed only when needed. Comice core puts media on the graphics card and
+        keeps it in the right place, with zero effects included. Every effect is a plugin.
+      </p>
+    </div>
+
+    <div class="stack">
+      <div class="layer core">
+        <div class="lh"><div class="lt">Core</div><div class="lk">comice, required, under 10 KB</div></div>
+        <p>Media on the GPU, the state machine, native drivers, the render loop, mobile budget, fallback contract. Ships with zero effects.</p>
+      </div>
+      <div class="layer plug">
+        <div class="lh"><div class="lt">Plugins</div><div class="lk">@comice/*, opt in</div></div>
+        <p>Everything that does something to media. Registered explicitly, tree shaken when unused.</p>
+      </div>
+      <div class="layer show">
+        <div class="lh"><div class="lt">Presets and showcase</div><div class="lk">not the library</div></div>
+        <p>Saved configurations and a gallery site. Built on the public API. Never required.</p>
+      </div>
+    </div>
+
+    <h3 class="sub">The five operations everything reduces to</h3>
+    <dl class="rows">
+      <div class="row"><dt>Merge</dt><dd>Many pieces become one. Three panels joining into a single hero.</dd></div>
+      <div class="row"><dt>Breakout</dt><dd>One piece becomes many. A hero splitting into feature cards.</dd></div>
+      <div class="row"><dt>Distribute</dt><dd>Pieces travel into an arrangement. Radial fan, film strip, shelf.</dd></div>
+      <div class="row"><dt>Mask</dt><dd>Media takes the shape of something. Logo, lettering, any SVG path.</dd></div>
+      <div class="row"><dt>Recompose</dt><dd>One layout becomes another. Grid opening into fullscreen.</dd></div>
+    </dl>
+  </section>
+
+  <!-- ============ 7 ============ -->
+  <section id="sec7">
+    <h2><span class="num">07</span>The shared GPU primitives</h2>
+
+    <div class="plain">
+      <div class="pl">In plain terms</div>
+      <p>
+        Four things turn up in more than one plugin. A mask. Two images resident at once. The previous
+        frame. Noise and displacement. Each one looks like a feature of whichever plugin needs it first,
+        and each one is actually a capability of the renderer underneath.
+      </p>
+      <p>
+        If masks get built inside reveal, then morph needs masks and builds its own, then vision needs
+        masks and builds a third, unifying them later means rewriting three plugins. Building them once,
+        in core, before the first plugin needs them costs a design pass. Building them four times costs
+        a rewrite.
+      </p>
+    </div>
+
+    <div class="callout risk">
+      <b>This is the one section that has to be right before the GPU pipeline is written, not after.</b>
+      Everything in section 08 is a consumer of these four. A plugin can be replaced later without
+      touching its neighbours. A primitive cannot, because by then every plugin has an opinion about it.
+    </div>
+
+    <dl class="rows">
+      <div class="row">
+        <dt>Mask field</dt>
+        <dd>
+          One representation, many producers. A mask may come from a <b>shape</b>, <b>text</b>, the
+          <b>cursor</b>, an <b>image</b>, a <b>video</b>, a segmented <b>subject</b>, or a
+          <b>depth</b> threshold, and any plugin can read it. The cursor case is a field sampled in
+          the shader, never DOM clipping, so it costs nothing in layout and stays smooth under load.
+          Consumed by reveal, morph, dissolve, distort and vision.
+        </dd>
+      </div>
+      <div class="row">
+        <dt>Multi-texture residency</dt>
+        <dd>
+          Two or more sources on the card at once, addressable in the same pass. This is the
+          precondition for every A to B transition, dissolve's whole job, and for particles
+          reassembling into a different image than it scattered from. Already implied by dissolve's
+          "both resident at once", made explicit here because it constrains texture-unit budgeting on
+          mobile.
+        </dd>
+      </div>
+      <div class="row">
+        <dt>Temporal feedback</dt>
+        <dd>
+          The previous frame, available to the current one. A ping-pong buffer pair allocated once at
+          setup, never per frame. Trails, echo, ghosting, persistence, smear and feedback distortion
+          are all the same capability with different decay and offset. footage's echo is one consumer,
+          not the owner.
+        </dd>
+      </div>
+      <div class="row">
+        <dt>Noise and displacement</dt>
+        <dd>
+          One GLSL library, simplex and curl noise plus a common displacement sampler. dissolve's
+          noise and liquid transitions and distort's liquid and glass presets are the same math
+          pointed at different targets. Two copies would drift, and the second one would be written
+          by someone reading the first.
+        </dd>
+      </div>
+    </dl>
+
+    <div class="callout">
+      <b>The allocation rule applies hardest here.</b> Temporal feedback is the single easiest place in
+      this whole plan to leak textures, because the naive implementation allocates a target every frame
+      and looks correct while doing it. Buffers are allocated at setup, swapped by pointer, and released
+      on destroy, in line with rule 04 and the mobile budget in section 13.
+    </div>
+
+    <h3 class="sub">The mask field, in full</h3>
+    <p class="sec-note">
+      Seven producers, one contract. Shape, text, cursor, image, video, subject and depth all end up as
+      a mask, and every consumer, reveal, morph, dissolve, distort, vision, samples them the same way.
+      What differs is how each producer gets there, not what it hands over.
+    </p>
+
+    <dl class="rows">
+      <div class="row">
+        <dt>Procedural</dt>
+        <dd>
+          <b>Cursor only.</b> A point, a radius, a softness, a falloff curve, held as a tiny uniform
+          block and evaluated analytically inside the shader that samples it. No texture, no render
+          target, no per-frame upload. This is what section 07's original line about the cursor meant
+          by "costs nothing in layout", and it is deliberately kept out of the texture path below
+          rather than folded in for consistency, forcing it through a texture would mean rendering to
+          one every frame just to read it back.
+        </dd>
+      </div>
+      <div class="row">
+        <dt>Rasterized</dt>
+        <dd>
+          <b>Shape and text.</b> Vector input, an SVG path or a glyph outline, drawn once to an
+          off-screen single-channel render target at plugin <code>setup()</code>. Re-rasterized only
+          when the source path or text actually changes, never per frame.
+        </dd>
+      </div>
+      <div class="row">
+        <dt>Derived</dt>
+        <dd>
+          <b>Image, video, subject, depth.</b> Already a texture, reduced to one channel by a small
+          fragment pass. Image and video reduce by luminance. Subject passes through, it is already
+          vision's single-channel <code>alpha</code>. Depth compares against a threshold with softness
+          around the edge, owned here as masking work rather than by vision, whose job in section 08 is
+          producing plain textures, never deciding what counts as inside or outside a mask.
+        </dd>
+      </div>
+    </dl>
+
+    <p class="sec-note">
+      Every producer except the cursor lands on the same shape, a single-channel texture in
+      element-local UV space, values 0 to 1. One tagged union, one sampling function, and the branch
+      between the two lives once, in the mask field's own shader chunk, never copied into reveal,
+      morph, dissolve, distort or vision individually.
+    </p>
+
+<pre><span class="c">// The shape every producer above resolves to</span>
+<span class="k">type</span> MaskField =
+  | { <span class="k">kind</span>: <span class="s">'texture'</span>, texture: WebGLTexture, uvTransform: mat3 }   <span class="c">// shape, text, image, video, subject, depth</span>
+  | { <span class="k">kind</span>: <span class="s">'analytic-cursor'</span>, center: vec2, radius: <span class="k">f32</span>, softness: <span class="k">f32</span>, falloff: Falloff }
+
+<span class="c">// What every consumer calls, the branch lives here and nowhere else</span>
+<span class="k">float</span> sampleMask(vec2 uv);</pre>
+
+    <div class="callout good">
+      <b>Lifecycle follows the same discipline as the other three primitives.</b> Rasterized masks
+      allocate their render target once at setup, not per frame. Derived masks reuse one shared
+      reduction target per Comice instance, sized against the mobile DPR cap from section 13, and
+      release it on <code>destroy()</code>. Nothing here allocates inside the render loop, the same
+      rule scheduler.ts and the audio driver already hold to.
+    </div>
+  </section>
+
+  <!-- ============ 8 ============ -->
+  <section id="sec8">
+    <h2><span class="num">08</span>The 18 plugins</h2>
+    <p class="sec-note">
+      Eighteen packages, one job each. Every card shows what it owns, its real options, a genuine
+      usage scenario, and what it deliberately leaves out. The badge on each card is the release it
+      is planned for, per section 18, not a version that exists. None of these are built yet.
+    </p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Plugin</th><th>Was</th><th>Job</th></tr></thead>
+        <tbody>
+          <tr><td><b>vision</b></td><td>new</td><td>Reads depth and subject from media</td></tr>
+          <tr><td><b>morph</b></td><td>new</td><td>Media changes shape</td></tr>
+          <tr><td><b>reveal</b></td><td>new</td><td>Media enters, leaves, expands</td></tr>
+          <tr><td><b>dissolve</b></td><td>blend</td><td>Media moves from A to B</td></tr>
+          <tr><td><b>rail</b></td><td>drag</td><td>Collections you move through</td></tr>
+          <tr><td><b>spotlight</b></td><td>hover</td><td>One item emphasised, peers recede</td></tr>
+          <tr><td><b>distort</b></td><td>pointer</td><td>Field distortion, bulge, lens, ripple</td></tr>
+          <tr><td><b>mosaic</b></td><td>mosaic, dither, grain</td><td>Media rebuilt from cells</td></tr>
+          <tr><td><b>ascii</b></td><td>new</td><td>Media rebuilt from characters</td></tr>
+          <tr><td><b>color</b></td><td>new</td><td>Grading and physical post processing</td></tr>
+          <tr><td><b>aura</b></td><td>ambient</td><td>Media colour pushed into the page</td></tr>
+          <tr><td><b>type</b></td><td>new</td><td>Media and text meeting, including melt</td></tr>
+          <tr><td><b>layout</b></td><td>new</td><td>Page reacts to media</td></tr>
+          <tr><td><b>spatial</b></td><td>new</td><td>Media on generated 3D geometry</td></tr>
+          <tr><td><b>particles</b></td><td>particles, shatter</td><td>Point clouds and tile scatter</td></tr>
+          <tr><td><b>footage</b></td><td>video, flow</td><td>Keying, frame level work, audio reactive</td></tr>
+          <tr><td><b>seed</b></td><td>loader</td><td>Placeholders, decode, priority, art direction</td></tr>
+          <tr><td><b>persist</b></td><td>new</td><td>Media surviving navigation</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="ps t1">
+      <div class="ph"><span class="pn">vision</span><span class="pk">@comice/vision</span><span class="pv">ships v0.5</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> understanding what is in the media. Produces depth, subject masks and palettes as plain textures every other plugin consumes. Renders nothing itself.</p>
+        <div class="lbl">Produces</div>
+        <div class="chips"><span class="chip">depth</span><span class="chip">alpha</span><span class="chip">normals</span><span class="chip">palette</span><span class="chip">saliency</span><span class="chip">edges</span></div>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">depth</td><td class="ty">boolean</td><td>Estimate a depth map. Default false.</td></tr>
+          <tr><td class="o">segment</td><td class="ty">boolean | 'person'</td><td>Subject separation. Default false.</td></tr>
+          <tr><td class="o">palette</td><td class="ty">number</td><td>Extract N dominant colours. Default 0.</td></tr>
+          <tr><td class="o">refine</td><td class="ty">'edges' | 'matte'</td><td>matte handles hair. Default 'edges'.</td></tr>
+          <tr><td class="o">source</td><td class="ty">Media</td><td>Image or video. Video analysis updates over time rather than resolving once.</td></tr>
+          <tr><td class="o">updateRate</td><td class="ty">number</td><td>Analyses per second for video. Default 15, decoupled from the render loop.</td></tr>
+        </table>
+        <div class="lbl">Example</div>
+<pre class="ex"><span class="c">// Depth and subject, consumed by two other plugins</span>
+comice(<span class="s">'#portrait'</span>)
+  .use(vision({ <span class="k">depth</span>: <span class="s">true</span>, <span class="k">segment</span>: <span class="s">'person'</span>, <span class="k">refine</span>: <span class="s">'matte'</span> }))
+  .use(type({ <span class="k">mode</span>: <span class="s">'behind'</span>, <span class="k">target</span>: <span class="s">'h1'</span> }))
+
+<span class="c">// Video depth, analysed 15x a second, rendered at 60</span>
+comice(<span class="s">'#reel'</span>).use(vision({ <span class="k">depth</span>: <span class="s">true</span>, <span class="k">source</span>: video, <span class="k">updateRate</span>: 15 }))</pre>
+        <div class="use"><b>Real usage:</b> a fashion editorial where the headline sits behind the model, and the background softly blurs while she stays sharp, computed live from one uploaded photo, no manual masking.</div>
+        <div class="use"><b>Video is a different problem, not a bigger one.</b> Depth inference is far too expensive to run every frame, so analysis and rendering run at different rates, the depth map updates several times a second while the shader consuming it still runs at 60. The map is interpolated between updates rather than stepping visibly. This is an architectural constraint on vision from the first line, not an optimisation added later, because a still-only depth path has to be restructured to accept it.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">Not image generation, inpainting or style transfer. Vision reads media, it never rewrites it. Never per-frame inference, and never its own rAF loop, the analysis cadence gates inside the shared scheduler.</p>
+      </div>
+    </div>
+
+    <div class="ps t1">
+      <div class="ph"><span class="pn">morph</span><span class="pk">@comice/morph</span><span class="pv">ships v0.2</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> media changing shape. Five operations over signed distance fields, with liquid blending and a stretching thread between separating pieces.</p>
+        <div class="lbl">Operations</div>
+        <div class="chips"><span class="chip">merge</span><span class="chip">breakout</span><span class="chip">distribute</span><span class="chip">mask</span><span class="chip">recompose</span></div>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">operation</td><td class="ty">Operation</td><td>Required.</td></tr>
+          <tr><td class="o">liquid</td><td class="ty">number</td><td>smin blend amount, 0 to 1. Default 0.5.</td></tr>
+          <tr><td class="o">thread</td><td class="ty">object | false</td><td>{ width, pinch, sag, dissolve }, models the bridge between separating shapes so they break rather than simply stop touching. Default false.</td></tr>
+          <tr><td class="o">order</td><td class="ty">'sequence' | 'alternate'</td><td>alternate deals either side of a seed origin. Default 'sequence'.</td></tr>
+        </table>
+        <div class="lbl">Example</div>
+<pre class="ex">comice(<span class="s">'#film'</span>).use(morph({
+  <span class="k">operation</span>: <span class="s">'mask'</span>, <span class="k">into</span>: <span class="s">'svg'</span>, <span class="k">path</span>: <span class="s">'M12 2L2 7…'</span>,
+  <span class="k">liquid</span>: 0.7, <span class="k">thread</span>: { <span class="k">sag</span>: 6, <span class="k">dissolve</span>: 4 }
+})).driver(scroll())</pre>
+        <div class="use"><b>Real usage:</b> a brand film's closing shot where the footage collapses into the client's logo, the connecting tissue stretches and visibly snaps rather than fading, matching how honey or wax actually breaks apart.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">Not SVG animation, a path is an input shape, never an animated subject.</p>
+      </div>
+    </div>
+
+    <div class="ps t1">
+      <div class="ph"><span class="pn">reveal</span><span class="pk">@comice/reveal</span><span class="pv">ships v0.1</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> media entering, leaving and expanding. The most common media interaction on the web, in one place.</p>
+        <div class="lbl">Effects</div>
+        <div class="chips"><span class="chip">wipe</span><span class="chip">mask</span><span class="chip">scale</span><span class="chip">blur</span><span class="chip">blinds</span><span class="chip">slats</span><span class="chip">curtain</span><span class="chip">expand</span></div>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">effect</td><td class="ty">Effect</td><td>Default 'mask'.</td></tr>
+          <tr><td class="o">stagger</td><td class="ty">object</td><td>{ each, from, grid, random } for coordinated grids.</td></tr>
+          <tr><td class="o">waitForDecode</td><td class="ty">boolean</td><td>Never reveal a blank frame. Default true.</td></tr>
+          <tr><td class="o">mask</td><td class="ty">MaskSource</td><td>For effect 'mask'. A shape, text, the cursor, an image, a video, a subject or depth, see section 07.</td></tr>
+        </table>
+        <div class="lbl">Example</div>
+<pre class="ex">comice(<span class="s">'.grid figure'</span>).use(reveal({
+  <span class="k">effect</span>: <span class="s">'blinds'</span>, <span class="k">stagger</span>: { <span class="k">each</span>: 0.06, <span class="k">grid</span>: <span class="s">'auto'</span> }
+}))
+
+<span class="c">// The cursor as a mask field, radius and softness in px and 0..1</span>
+comice(<span class="s">'.image'</span>).use(reveal({
+  <span class="k">effect</span>: <span class="s">'mask'</span>,
+  <span class="k">mask</span>: { <span class="k">type</span>: <span class="s">'cursor'</span>, <span class="k">radius</span>: 200, <span class="k">softness</span>: 0.4 }
+})).driver(pointer())
+
+<span class="c">// Another image as the mask, sampled by luminance or alpha</span>
+comice(<span class="s">'.image'</span>).use(reveal({ <span class="k">effect</span>: <span class="s">'mask'</span>, <span class="k">mask</span>: anotherImage }))</pre>
+        <div class="use"><b>Real usage:</b> a portfolio grid where each project image slats open column by column as it scrolls into view, and never flashes an empty box because the reveal waits for the real decode event, not a guessed delay.</div>
+        <div class="use"><b>Cursor masks:</b> a second image showing through wherever the cursor is, a torch over a dark photograph, a before and after that follows the hand. Cursor masks take { radius, softness, shape, falloff, lag }. The mask is a field sampled in the shader, never a DOM clip path, which is what keeps it smooth and free of layout cost.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">Not generic scroll animation. Fading a heading in is CSS's job now. reveal consumes the shared mask field from section 07, it does not own masking.</p>
+      </div>
+    </div>
+
+    <div class="ps t1">
+      <div class="ph"><span class="pn">dissolve</span><span class="pk">@comice/dissolve</span><span class="pv">ships v0.3</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> moving between two pieces of media that are both resident at once.</p>
+        <div class="lbl">Transitions</div>
+        <div class="chips"><span class="chip">crossfade</span><span class="chip">displace</span><span class="chip">wipe</span><span class="chip">zoomBlur</span><span class="chip">pixelBridge</span><span class="chip">ink</span><span class="chip">flip</span><span class="chip">glitch</span><span class="chip">noise</span><span class="chip">liquid</span><span class="chip">mask</span><span class="chip">dissolve</span></div>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">transition</td><td class="ty">Transition</td><td>Default 'crossfade'.</td></tr>
+          <tr><td class="o">from / to</td><td class="ty">Media</td><td>Sources. to may be an array for a sequence.</td></tr>
+          <tr><td class="o">map</td><td class="ty">string</td><td>Displacement texture for displace.</td></tr>
+          <tr><td class="o">noise</td><td class="ty">object</td><td>{ scale, intensity, direction, threshold, softness, seed } for noise, liquid and dissolve.</td></tr>
+          <tr><td class="o">mask</td><td class="ty">MaskSource</td><td>For transition 'mask'. Any source from section 07, including another image or video.</td></tr>
+          <tr><td class="o">progress</td><td class="ty">number</td><td>Mappable, so any driver can scrub the transition directly.</td></tr>
+        </table>
+        <div class="lbl">Example</div>
+<pre class="ex">comice(<span class="s">'#gallery'</span>).use(dissolve({
+  <span class="k">transition</span>: <span class="s">'displace'</span>, <span class="k">to</span>: images, <span class="k">map</span>: <span class="s">'/wave.png'</span>
+})).driver(scroll())
+
+<span class="c">// Noise drives the threshold, so regions cross at different times</span>
+comice(<span class="s">'.hero'</span>).use(dissolve({
+  <span class="k">transition</span>: <span class="s">'noise'</span>, <span class="k">from</span>: imageA, <span class="k">to</span>: imageB,
+  <span class="k">noise</span>: { <span class="k">scale</span>: 2, <span class="k">intensity</span>: 1, <span class="k">softness</span>: 0.2 }
+}))</pre>
+        <div class="use"><b>Real usage:</b> a case study gallery where each screenshot melts into the next as the visitor scrolls, using a wave shaped displacement map so the edge of the transition ripples instead of cutting straight across.</div>
+        <div class="use"><b>Why noise matters:</b> a crossfade moves every pixel at the same rate, which is the one thing a real material never does. Noise controls the threshold instead, so parts of the image cross over early and others hold, and <b>liquid</b> adds displacement on top of that so image A appears to flow into B rather than fade. Both read as a material changing state rather than two pictures being mixed.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">Transitions between pages belong to persist, which also keeps playback alive across the route change. liquid shares distort's displacement sampler rather than carrying its own, see section 07.</p>
+      </div>
+    </div>
+
+    <div class="ps t1">
+      <div class="ph"><span class="pn">rail</span><span class="pk">@comice/rail</span><span class="pv">ships v0.3</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> media collections you move through, with physics that feel physical. A state machine, idle, dragging, decelerating, snapping, settled.</p>
+        <div class="lbl">Modes</div>
+        <div class="chips"><span class="chip">canvas</span><span class="chip">strip</span><span class="chip">compare</span><span class="chip">stack</span><span class="chip">marquee</span><span class="chip">arc</span><span class="chip">coverflow</span></div>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">mode</td><td class="ty">Mode</td><td>Required.</td></tr>
+          <tr><td class="o">inertia</td><td class="ty">number</td><td>Momentum after release. Default 0.92.</td></tr>
+          <tr><td class="o">keyboard</td><td class="ty">boolean</td><td>Arrow key stepping, roving focus, live region announcements. Default true.</td></tr>
+          <tr><td class="o">onActive</td><td class="ty">function</td><td>Fires with the centred index.</td></tr>
+        </table>
+        <div class="lbl">Example</div>
+<pre class="ex">comice(<span class="s">'#rail'</span>).use(rail({
+  <span class="k">mode</span>: <span class="s">'coverflow'</span>, <span class="k">inertia</span>: 0.94, <span class="k">snap</span>: <span class="s">true</span>,
+  <span class="k">onActive</span>: i => updateMeta(i)
+}))</pre>
+        <div class="use"><b>Real usage:</b> a product carousel a visitor drags or scroll wheels through, with real momentum and a snap into place, arrow keys work, and screen readers announce which product is active, without any extra work from the developer.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">Not a general drag and drop library, no sortable lists, no file drops. Media browsing only.</p>
+      </div>
+    </div>
+
+    <div class="ps t1">
+      <div class="ph"><span class="pn">spotlight</span><span class="pk">@comice/spotlight</span><span class="pv">ships v0.3</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> one item emphasised, its peers receding. A state machine, idle, entering, active, leaving.</p>
+        <div class="lbl">Effects</div>
+        <div class="chips"><span class="chip">wake</span><span class="chip">lift</span><span class="chip">peers dim/blur</span><span class="chip">reveal caption</span><span class="chip">expand</span></div>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">peers</td><td class="ty">object | false</td><td>{ selector, blur, dim } applied to siblings.</td></tr>
+          <tr><td class="o">reveal</td><td class="ty">string</td><td>Selector for caption children to show, stays real DOM.</td></tr>
+        </table>
+        <div class="lbl">Example</div>
+<pre class="ex">comice(<span class="s">'.project'</span>).use(spotlight({
+  <span class="k">peers</span>: { <span class="k">selector</span>: <span class="s">'.project'</span>, <span class="k">blur</span>: 4, <span class="k">dim</span>: 0.4 },
+  <span class="k">reveal</span>: <span class="s">'.meta'</span>
+})).driver(hover())</pre>
+        <div class="use"><b>Real usage:</b> a work grid where hovering one thumbnail sharpens it and lifts it slightly while every other tile softens and dims, and the project title fades in as a real, selectable caption underneath it.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">Anything revealed must be reachable by keyboard and touch, which is why reveal targets real DOM.</p>
+      </div>
+    </div>
+
+    <div class="ps t2">
+      <div class="ph"><span class="pn">distort</span><span class="pk">@comice/distort</span><span class="pv">ships v0.3</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> field distortion that follows an input. The cursor is a force in the field, not a shape drawn at a point.</p>
+        <div class="lbl">Effects</div>
+        <div class="chips"><span class="chip">bulge</span><span class="chip">lens</span><span class="chip">ripple</span><span class="chip">smear</span><span class="chip">shapedLens</span><span class="chip">tear</span><span class="chip">liquid</span><span class="chip">glass</span></div>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">effect</td><td class="ty">Effect</td><td>Default 'bulge'. liquid and glass are presets over the same field, not separate engines.</td></tr>
+          <tr><td class="o">radius</td><td class="ty">number</td><td>Influence radius, px. Default 160.</td></tr>
+          <tr><td class="o">strength</td><td class="ty">number</td><td>Field magnitude. Default 0.5.</td></tr>
+          <tr><td class="o">lag</td><td class="ty">number</td><td>Follow delay, 0 to 1. Default 0.12.</td></tr>
+          <tr><td class="o">refraction</td><td class="ty">number</td><td>Index-of-refraction bend, glass. Default 0.
+          </td></tr>
+          <tr><td class="o">falloff</td><td class="ty">'linear' | 'smooth' | 'exp'</td><td>Edge of the field. Default 'smooth'.</td></tr>
+        </table>
+        <div class="lbl">Example</div>
+<pre class="ex">comice(<span class="s">'.image'</span>).use(distort({ <span class="k">effect</span>: <span class="s">'glass'</span> })).driver(pointer())</pre>
+        <div class="use"><b>Real usage:</b> a product photo that bulges subtly like glass under the cursor as a visitor moves across it, purely a distortion field, nothing drawn on top.</div>
+        <div class="use"><b>liquid and glass:</b> both are the pointer written into a field the shader samples, the difference is what the field does to the pixels underneath. <b>liquid</b> pushes them, carrying momentum so the surface settles after the cursor has gone. <b>glass</b> refracts them, bending what is behind the lens rather than displacing it. Neither draws a cursor, both are fields.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">No custom cursor replacement. Touch falls back to no effect rather than a fake pointer. lag is the pointer driver's smoothing and the mapping layer's, never a third implementation here.</p>
+      </div>
+    </div>
+
+    <div class="ps t1">
+      <div class="ph"><span class="pn">mosaic</span><span class="pk">@comice/mosaic</span><span class="pv">ships v0.4</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> media rebuilt from cells, still reading as a photograph. Dot, print and pattern degradation, not text.</p>
+        <div class="lbl">Fills</div>
+        <div class="chips"><span class="chip">dither</span><span class="chip">halftone</span><span class="chip">riso</span><span class="chip">pixelate</span><span class="chip">crosshatch</span><span class="chip">images</span></div>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">fill</td><td class="ty">Fill</td><td>Required.</td></tr>
+          <tr><td class="o">palette</td><td class="ty">string[] | number</td><td>Brand colours, or a count. Default 2.</td></tr>
+          <tr><td class="o">sources</td><td class="ty">Media[]</td><td>Tile pool for fill: 'images'.</td></tr>
+        </table>
+        <div class="use"><b>Real usage:</b> a two colour lookbook where every photo is dithered into the brand's exact palette, still reading clearly as a photograph rather than noise, or a festival page where a thousand crowd photos assemble into the headline act's portrait.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">Error diffusion dithering is sequential and CPU bound, offered for stills, discouraged for video.</p>
+      </div>
+    </div>
+
+    <div class="ps t1">
+      <div class="ph"><span class="pn">ascii</span><span class="pk">@comice/ascii</span><span class="pv">ships v0.4</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> media rebuilt from characters, live, on the GPU. Kept separate from mosaic because the result reads as text, not as a degraded photograph.</p>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">charset</td><td class="ty">string</td><td>Ordered dark to light. Default ' .:-=+*#%@'.</td></tr>
+          <tr><td class="o">cell</td><td class="ty">number</td><td>Cell size, px. Default 10.</td></tr>
+        </table>
+        <div class="use"><b>Real usage:</b> a developer tool's hero video that resolves out of a field of live characters into full footage as the visitor scrolls, an immediately recognisable, shareable moment.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">Not selectable text output. If it must be readable by a screen reader, that text belongs in the DOM layer underneath.</p>
+      </div>
+    </div>
+
+    <div class="ps t1">
+      <div class="ph"><span class="pn">color</span><span class="pk">@comice/color</span><span class="pv">ships v0.3</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> how media is graded, stylised and physically finished.</p>
+        <div class="lbl">Effects</div>
+        <div class="chips"><span class="chip">duotone</span><span class="chip">lut</span><span class="chip">grain</span><span class="chip">bloom</span><span class="chip">aberration</span><span class="chip">dof</span></div>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">lut</td><td class="ty">string</td><td>Path to a .cube file, the format colourists already use.</td></tr>
+          <tr><td class="o">interpolate</td><td class="ty">'oklch' | 'rgb'</td><td>Colour blend space. Default 'oklch'.</td></tr>
+        </table>
+        <div class="use"><b>Real usage:</b> every image on a campaign site graded through the exact same LUT the colourist used on the film, so the website matches the trailer frame for frame.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">Not colour management, no ICC profiles, no HDR tone mapping. Creative grading only.</p>
+      </div>
+    </div>
+
+    <div class="ps t1">
+      <div class="ph"><span class="pn">aura</span><span class="pk">@comice/aura</span><span class="pv">ships v0.4</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> media colour escaping its frame. Samples the playing source and pushes colour into the page, as a glow, as CSS variables, or as data.</p>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">sample</td><td class="ty">'edges' | 'palette'</td><td>Default 'edges'.</td></tr>
+          <tr><td class="o">contrast</td><td class="ty">number | false</td><td>Minimum contrast ratio to clamp to. Default 4.5.</td></tr>
+        </table>
+        <div class="lbl">Example</div>
+<pre class="ex">comice(<span class="s">'#reel'</span>).use(aura({ <span class="k">sample</span>: <span class="s">'palette'</span>, <span class="k">colors</span>: 5, <span class="k">contrast</span>: 4.5 }))</pre>
+        <div class="use"><b>Real usage:</b> a film site where the button colours and page background shift with whatever scene is currently playing in the hero video, like Philips Ambilight for a browser tab.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">Contrast clamping is not optional by default. An unreadable page is a bug, not a style.</p>
+      </div>
+    </div>
+
+    <div class="ps t1">
+      <div class="ph"><span class="pn">type</span><span class="pk">@comice/type</span><span class="pv">ships v0.4</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> media and live text meeting, and text behaving like media. The text stays real DOM, selectable, styleable, indexable.</p>
+        <div class="lbl">Modes</div>
+        <div class="chips"><span class="chip">fill</span><span class="chip">behind</span><span class="chip">knockout</span><span class="chip">melt</span></div>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">mode</td><td class="ty">Mode</td><td>Default 'fill'.</td></tr>
+          <tr><td class="o">melt</td><td class="ty">object</td><td>{ blur, threshold, curve, hold }, word to word morphing via CSS filters.</td></tr>
+        </table>
+        <div class="lbl">Example</div>
+<pre class="ex">comice(<span class="s">'.project-name'</span>).use(type({
+  <span class="k">mode</span>: <span class="s">'melt'</span>, <span class="k">melt</span>: { <span class="k">blur</span>: 14, <span class="k">threshold</span>: [0.5, 18], <span class="k">hold</span>: <span class="s">true</span> }
+}))</pre>
+        <div class="use"><b>Real usage:</b> a carousel of project names that blur into one another as the rail turns, rather than crossfading flatly, and a project name that does not change between two consecutive slides stays perfectly still instead of visibly thickening.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">Not text animation, splitting and staggering letters belong to SplitText. Melt is the one exception, it is the text side twin of smin.</p>
+      </div>
+    </div>
+
+    <div class="ps t2">
+      <div class="ph"><span class="pn">layout</span><span class="pk">@comice/layout</span><span class="pv">ships v0.4</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> the page reacting to the media, rather than the media sitting inside the page.</p>
+        <div class="lbl">Modes</div>
+        <div class="chips"><span class="chip">wrap</span><span class="chip">avoid</span><span class="chip">anchor</span><span class="chip">crop</span></div>
+        <div class="use"><b>Real usage:</b> an editorial paragraph that automatically wraps around the outline of the person in the photo beside it, instead of sitting in a rigid rectangular column.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">Not a layout engine. Nudges existing CSS layout using shape data, never replaces grid or flex.</p>
+      </div>
+    </div>
+
+    <div class="ps t2">
+      <div class="ph"><span class="pn">spatial</span><span class="pk">@comice/spatial</span><span class="pv">ships v0.5</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> media on generated 3D geometry. Every shape is maths, no files, no parser, no dependency.</p>
+        <div class="lbl">Shapes</div>
+        <div class="chips"><span class="chip">plane</span><span class="chip">cube</span><span class="chip">sphere</span><span class="chip">cylinder</span><span class="chip">cone</span><span class="chip">torus</span></div>
+        <div class="lbl">Arrangements</div>
+        <div class="chips"><span class="chip">faces</span><span class="chip">carousel</span><span class="chip">helix</span><span class="chip">coverflow</span><span class="chip">parallax</span></div>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">mode</td><td class="ty">Mode</td><td>'parallax' displaces by a depth map from vision rather than wrapping geometry.</td></tr>
+          <tr><td class="o">depth</td><td class="ty">number</td><td>Displacement strength. Default 0.5.</td></tr>
+          <tr><td class="o">scale</td><td class="ty">number</td><td>Depth map range remap, before strength. Default 1.</td></tr>
+          <tr><td class="o">perspective</td><td class="ty">number</td><td>Projection distance, px. Default 800.</td></tr>
+          <tr><td class="o">smoothing</td><td class="ty">number</td><td>Lag on the driver input, 0 to 1. Default 0.1.</td></tr>
+          <tr><td class="o">sensitivity</td><td class="ty">number | object</td><td>Per-driver gain, { pointer, scroll }. Default 1.</td></tr>
+        </table>
+        <div class="lbl">Example</div>
+<pre class="ex"><span class="c">// vision produces depth, spatial consumes it, pointer drives it</span>
+comice(<span class="s">'.image'</span>)
+  .use(vision({ <span class="k">depth</span>: <span class="s">true</span> }))
+  .use(spatial({ <span class="k">mode</span>: <span class="s">'parallax'</span>, <span class="k">depth</span>: 0.5, <span class="k">perspective</span>: 800 }))
+  .driver(pointer())</pre>
+        <div class="use"><b>Real usage:</b> six product photos wrapped on the faces of a cube that turns slowly and follows the cursor slightly, on a product page, with no 3D model file or Three.js needed.</div>
+        <div class="use"><b>Parallax:</b> one photograph gaining real depth. The depth map from vision displaces pixels by how far away they are, so moving the cursor or scrolling shifts the foreground further than the background and the flat image reads as a shallow scene. Pointer and scroll both drive it through the normal mapping layer, so spatial never knows which one is attached.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">No model files, no scene graph, no shadows, no physics. A project needing those needs Three, and Comice composes beside it. Parallax is a depth-displaced plane, it is not the beginning of a 3D engine.</p>
+      </div>
+    </div>
+
+    <div class="ps t1">
+      <div class="ph"><span class="pn">particles</span><span class="pk">@comice/particles</span><span class="pv">ships v0.4</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> media as a cloud of points, and media broken into tiles. Both are instanced geometry with velocity and scatter, the only difference is how the instances are produced.</p>
+        <div class="lbl">Modes</div>
+        <div class="chips"><span class="chip">cloud</span><span class="chip">shatter</span></div>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">mode</td><td class="ty">'cloud' | 'shatter'</td><td>Default 'cloud'.</td></tr>
+          <tr><td class="o">from / to</td><td class="ty">SourceSpec</td><td>Point sources. to enables morphing between them.</td></tr>
+          <tr><td class="o">motion</td><td class="ty">object</td><td>{ fluid: true } gives continuous momentum and surface tension without a full simulation.</td></tr>
+          <tr><td class="o">reassemble</td><td class="ty">boolean</td><td>Particles carry their target so the image reforms exactly. Default true when to is media.</td></tr>
+        </table>
+        <div class="lbl">Example</div>
+<pre class="ex">comice(<span class="s">'#stage'</span>).use(particles({
+  <span class="k">mode</span>: <span class="s">'cloud'</span>, <span class="k">from</span>: { <span class="k">image</span>: <span class="s">'/founder.jpg'</span> }, <span class="k">to</span>: { <span class="k">text</span>: <span class="s">'COMICE'</span> },
+  <span class="k">count</span>: 120000, <span class="k">motion</span>: { <span class="k">noise</span>: 0.3 }
+})).driver(scroll())
+
+<span class="c">// Image to particles and back, same image or a different one</span>
+comice(<span class="s">'#hero'</span>).use(particles({
+  <span class="k">mode</span>: <span class="s">'shatter'</span>, <span class="k">from</span>: imageA, <span class="k">to</span>: imageB
+})).driver(scroll())</pre>
+        <div class="use"><b>Real usage:</b> a founder's portrait dissolving into 120,000 drifting points that reassemble into the company wordmark as the visitor scrolls, or a hero image that breaks into a hundred squares and scatters, then reassembles on scroll back.</div>
+        <div class="use"><b>The full round trip:</b> image, particles, movement, reassembly, image, as one first-class path rather than a scatter that happens to reverse. Each particle carries its destination as well as its origin, so <b>A back to A</b> lands pixel-exact and <b>A to B</b> resolves into a genuinely different picture. That per-particle target is a constraint on the instance buffer layout, which is why it belongs in the spec before the buffer is designed rather than after.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">No 3D model file loading. Accepts a raw position array for anyone who samples a mesh themselves.</p>
+      </div>
+    </div>
+
+    <div class="ps t1">
+      <div class="ph"><span class="pn">footage</span><span class="pk">@comice/footage</span><span class="pv">ships v1.0</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> everything only video can do. Keying, temporal effects, audio reactivity, motion extracted from real footage, and playback that survives scrubbing.</p>
+        <div class="lbl">Effects</div>
+        <div class="chips"><span class="chip">chromaKey</span><span class="chip">lumaKey</span><span class="chip">echo</span><span class="chip">trails</span><span class="chip">ghosting</span><span class="chip">smear</span><span class="chip">audio</span><span class="chip">flow</span></div>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">chromaKey</td><td class="ty">object</td><td>{ color, tolerance, spill, softness }.</td></tr>
+          <tr><td class="o">audio</td><td class="ty">object</td><td>FFT bands exposed as driver values for any plugin.</td></tr>
+          <tr><td class="o">feedback</td><td class="ty">object</td><td>{ amount, decay, offset } over the shared previous-frame buffer from section 07.</td></tr>
+        </table>
+        <div class="use"><b>Real usage:</b> a presenter filmed on a green screen, keyed out live in the browser and composited directly into the page layout, with the bloom intensity on a nearby element pulsing off the actual audio track.</div>
+        <div class="use"><b>echo is one name for a shared capability.</b> Trails, echo, ghosting, persistence, smear and feedback distortion are all the previous frame blended into the current one with different decay and offset. That buffer lives in the renderer, see section 07, so footage consumes it rather than owning it, and any other plugin can reach the same thing without footage being installed.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">Not a player, no chrome, captions UI, HLS or DRM. No private feedback buffer, and no per-frame texture allocation.</p>
+      </div>
+    </div>
+
+    <div class="ps t1">
+      <div class="ph"><span class="pn">seed</span><span class="pk">@comice/seed</span><span class="pv">ships v0.3</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> everything before media is ready. Placeholders, priority, decoding, art direction.</p>
+        <div class="lbl">Placeholders</div>
+        <div class="chips"><span class="chip">thumbhash</span><span class="chip">blurhash</span><span class="chip">lqip</span></div>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">placeholder</td><td class="ty">Placeholder</td><td>Default 'thumbhash', about 25 bytes, handles transparency.</td></tr>
+          <tr><td class="o">focal</td><td class="ty">[x,y] | 'subject'</td><td>Crop anchor. 'subject' uses vision. Default [0.5, 0.5].</td></tr>
+        </table>
+        <div class="use"><b>Real usage:</b> a photography portfolio where every thumbnail fades up from its own tiny colour hash instead of popping in empty, and every crop stays centred on the subject's face across every breakpoint automatically.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">Not an image CDN or build tool. Consumes the sources given to it, does not resize or host.</p>
+      </div>
+    </div>
+
+    <div class="ps t1">
+      <div class="ph"><span class="pn">persist</span><span class="pk">@comice/persist</span><span class="pv">ships v1.0</span></div>
+      <div class="pb">
+        <p class="job"><b>Owns:</b> media surviving navigation. Playback continues, textures are reused, the transition belongs to the page rather than the browser reloading it.</p>
+        <div class="lbl">Transitions</div>
+        <div class="chips"><span class="chip">shared</span><span class="chip">blend</span><span class="chip">curtain</span><span class="chip">iris</span></div>
+        <div class="lbl">Options</div>
+        <table class="opts">
+          <tr><td class="o">match</td><td class="ty">string</td><td>Attribute pairing elements across routes.</td></tr>
+          <tr><td class="o">native</td><td class="ty">'auto' | boolean</td><td>Use the View Transitions API where it suffices. Default 'auto'.</td></tr>
+        </table>
+        <div class="use"><b>Real usage:</b> clicking a project thumbnail on the listing page and watching the same video keep playing, uninterrupted, as it grows into the hero of the detail page, rather than restarting.</div>
+        <div class="lbl">Excludes</div>
+        <p class="excl">Not a router. Comice never owns navigation or history, it reacts to a route change the page's own router already made.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9 ============ -->
+  <section id="sec9">
+    <h2><span class="num">09</span>Where this actually stands</h2>
+    <p class="sec-note">
+      Everything above describes what Comice does when it is finished. This is what is built today,
+      so the spec can be read without guessing which parts are real.
+    </p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Layer</th><th>Status</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td><b>State machine</b></td><td class="yes">Built</td><td>idle, entering, active, leaving, interrupt safe, rest and display transforms separated.</td></tr>
+          <tr><td><b>Shared scheduler</b></td><td class="yes">Built</td><td>One rAF loop, visibility gated, crash isolated per callback.</td></tr>
+          <tr><td><b>Drivers</b></td><td class="yes">Built</td><td>scroll, hover, pointer, audio. drag, click and time still missing.</td></tr>
+          <tr><td><b>Signal and mapping</b></td><td class="yes">Built</td><td>Named signals to plugin parameters, clamp, remap, ease, smooth. Fully tested.</td></tr>
+          <tr><td><b>GPU pipeline</b></td><td class="nope">Not built</td><td>No renderer, no texture management, no shaders. Section 07 specifies what it has to carry.</td></tr>
+          <tr><td><b>The four primitives</b></td><td class="nope">Not built</td><td>Mask field, multi-texture residency, temporal feedback, noise and displacement.</td></tr>
+          <tr><td><b>Plugins</b></td><td class="nope">None exist</td><td>All eighteen in section 08 are specification. The plugin contract has never met a real consumer.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout risk">
+      <b>The one thing this ordering depends on.</b> Core's plugin contract, setup, teardown and the
+      params object a mapping writes into, has never been exercised by an actual plugin. The first one
+      built is as much a test of that contract as it is a feature, which is why it should be the
+      cheapest plugin to build, not the most impressive one.
+    </div>
+
+    <div class="callout good">
+      <b>Audio is the exception, it already works.</b> The audio driver reports bass, mid, high, energy,
+      amplitude and spectrum, plus beat, onset and drop events, and the mapping layer already routes any
+      named signal into any plugin parameter. Driving a distortion from the bass needs no audio-specific
+      code inside distort, which is the entire reason the signal layer was built separately from the
+      state machine. Note that beat, onset and drop are discrete events rather than continuous signals,
+      so they arrive through .on() rather than .map().to().
+    </div>
+
+<pre><span class="c">// Works today, against plugins that do not exist yet</span>
+comice(<span class="s">'.hero'</span>)
+  .use(distort()).use(aura()).use(particles())
+  .driver(audio({ source: <span class="s">'#track'</span> }))
+  .map(<span class="s">'bass'</span>).to(distortInstance, <span class="s">'strength'</span>, { output: [0, 0.8] })
+  .map(<span class="s">'energy'</span>).to(auraInstance, <span class="s">'intensity'</span>)
+  .map(<span class="s">'high'</span>).to(colorInstance, <span class="s">'shift'</span>)</pre>
+  </section>
+
+  <!-- ============ 10 ============ -->
+  <section id="sec10">
+    <h2><span class="num">10</span>Color, OKLCH by default</h2>
+    <div class="plain">
+      <div class="pl">In plain terms</div>
+      <p>
+        A gradient between two saturated colours in ordinary RGB often goes grey or muddy in the
+        middle, because RGB describes screen hardware rather than how eyes perceive colour. OKLCH fixes
+        this by blending through a perceptually uniform space, so the same gradient stays smooth and
+        vivid instead.
+      </p>
+      <p>
+        This is not a new plugin. It is the default interpolation method wherever a plugin blends
+        between two colours, aura's glow, color's duotone, mosaic's palette fills, dissolve's tonal
+        grade. Full browser support exists now, and CSS itself already recommends OKLCH for gradients
+        and color-mix.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ 11 ============ -->
+  <section id="sec11">
+    <h2><span class="num">11</span>Dependencies</h2>
+    <p class="sec-note">The target is zero runtime dependencies in core.</p>
+
+    <div class="plain">
+      <div class="pl">In plain terms</div>
+      <p>
+        Written in TypeScript, compiled down to plain JavaScript for the actual published package. This
+        is a step ahead of both GSAP and Three.js, both are written in JavaScript with type definitions
+        bolted on afterward in a separate file, which is why Three's types are so often a release behind
+        the library itself. Writing Comice in TypeScript from the start means the types can never drift
+        out of sync with the code, they come from the same source, not a translation layer maintained on
+        the side.
+      </p>
+    </div>
+
+    <dl class="rows">
+      <div class="row">
+        <dt>WebGL layer</dt>
+        <dd>Hand written WebGL2. A full WebGL library fits in 7 KB gzipped, Comice needs less than that.</dd>
+      </div>
+      <div class="row">
+        <dt>Render loop and state machine</dt>
+        <dd>One shared requestAnimationFrame, visibility gating, per element state. Cannot be delegated, it is where mobile budgets and interrupt safety are enforced.</dd>
+      </div>
+      <div class="row">
+        <dt>ONNX Runtime Web</dt>
+        <dd>The one permitted dependency, inside vision only. Lazy loaded, never bundled, never in core.</dd>
+      </div>
+      <div class="row">
+        <dt>Peer adapters</dt>
+        <dd>Optional, for GSAP, Lenis and Motion, so nobody has to change their stack.</dd>
+      </div>
+    </dl>
+  </section>
+
+  <!-- ============ 12 ============ -->
+  <section id="sec12">
+    <h2><span class="num">12</span>Framework wrappers</h2>
+
+    <div class="plain">
+      <div class="pl">In plain terms</div>
+      <p>
+        Neither GSAP nor Three.js ships a separate React version, a separate Vue version and a separate
+        Svelte version of the actual engine. Both ship one vanilla core, and a small hook per framework
+        that does nothing but call that same core inside the framework's own lifecycle.
+      </p>
+      <p>
+        @gsap/react's useGSAP() is a thin wrapper around gsap.to(), the same call you would make in
+        plain JavaScript, just triggered inside a useEffect and torn down on unmount.
+        react-three-fiber is the same idea for Three.js, one adapter translating JSX into calls against
+        the one underlying engine. Comice copies this shape exactly, because core is already
+        framework-agnostic vanilla JavaScript with zero dependencies, wrapping it costs almost nothing.
+      </p>
+    </div>
+
+    <div class="core-api">
+      <div class="row2"><dt>@comice/react</dt><dd>useComice() hook. Instantiates on mount, calls .destroy() on unmount, re-attaches when the selector or options change.</dd></div>
+      <div class="row2"><dt>@comice/vue</dt><dd>A composable, useComice(), against Vue's onMounted and onUnmounted.</dd></div>
+      <div class="row2"><dt>@comice/svelte</dt><dd>A Svelte action, use:comice, following the same mount and destroy pattern as Svelte's own actions.</dd></div>
+    </div>
+
+<pre><span class="c">// React, the wrapper never touches the plugin API itself</span>
+<span class="k">import</span> { useComice } <span class="k">from</span> <span class="s">'@comice/react'</span>
+<span class="k">import</span> { spotlight } <span class="k">from</span> <span class="s">'@comice/spotlight'</span>
+
+<span class="k">function</span> ProjectCard() {
+  <span class="k">const</span> ref = useComice(<span class="k">c</span> => c.use(spotlight({ peers: <span class="s">'.project'</span> })).driver(hover()))
+  <span class="k">return</span> &lt;div ref={ref} className=<span class="s">"project"</span>&gt;&lt;/div&gt;
+}</pre>
+
+    <div class="callout good">
+      <b>Why this stays out of v0.1.</b> A wrapper is only worth writing once the core API it wraps has
+      stopped changing, writing it earlier means rewriting the wrapper every time a plugin's shape
+      shifts. Framework wrappers belong after the plugin surface is stable, not before.
+    </div>
+  </section>
+
+  <!-- ============ 13 ============ -->
+  <section id="sec13">
+    <h2><span class="num">13</span>Mobile</h2>
+    <p class="sec-note">
+      GSAP is not desktop only, it is JavaScript. The real constraint has always been the GPU and the
+      battery, not the library. Mobile web is required, not optional, it is half the audience on day
+      one.
+    </p>
+    <dl class="rows">
+      <div class="row"><dt>Cap the pass chain</dt><dd>One or two passes on mobile. Beyond it, merge passes or drop the lowest priority ones.</dd></div>
+      <div class="row"><dt>Scale resolution</dt><dd>Cap device pixel ratio at 1.5 to 2 rather than honouring 3x displays.</dd></div>
+      <div class="row"><dt>Render only when visible</dt><dd>Off screen planes and hidden tabs do zero work.</dd></div>
+      <div class="row"><dt>Watch the frame clock</dt><dd>Step down resolution, then chain length, then a static poster if frames keep missing budget.</dd></div>
+    </dl>
+  </section>
+
+  <!-- ============ 14 ============ -->
+  <section id="sec14">
+    <h2><span class="num">14</span>Studio, the visual editor</h2>
+
+    <div class="plain">
+      <div class="pl">In plain terms</div>
+      <p>
+        A visual tool where someone without code uploads a photo or video, picks plugins from a
+        sidebar, tunes them live, and exports something to use elsewhere, the Aminos.app pattern
+        applied to Comice.
+      </p>
+      <p>
+        The strongest single feature for that tool is exactly the two things Comice already does that
+        nothing else does, vision's depth and subject data, and particles turning any source into a
+        cloud of points. Upload a photo, get particles driven by real depth, tune the motion, export.
+        That is a genuinely strong demo, not a filler feature.
+      </p>
+    </div>
+
+    <h3 class="sub">What export actually means here</h3>
+    <div class="verdict">
+      <div class="vh">JSON config is the real export, GIF is a nice extra, not the headline</div>
+      <p>
+        A GIF is a fixed, baked, non-interactive loop. Comice's actual output is a live WebGL state
+        machine reacting to a real pointer or scroll position, exporting to GIF means throwing that
+        away and shipping something indistinguishable from tools that already exist and are free,
+        ParticleFX Studio already does exactly this.
+      </p>
+      <p>
+        The export worth building the product around is a small JSON config describing the source,
+        the plugin chain and its options, the same idea as a Lottie file, except the point is not the
+        JSON itself, it is that <b>the library can read that JSON straight back and run the real,
+        interactive thing</b>. GIF export is worth offering as a one click extra for people who just
+        want a shareable clip, but it should never be the thing Studio is sold on.
+      </p>
+    </div>
+
+<pre><span class="c">// What Studio exports, and what the library consumes, same file both directions</span>
+{
+  <span class="k">"source"</span>: { <span class="k">"type"</span>: <span class="s">"image"</span>, <span class="k">"src"</span>: <span class="s">"upload.jpg"</span> },
+  <span class="k">"plugins"</span>: [
+    { <span class="k">"use"</span>: <span class="s">"vision"</span>, <span class="k">"depth"</span>: <span class="s">true</span>, <span class="k">"segment"</span>: <span class="s">"person"</span> },
+    { <span class="k">"use"</span>: <span class="s">"particles"</span>, <span class="k">"mode"</span>: <span class="s">"cloud"</span>, <span class="k">"count"</span>: 80000, <span class="k">"motion"</span>: { <span class="k">"noise"</span>: 0.3 } }
+  ],
+  <span class="k">"driver"</span>: { <span class="k">"type"</span>: <span class="s">"scroll"</span> }
+}
+
+<span class="c">// The library runs it directly, no separate player, no separate format</span>
+comice(<span class="s">'#stage'</span>).load(<span class="s">'./export.json'</span>)</pre>
+
+    <h3 class="sub">Why it is not part of the plan yet</h3>
+    <div class="callout risk">
+      <b>Same reasoning as the framework wrappers, sequencing, not doubt.</b> Studio hard codes
+      assumptions about the plugin config shape. Built before the plugin options stop moving, it gets
+      rewritten with every change. Built once the eighteen plugins above have shipped and settled, it
+      is a thin form over a format that already works. It belongs after v1.0 in the build order below,
+      not before it, and revenue, if there ever is any, belongs there too rather than on the library
+      itself, in keeping with the licensing decision below.
+    </div>
+
+    <h3 class="sub">Native mobile languages, Flutter, Kotlin, Swift</h3>
+    <div class="plain">
+      <div class="pl">In plain terms</div>
+      <p>
+        Not a Comice branded app, the library itself running as an interaction layer inside a native
+        mobile app, so a Flutter or Kotlin developer gets the same kind of media response Comice gives
+        a web developer. Checked what this would actually take rather than assuming it is a simple port.
+      </p>
+      <p>
+        Comice's shader math, the SDF operations in morph, the smin blending, the distortion fields, is
+        portable in principle, GLSL translates reasonably closely to Flutter's shader language and to
+        Android's AGSL, both now run real-time fragment shaders natively. What does not port is the
+        JavaScript half, the state machine, the driver system, the plugin API, none of that runs inside
+        Flutter or a native Android view. A native binding is not a wrapper the way the React or Vue
+        packages are, it means rebuilding the state machine and driver system a second time in Dart or
+        Kotlin, reusing only the shader math underneath. A real, separate engineering project, not
+        something to promise alongside the web library.
+      </p>
+    </div>
+    <div class="callout risk">
+      <b>Where this sits in the plan.</b> Not in the roadmap below. Worth revisiting once the web
+      library and Studio exist and there is a specific team asking for it, building a second engine on
+      spec before the first one has users would be the same mistake as building Studio too early, just
+      more expensive.
+    </div>
+  </section>
+
+  <!-- ============ 15 ============ -->
+  <section id="sec15">
+    <h2><span class="num">15</span>Licensing</h2>
+    <div class="verdict">
+      <div class="vh">Free and MIT, both the library and the examples</div>
+      <p>
+        Webflow acquired GSAP and made the whole thing free in 2025, including plugins that used to
+        cost money. The paid plugin model this might have copied was removed from the market by the
+        biggest player in it.
+      </p>
+      <p>
+        Comice is unknown, GSAP is on eleven million sites and costs nothing. A paid tier now buys
+        friction at exactly the moment adoption matters more than revenue.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ 16 ============ -->
+  <section id="sec16">
+    <h2><span class="num">16</span>The rules</h2>
+    <div class="princ">
+      <div class="pr"><div class="n">01</div><div><b>Core earns its size in every project</b><p>Nothing enters core unless every user needs it. Target, under 10 KB.</p></div></div>
+      <div class="pr"><div class="n">02</div><div><b>Plugins are peers, not favourites</b><p>Official plugins use the same public API a stranger would.</p></div></div>
+      <div class="pr"><div class="n">03</div><div><b>Presets are data, not code</b><p>Anything a preset does, a user can write by hand and change halfway through.</p></div></div>
+      <div class="pr"><div class="n">04</div><div><b>Degrade, never disappear</b><p>No GPU, reduced motion, weak phone, failed load, the media still shows.</p></div></div>
+      <div class="pr"><div class="n">05</div><div><b>The page stays real</b><p>Real text, real links, real layout underneath. The canvas mirrors the page, never replaces it.</p></div></div>
+      <div class="pr"><div class="n">06</div><div><b>States, not durations</b><p>Every interactive plugin is a state machine driven by real events, interrupt safe by construction.</p></div></div>
+      <div class="pr"><div class="n">07</div><div><b>Say no in public</b><p>A written list of what Comice will never do protects the core from the catalogue.</p></div></div>
+    </div>
+  </section>
+
+  <!-- ============ 17 ============ -->
+  <section id="sec17">
+    <h2><span class="num">17</span>The actual stack</h2>
+
+    <div class="plain">
+      <div class="pl">In plain terms</div>
+      <p>
+        Everything above this point is what Comice does. This is how it is actually organised on disk
+        and built, the decisions that have to be made before the first line of morph is written, not
+        after.
+      </p>
+    </div>
+
+    <h3 class="sub">Monorepo layout</h3>
+    <p class="sec-note">
+      One repository, one core, one package per plugin, matching the plugin table above exactly, so
+      the folder structure and the plugin list never drift apart.
+    </p>
+<pre><span class="c">comice/
+  packages/
+    core/              </span><span class="k">comice</span><span class="c">, the state machine, drivers, render loop
+    morph/             </span><span class="k">@comice/morph</span><span class="c">
+    spotlight/         </span><span class="k">@comice/spotlight</span><span class="c">
+    reveal/            </span><span class="k">@comice/reveal</span><span class="c">
+    ...                one folder per plugin, same 18 names as section 08
+    react/             </span><span class="k">@comice/react</span><span class="c">
+    vue/               </span><span class="k">@comice/vue</span><span class="c">
+  apps/
+    docs/              the showcase site, consumes the packages like any other user
+  pnpm-workspace.yaml
+  package.json</span></pre>
+
+    <div class="core-api">
+      <div class="row2"><dt>pnpm workspaces</dt><dd>The package manager, not npm or yarn. Matches this shape exactly, one package per plugin, shared devDependencies hoisted once, and it is what most modern plugin-based libraries in this space already use.</dd></div>
+      <div class="row2"><dt>tsup</dt><dd>Builds each package. A thin wrapper over esbuild built specifically for shipping small TypeScript libraries with bundled type declarations, the same tool GSAP-scale libraries reach for over a heavier bundler like Webpack.</dd></div>
+      <div class="row2"><dt>Vite</dt><dd>Runs the docs app and the local dev playground only, never part of the published packages themselves.</dd></div>
+      <div class="row2"><dt>TypeScript, project references</dt><dd>Each package builds independently but core's types are shared through TypeScript project references, so a plugin gets full autocomplete against core without a circular dependency.</dd></div>
+    </div>
+
+    <h3 class="sub">What ships in each package</h3>
+    <dl class="rows">
+      <div class="row"><dt>dist/index.js</dt><dd>The runtime, ES module, tree-shakeable.</dd></div>
+      <div class="row"><dt>dist/index.d.ts</dt><dd>Types, generated from the TypeScript source directly, never hand-written separately.</dd></div>
+      <div class="row"><dt>package.json</dt><dd>sideEffects: false declared explicitly, this is the flag that actually makes a bundler tree-shake unused plugins out of a user's build.</dd></div>
+    </dl>
+
+    <h3 class="sub">GLSL, not WebAssembly, for morph and particles</h3>
+    <div class="plain">
+      <div class="pl">In plain terms</div>
+      <p>
+        The heavy math in morph and particles, the SDF distance field, the position updates, does not
+        run as JavaScript, it runs as GLSL inside the WebGL shader, on the GPU, already in parallel
+        across every pixel or point at once. There is no JavaScript loop there to replace with
+        WebAssembly, the computation was never in JavaScript to begin with.
+      </p>
+      <p>
+        WebAssembly genuinely is 10 to 100x faster than JavaScript, but only for self-contained,
+        sequential math with no back and forth to the browser. The moment code crosses the boundary
+        between WASM and JavaScript repeatedly inside a hot loop, that speed gain disappears, and a
+        state machine reading scroll position and DOM bounds every frame is exactly that kind of
+        repeated crossing. Using WASM for morph or particles would mean computing positions on the CPU
+        and uploading them to the GPU each frame, slower than the shader doing it directly, plus a
+        second toolchain, plus a compiled binary working against a 10 KB core budget.
+      </p>
+    </div>
+    <div class="callout good">
+      <b>Where WASM is a real candidate, later, narrowly.</b> Only for CPU-bound, sequential work that
+      cannot be a shader, error diffusion dithering inside mosaic is the one plugin in this whole plan
+      that genuinely qualifies, each pixel depends on the one before it, which is the opposite of what
+      a GPU is good at. Worth a small, isolated WASM module there if it ever becomes a bottleneck, never
+      the engine itself, and never morph or particles, which are already running at the speed a CPU
+      path would be trying to reach.
+    </div>
+
+    <div class="callout risk">
+      <b>What is deliberately not decided yet.</b> Testing strategy, a shader is not something a unit
+      test catches, the honest answer is visual regression against reference screenshots, but that is
+      worth setting up once morph exists to test, not before. Same for CI and a release process, both
+      are team-scale concerns, and adding them now while building solo would be exactly the kind of
+      premature process this whole plan has been avoiding elsewhere.
+    </div>
+  </section>
+
+  <!-- ============ 18 ============ -->
+  <section id="sec18">
+    <h2><span class="num">18</span>Build order</h2>
+    <p class="sec-note">
+      Ordered by what each step makes safe to build next, not by what would be most exciting to
+      announce. A release bundles whatever is ready, a phase says what unblocks what, and the two are
+      allowed to differ. What is not allowed is building something before the thing it depends on has
+      been proven.
+    </p>
+
+    <div class="phase"><div class="tag-v">v0.1</div><div><h4>Core, then one cheap plugin</h4><p>State machine, native drivers, plane, sources, pass chain, mobile budget, fallbacks. Then <b>reveal</b>, deliberately the least impressive plugin on the list, because it is CSS and geometry with no shaders, and its only job here is to answer whether .use(), setup(), teardown() and the params object a mapping writes into actually hold up against a real consumer. Getting that answer from the cheapest possible plugin is the entire point. If the contract is wrong, it is wrong now, before seventeen more are built on it.</p></div></div>
+
+    <div class="phase"><div class="tag-v">v0.2</div><div><h4>The GPU pipeline and the four primitives</h4><p>The renderer, plus the mask field, multi-texture residency, temporal feedback, and the noise and displacement library from section 07. Every release after this one consumes them, and a primitive cannot be replaced later the way a plugin can. Then <b>morph</b>, which is the right first shader plugin because the legacy prototype already proves the SDF and liquid-blend math against real footage, so the pipeline is being tested rather than the algorithm. The remaining drivers, drag, click and time, land here too.</p></div></div>
+
+    <div class="phase"><div class="tag-v">v0.3</div><div><h4>Dissolve and distort, then the daily plugins</h4><p><b>dissolve</b> and <b>distort</b> come first in this release for a specific reason, they are the first real exercise of two primitives everything else leans on, multi-texture residency and the displacement sampler. dissolve ships the noise and liquid transitions, distort the liquid and glass presets, and reveal gains cursor and media masks as the first consumer of the mask field. Then spotlight, color, rail and seed, mechanical once the pipeline is proven.</p></div></div>
+
+    <div class="phase"><div class="tag-v">v0.4</div><div><h4>Mosaic, ascii, aura, type, layout, particles</h4><p>The looks that travel. particles ships the image to particles to image round trip, including A to B, which is where per-particle targets constrain the instance buffer layout. No new primitives, no new risk, which is exactly why this tier sits here rather than earlier.</p></div></div>
+
+    <div class="phase"><div class="tag-v">v0.5</div><div><h4>Vision, then spatial</h4><p>The hardest release and the one worth slowing down for, the only plugin with an ML dependency and the only lazy-loaded runtime. Video depth, source and updateRate, is in vision from the first line rather than retrofitted. <b>spatial</b> follows vision rather than accompanying it, because depth has one producer and several consumers, and building parallax against an unstable depth output means building it twice.</p></div></div>
+
+    <div class="phase"><div class="tag-v">v1.0</div><div><h4>Footage and persist, then framework wrappers</h4><p>Chroma key, audio reactive, motion transfer, scrub safe seeking, and media that survives navigation. The family that makes the name honest, a media library rather than an image library. echo, trails and ghosting are written against the shared feedback buffer from v0.2, so there is never a private implementation to refactor away. React, Vue and Svelte wrappers follow immediately after, once the plugin surface stops moving.</p></div></div>
+
+    <div class="phase"><div class="tag-v">v1.5</div><div><h4>Studio</h4><p>The visual editor, built only once the config shape above has proven stable in real use. Upload, depth, particles, export JSON that the library reads back and runs live, GIF export as a secondary option.</p></div></div>
+
+    <div class="callout good">
+      <b>The discipline that keeps this a library.</b> Every release ships capabilities, and demos follow
+      from them. The moment a release is planned around what would look good in a gallery, the drift has
+      started. The catalogue serves the engine, never the other way round.
+    </div>
+
+    <div class="callout risk">
+      <b>The one ordering rule worth stating outright.</b> Twice in this plan a cheap thing goes before
+      an impressive one, reveal before morph and vision before spatial, and both times for the same reason.
+      The first plugin tests the contract, so it should be the one whose failure is cheapest to diagnose.
+      A producer ships before its consumers, so the consumer is not built twice. Every other ordering
+      question in this document resolves to one of those two.
+    </div>
+  </section>
+
+
+</div>
+
+</body></html>
