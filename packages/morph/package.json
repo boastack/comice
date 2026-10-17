@@ -1,7 +1,7 @@
 {
   "name": "@comice/morph",
   "version": "0.1.0",
-  "description": "Media changing shape — five operations over signed distance fields.",
+  "description": "Media morphing between caller-supplied SVG and CSS clip-path silhouettes.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
