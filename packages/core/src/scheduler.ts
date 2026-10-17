@@ -66,8 +66,8 @@ export function createScheduler(): Scheduler {
     // the `requestAnimationFrame(tick)` call below never runs again —
     // the entire shared loop stops forever, for everyone, silently.
     entries.forEach((entry) => {
-      if (!entry.isActive()) return
       try {
+        if (!entry.isActive()) return
         entry.callback(deltaMs, timestamp)
       } catch (err) {
         if (__DEV__) {
@@ -135,8 +135,11 @@ export function createVisibilityGate(target: Element): {
 
   const observer = canObserve
     ? new IntersectionObserver(
-        ([entry]) => {
-          onScreen = entry.isIntersecting
+        (records) => {
+          // The LAST record is the element's current state. A fast scroll queues several in
+          // one batch ("left the screen", then "came back"), and reading the first left the
+          // gate stuck on "not visible" with the element in plain view, so nothing ever drew.
+          onScreen = records[records.length - 1]?.isIntersecting ?? false
         },
         { threshold: 0 },
       )

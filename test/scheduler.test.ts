@@ -328,3 +328,41 @@ describe('createVisibilityGate', () => {
     }
   })
 })
+
+describe('createVisibilityGate: a batch of observer records', () => {
+  const OriginalIO = globalThis.IntersectionObserver
+  let deliver: (records: Array<{ isIntersecting: boolean }>) => void = () => {}
+  beforeEach(() => {
+    globalThis.IntersectionObserver = class {
+      constructor(callback: (records: unknown[]) => void) { deliver = (records) => callback(records) }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    } as unknown as typeof IntersectionObserver
+  })
+  afterEach(() => { globalThis.IntersectionObserver = OriginalIO })
+
+  it('the last record is the current state: left the screen and came back within one batch is visible', () => {
+    const gate = createVisibilityGate(document.createElement('div'))
+    deliver([{ isIntersecting: false }, { isIntersecting: true }])
+    expect(gate.isVisible()).toBe(true)
+    gate.destroy()
+  })
+
+  it('and the reverse: came in and left within one batch is not visible', () => {
+    const gate = createVisibilityGate(document.createElement('div'))
+    deliver([{ isIntersecting: true }])
+    expect(gate.isVisible()).toBe(true)
+    deliver([{ isIntersecting: true }, { isIntersecting: false }])
+    expect(gate.isVisible()).toBe(false)
+    gate.destroy()
+  })
+
+  it('an empty batch means not visible rather than throwing', () => {
+    const gate = createVisibilityGate(document.createElement('div'))
+    deliver([{ isIntersecting: true }])
+    deliver([])
+    expect(gate.isVisible()).toBe(false)
+    gate.destroy()
+  })
+})
