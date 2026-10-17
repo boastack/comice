@@ -6,15 +6,21 @@
  * IntersectionObserver and scroll listener where it is not, entirely inside
  * core."
  *
- * Where the browser supports ScrollTimeline, this driver runs on the
- * compositor thread and never touches the main thread per frame. Where it
- * does not, it falls back to computing progress from getBoundingClientRect()
- * on scroll and resize, throttled to one read per animation frame.
+ * Native ViewTimeline supplies browser-measured element progress, sampled
+ * by the shared scheduler. Custom ranges/root containers use scroll-event
+ * measurements batched to an animation frame. GPU uniforms are updated on
+ * the main thread in both paths.
  */
 
+import { getSharedScheduler } from '../scheduler.js'
 import type { Driver, DriverSignal } from '../types.js'
+import { prefersReducedMotion } from '../motion.js'
 
 export type ScrollOptions = {
+  /** Measure a surrounding section instead of the driven media (sticky stages). */
+  subject?: Element | string
+  /** cover: enters bottom to exits top; contain: section top at top to bottom at bottom. */
+  range?: 'cover' | 'contain'
   /** Fraction of the element that must be visible before progress starts. Default 0. */
   threshold?: number
   /** Scroll container. Defaults to the viewport. (The native path finds
@@ -22,6 +28,43 @@ export type ScrollOptions = {
   root?: Element | null
   /** Pixel offset applied to the start/end of the progress range. */
   offset?: number
+  /**
+   * Seconds the progress takes to catch up with the scroll, so it glides behind the
+   * wheel instead of tracking it frame for frame: the "scrub" of a ScrollTrigger, with
+   * no library. About 95% of the way in `smooth` seconds, easing out; it stops
+   * the moment it arrives. Short values (.2 to .4) read as polish, longer ones as drag.
+   * Skipped with `prefers-reduced-motion`. Default 0: the progress follows the scroll.
+   */
+  smooth?: number
+}
+
+/**
+ * Wraps a signal sink with the `smooth` lag. With no smoothing it is the sink itself.
+ * The first signal lands at once (nothing to glide from), later ones set a target that
+ * a shared-scheduler entry eases toward, and the entry sits idle between glides.
+ */
+function smoothed(onSignal: (signal: DriverSignal) => void, seconds: number): { push: (signal: DriverSignal) => void; stop: () => void } {
+  if (!(seconds > 0) || prefersReducedMotion()) return { push: onSignal, stop() {} }
+  let want = 0
+  let have = 0
+  let started = false
+  const tau = seconds / 3
+  const unregister = getSharedScheduler().add(
+    (deltaMs) => {
+      // Capped, so a stalled frame does not leap most of the distance in one step.
+      have += (want - have) * (1 - Math.exp(-Math.min(deltaMs, 100) / 1000 / tau))
+      if (Math.abs(want - have) < 5e-4) have = want
+      onSignal({ progress: have })
+    },
+    () => started && have !== want,
+  )
+  return {
+    push(signal) {
+      want = signal.progress
+      if (!started) { started = true; have = want; onSignal(signal) }
+    },
+    stop: unregister,
+  }
 }
 
 function supportsViewTimeline(): boolean {
@@ -56,9 +99,9 @@ function attachFallback(
     // 0 when the element's top just enters the viewport bottom,
     // 1 when its bottom leaves the viewport top. Threshold shifts the
     // start point; offset nudges both ends by a fixed pixel amount.
-    const start = viewportHeight * (1 - threshold) + offset
-    const end = -rect.height + offset
-    const raw = (start - top) / (start - end)
+    const start = options.range === 'contain' ? offset : viewportHeight * (1 - threshold) + offset
+    const end = options.range === 'contain' ? viewportHeight - rect.height + offset : -rect.height + offset
+    const raw = start === end ? (top <= start ? 1 : 0) : (start - top) / (start - end)
     const progress = Math.max(0, Math.min(1, raw))
 
     onSignal({ progress })
@@ -100,7 +143,6 @@ function attachNative(target: Element, onSignal: (signal: DriverSignal) => void)
   const timeline = new (window as any).ViewTimeline({ subject: target, axis: 'block' })
   const probe = (target as any).animate([], { timeline, fill: 'both', rangeStart: 'cover 0%', rangeEnd: 'cover 100%' }) as Animation
 
-  let rafId: number | null = null
   let last: number | null = null
 
   function poll(): void {
@@ -111,13 +153,12 @@ function attachNative(target: Element, onSignal: (signal: DriverSignal) => void)
       last = progress
       onSignal({ progress })
     }
-    rafId = requestAnimationFrame(poll)
   }
-  rafId = requestAnimationFrame(poll)
+  const unregister = getSharedScheduler().add(poll, () => target.isConnected && !document.hidden)
 
   return () => {
     probe.cancel()
-    if (rafId !== null) cancelAnimationFrame(rafId)
+    unregister()
   }
 }
 
@@ -125,11 +166,19 @@ export function scroll(options: ScrollOptions = {}): Driver {
   return {
     name: 'scroll',
     attach(target, onSignal) {
+      if (options.subject) {
+        const subject = typeof options.subject === 'string' ? target.ownerDocument.querySelector(options.subject) : options.subject
+        if (!subject) throw new Error('[comice] scroll subject did not match an element.')
+        target = subject
+      }
+      if (options.smooth !== undefined && (!Number.isFinite(options.smooth) || options.smooth < 0)) throw new RangeError('[comice] scroll smooth must be a finite number of seconds, 0 or more.')
+      const glide = smoothed(onSignal, options.smooth ?? 0)
       // threshold/offset reshape the range, which the fallback measures
       // directly; the native timeline is the plain 'cover' range.
-      return supportsViewTimeline() && !options.threshold && !options.offset
-        ? attachNative(target, onSignal)
-        : attachFallback(target, onSignal, options)
+      const detach = supportsViewTimeline() && !options.root && !options.threshold && !options.offset && options.range !== 'contain'
+        ? attachNative(target, glide.push)
+        : attachFallback(target, glide.push, options)
+      return () => { detach(); glide.stop() }
     },
   }
 }
