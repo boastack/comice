@@ -21,7 +21,7 @@
  * shown it on its own).
  */
 
-import { renderScale } from '../budget.js'
+import { quietFor, renderScale } from '../budget.js'
 
 /** One WebGL2 context, shared by every Comice instance registered against
  *  the same root. Kept minimal on purpose — texture/program state lives in
@@ -56,7 +56,9 @@ type MountState = {
   owner: string
   hid: boolean
   originalVisibility: string
+  releaseParent(): void
 }
+const positionedParents = new WeakMap<HTMLElement, { original: string; count: number }>()
 const mountsByCanvas = new WeakMap<HTMLCanvasElement, MountState>()
 
 /**
@@ -119,15 +121,17 @@ export function createGLContext(
   // DOM element (see the drivers), never through the canvas itself.
   canvas.style.pointerEvents = 'none'
 
-  const gl = canvas.getContext('webgl2', {
+  let gl: WebGL2RenderingContext | null
+  try { gl = canvas.getContext('webgl2', {
     alpha: options.alpha ?? true,
     antialias: options.antialias ?? true,
     premultipliedAlpha: true,
     preserveDrawingBuffer: false,
-  }) as WebGL2RenderingContext | null
+  }) as WebGL2RenderingContext | null } catch { return null }
 
   if (!gl) return null
 
+  const activeGL = gl
   let destroyed = false
   const context: GLContext = {
     canvas,
@@ -144,12 +148,12 @@ export function createGLContext(
       if (canvas.width === targetWidth && canvas.height === targetHeight) return
       canvas.width = targetWidth
       canvas.height = targetHeight
-      gl.viewport(0, 0, targetWidth, targetHeight)
+      activeGL.viewport(0, 0, targetWidth, targetHeight)
     },
     destroy(): void {
       if (destroyed) return
       destroyed = true
-      const loseContext = gl.getExtension('WEBGL_lose_context')
+      const loseContext = activeGL.getExtension('WEBGL_lose_context')
       loseContext?.loseContext()
       canvas.remove()
       contextsByRoot.delete(root)
@@ -174,6 +178,13 @@ export function hasGLContext(root: Element): boolean {
  *  writes when something changed, since this runs every frame. */
 function syncCanvasBox(canvas: HTMLCanvasElement, target: HTMLElement): void {
   const style = canvas.style
+  const targetStyle = getComputedStyle(target)
+  // A fixed media element and its sibling canvas share the same fixed
+  // containing block; an absolute sibling would scroll away from it.
+  const position = targetStyle.position === 'fixed' ? 'fixed' : 'absolute'
+  if (style.position !== position) style.position = position
+  if (style.transform !== targetStyle.transform) style.transform = targetStyle.transform
+  if (style.transformOrigin !== targetStyle.transformOrigin) style.transformOrigin = targetStyle.transformOrigin
   const left = `${target.offsetLeft}px`
   const top = `${target.offsetTop}px`
   const width = `${target.offsetWidth}px`
@@ -187,6 +198,22 @@ function syncCanvasBox(canvas: HTMLCanvasElement, target: HTMLElement): void {
 export type CanvasMount = {
   /** Removes the canvas and restores the target's own visibility. Idempotent. */
   release(): void
+  /** For a canvas mounted with `hideTarget: false`, before its first real frame:
+   *  whether the target shows under the still-empty canvas. A plugin shows it
+   *  only while it looks exactly like the effect's current frame (an effect at
+   *  the end that IS the media's own frame), and hides it otherwise, so the
+   *  wrong shape is never on screen; no effect after reveal. release() restores. */
+  holdTarget(visible: boolean): void
+  /** The canvas has just drawn its first real frame: hand the page over to it,
+   *  once (later calls do nothing). If the target is still showing, the canvas
+   *  fades in over it, `fadeMs` long, and the target is hidden once it is fully
+   *  in (an effect that arrives late eases in instead of switching); if the target is already hidden, the
+   *  canvas fades in from empty. release() restores. */
+  hideTarget(fadeMs?: number): void
+  /** Finishes a handoff that is still fading right now: the target is hidden and the
+   *  canvas fully in. For when what the target shows stops matching the canvas
+   *  mid-fade, so it must not stay half-visible under it. No effect otherwise. */
+  completeReveal(): void
 }
 
 /**
@@ -234,8 +261,23 @@ export function mountCanvas(
   }
 
   const parent = target.parentElement
-  if (parent && getComputedStyle(parent).position === 'static') {
-    parent.style.position = 'relative'
+  let releaseParent = () => {}
+  if (parent) {
+    let positioning = positionedParents.get(parent)
+    if (!positioning && getComputedStyle(parent).position === 'static') {
+      positioning = { original: parent.style.position, count: 0 }
+      positionedParents.set(parent, positioning)
+      parent.style.position = 'relative'
+    }
+    if (positioning) {
+      positioning.count++
+      const owned = positioning
+      releaseParent = () => {
+        if (--owned.count > 0) return
+        if (parent.style.position === 'relative') parent.style.position = owned.original
+        positionedParents.delete(parent)
+      }
+    }
   }
 
   const state: MountState = {
@@ -243,20 +285,82 @@ export function mountCanvas(
     owner: options.owner,
     hid: options.hideTarget,
     originalVisibility: target.style.visibility,
+    releaseParent,
   }
   if (options.hideTarget) target.style.visibility = 'hidden'
   target.insertAdjacentElement('afterend', canvas)
   syncCanvasBox(canvas, target)
   mountsByCanvas.set(canvas, state)
+  // Hiding the media (visibility: hidden) takes it out of the accessibility tree,
+  // so the canvas that replaces it speaks for it: the same name, as an image.
+  // Explicitly decorative media (alt="") stays out of the tree, and media with
+  // no name at all gets none invented. The canvas is removed on release, so
+  // there is nothing to restore.
+  const decorative = target instanceof HTMLImageElement && target.hasAttribute('alt') && target.alt === ''
+  const name = target.getAttribute('aria-label') ?? (target instanceof HTMLImageElement ? target.alt : target.getAttribute('title'))
+  if (decorative) canvas.setAttribute('aria-hidden', 'true')
+  else if (name) {
+    canvas.setAttribute('role', 'img')
+    canvas.setAttribute('aria-label', name)
+  }
+  // Setup stalls a few frames; that is not a reason to lower quality (budget.ts).
+  quietFor()
 
   let released = false
+  let revealed = false
+  let fades: Animation[] = []
   return {
+    holdTarget(visible: boolean): void {
+      if (released || revealed) return
+      if (visible) {
+        if (state.hid) target.style.visibility = state.originalVisibility
+        state.hid = false
+        return
+      }
+      if (!state.hid) state.originalVisibility = target.style.visibility
+      state.hid = true
+      target.style.visibility = 'hidden'
+    },
+    hideTarget(fadeMs = 0): void {
+      if (released || revealed) return
+      revealed = true
+      const animated = fadeMs > 0 && typeof canvas.animate === 'function' && typeof target.animate === 'function'
+      const timing = { duration: fadeMs, easing: 'cubic-bezier(.25, .1, .25, 1)' }
+      // Web Animations rather than inline styles: nothing to restore afterwards,
+      // and release() mid-fade just cancels them.
+      if (state.hid) {
+        // Already hidden (held empty): the canvas eases in from nothing.
+        if (animated) fades = [canvas.animate([{ opacity: 0 }, { opacity: 1 }], timing)]
+        return
+      }
+      state.originalVisibility = target.style.visibility
+      state.hid = true
+      const hide = () => { if (!released) target.style.visibility = 'hidden' }
+      if (animated) {
+        // The canvas fades in ON TOP of the media, which stays fully opaque underneath until
+        // the canvas is fully in. Fading both at once adds up to less than the picture
+        // (two half-transparent layers over a dark page dip to grey) and shows through.
+        fades = [canvas.animate([{ opacity: 0 }, { opacity: 1 }], timing)]
+        fades[0]!.onfinish = () => { hide(); fades = [] }
+        return
+      }
+      hide()
+    },
+    completeReveal(): void {
+      if (released || fades.length === 0) return
+      fades.forEach((fade) => fade.cancel())
+      fades = []
+      target.style.visibility = 'hidden'
+    },
     release(): void {
       if (released) return
       released = true
+      fades.forEach((fade) => fade.cancel())
+      fades = []
       canvas.remove()
       if (state.hid) target.style.visibility = state.originalVisibility
       mountsByCanvas.delete(canvas)
+      state.releaseParent()
     },
   }
 }
