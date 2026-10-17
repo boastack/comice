@@ -6,19 +6,23 @@ dist/
 coverage/
 
 # Editor/tool-generated, not part of the source.
-.cursorindexingignore
-.specstory/
 .claude/
 .vscode/
+.cursor/
 
-# legacy/ HTML, JS and shader logic are kept as reference (the SDF/liquid-
-# morph math the morph plugin ports from) — the video/audio demo media is
-# not, to keep clone size small. See ROADMAP.md section 0.
-legacy/assets/video/
-legacy/assets/audio/
+# Shared demo footage and soundtrack stay local and are not published.
+demo/assets/video/
+demo/assets/audio/
 
 # Internal planning doc, not meant to be public on GitHub.
 ROADMAP.md
 
 # Acceptance run output (screenshots, report.json).
 harness/acceptance/out/
+
+# Demo media: local footage and stills, not published.
+demo/media/
+
+# Morph browser regression artifacts and generated test bundle.
+harness/morph/out/
+harness/morph/build/
