@@ -143,6 +143,36 @@ describe('createRasterizedMask — with a real 2D context (faked)', () => {
     expect(mask.field).not.toBeNull()
   })
 
+  it('releases the surviving GPU object when render-target allocation is incomplete', () => {
+    for (const options of [{ failCreateFramebuffer: true }, { failCreateTexture: true }]) {
+      const context = createFakeGLContext(canvas, options)
+      let textures = 0, framebuffers = 0
+      context.gl.deleteTexture = () => { textures++ }
+      context.gl.deleteFramebuffer = () => { framebuffers++ }
+      const mask = createRasterizedMask(context)
+      mask.rasterize({ type: 'text', text: 'Fallback' }, 40, 20)
+      expect(mask.field).toBeNull()
+      expect(textures).toBe(options.failCreateFramebuffer ? 1 : 0)
+      expect(framebuffers).toBe(options.failCreateTexture ? 1 : 0)
+      mask.destroy()
+      expect(textures + framebuffers).toBe(1)
+    }
+  })
+
+  it('releases a new render target when storage allocation throws', () => {
+    const context = createFakeGLContext(canvas)
+    let textures = 0, framebuffers = 0
+    context.gl.deleteTexture = () => { textures++ }
+    context.gl.deleteFramebuffer = () => { framebuffers++ }
+    context.gl.texImage2D = () => { throw new Error('Texture storage unavailable') }
+    const mask = createRasterizedMask(context)
+    expect(() => mask.rasterize({ type: 'text', text: 'Fallback' }, 40, 20)).toThrow('Texture storage unavailable')
+    expect(mask.field).toBeNull()
+    expect(textures).toBe(1); expect(framebuffers).toBe(1)
+    mask.destroy()
+    expect(textures + framebuffers).toBe(2)
+  })
+
   it('rasterizing text calls ctx2d.fillText() with the given text', () => {
     const context = createFakeGLContext(canvas)
     const mask = createRasterizedMask(context)

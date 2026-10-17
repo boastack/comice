@@ -153,23 +153,36 @@ function createOrResizeRenderTarget(
 
   const texture = existing?.texture ?? gl.createTexture()
   const framebuffer = existing?.framebuffer ?? gl.createFramebuffer()
-  if (!texture || !framebuffer) return null
+  if (!texture || !framebuffer) {
+    // A partial allocation is not owned by a render target and would otherwise
+    // survive every retry, even after its consumer restores the original media.
+    if (texture && texture !== existing?.texture) gl.deleteTexture(texture)
+    if (framebuffer && framebuffer !== existing?.framebuffer) gl.deleteFramebuffer(framebuffer)
+    return null
+  }
 
-  gl.bindTexture(gl.TEXTURE_2D, texture)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-  // R8: single channel, exactly what a mask is — every producer that
-  // lands on the 'texture' MaskField kind resolves to one value per
-  // texel, never RGBA, per the "single-channel texture" line in §07.
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, width, height, 0, gl.RED, gl.UNSIGNED_BYTE, null)
+  try {
+    gl.bindTexture(gl.TEXTURE_2D, texture)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    // R8: single channel, exactly what a mask is — every producer that
+    // lands on the 'texture' MaskField kind resolves to one value per
+    // texel, never RGBA, per the "single-channel texture" line in §07.
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, width, height, 0, gl.RED, gl.UNSIGNED_BYTE, null)
 
-  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0)
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
 
-  return { texture, framebuffer, width, height }
+    return { texture, framebuffer, width, height }
+  } catch (error) {
+    // Existing targets retain their owner until the caller handles the error.
+    // A new target has no owner yet, so clean both objects before propagating it.
+    if (!existing) { gl.deleteTexture(texture); gl.deleteFramebuffer(framebuffer) }
+    throw error
+  }
 }
 
 function destroyRenderTarget(gl: WebGL2RenderingContext, target: RenderTarget | null): void {
