@@ -22,6 +22,7 @@ const name = document.querySelector('.project-name')
 comice(name).use(type({
   mode: 'melt',
   melt: { blur: 14, threshold: [0.5, 18], hold: true },
+  // For liquid blobs instead of soft pills, add: wobble: 40,
 }))
 
 // Change the text and it melts from the old name into the new one,
@@ -43,6 +44,9 @@ name.textContent = 'Basalt'
 |---|---|---|
 | `blur` | number | Blur at the middle of the melt, px. Default 14. |
 | `threshold` | `[cutoff, sharpness]` | How the blurred words weld into one shape: alpha below `cutoff` falls away, above it goes solid. Default `[0.5, 18]`. |
+| `wobble` | number | How far liquid turbulence pushes the outline around at the middle of the melt, px. It is 0 at both ends and strongest mid-melt, so the real text always shows at rest. It turns the blur into wavy, organic blobs instead of soft pills. Default 0 (off). |
+| `wobbleSize` | number | Size of the waves `wobble` makes, px. Larger is slower, rounder swells; smaller is finer ripples. Default 90. |
+| `soften` | number | Blur after the threshold, px. With a sharp threshold (say `[0.33, 400]`), a fraction of a pixel such as `0.35` antialiases the edge so it is crisp but never stair-stepped. Default 0. |
 | `curve` | `'linear'` `'easeIn'` `'easeOut'` `'easeInOut'` or a function | Easing over the melt. Default `'easeInOut'`. |
 | `hold` | boolean | Text that doesn't change stays perfectly still instead of melting into itself. Default `true`. |
 | `duration` | number | How long a melt takes, ms. Default 600. |
