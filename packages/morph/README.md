@@ -122,6 +122,37 @@ with all four CSS corner radii. Morphing uses signed distance fields, so endpoin
 can have different numbers of paths, vertices, pieces and holes. It is silhouette
 interpolation, rather than a correspondence between individual SVG vertices.
 
+## Image or video to text
+
+Text is a silhouette mask for the original image or video. Supply it at either
+endpoint, or use two text endpoints to change the words while retaining the media fill.
+
+```js
+const effect = morph({
+  from: { type: 'text', text: 'Olawale Balo', font: '700 160px Geist' },
+  to: { type: 'text', text: 'Design Engineer', font: '700 160px Geist' },
+  liquid: .25,
+  cursorFollow: false,
+  liquidSheen: 0,
+  maskRasterization: { fill: .9 },
+})
+```
+
+Omit `from` to morph the media's frame into text. Omit `to` to return from text
+to the media's frame. Both `<img>` and `<video>` targets use the same API.
+`font` accepts a CSS font shorthand. Define custom faces with `@font-face`;
+Morph waits for the requested font before baking. Text is centered and uniformly
+fitted to the available space, including custom fonts, overhangs and descenders.
+`maskRasterization.fill` applies to both text endpoints. Resizing refits the words
+and swaps their new distance fields together.
+
+This is GPU silhouette interpolation with image or video pixels inside the letters,
+not semantic text conversion or a per-character animation. Keep meaningful text
+in the document or accessible media label. The final showcase example demonstrates
+this transition with selectable video or photography inside both text silhouettes. Text-to-text
+transitions smooth their intermediate distance fields to round intersecting glyph
+contours; the supplied endpoint masks remain unchanged.
+
 ## Driving it from audio
 
 `progress`, `mouseX`, `mouseY` and `velocity` are all mappable, so the shape can follow
@@ -212,7 +243,7 @@ on long galleries mount effects near the viewport and release distant ones.
 
 Old `layout`, `operation`, `into`, `count`, `thread`, `order`, `stagger` and `via` options
 are retired and rejected. The demo collection supplies its own geometry under
-`demo/morph/assets`; those assets are not included in the published package.
+`demo/assets/images`; those assets are not included in the published package.
 
 Reduced-motion settings snap to an endpoint. GPU resources, image loads, observers
 and subscriptions release on `handle.destroy()`. Offscreen effects stop drawing.

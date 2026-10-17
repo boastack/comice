@@ -82,7 +82,7 @@ Pointer checks verify a live wake, fading at rest, independent progress and unch
 endpoints with directional glass lighting.
 Unsupported syntax must fail rather than render an approximate replacement.
 
-`node harness/morph/demo-shapes.mjs` executes the printed code for all 24 current
+`node harness/morph/demo-shapes.mjs` executes the printed code for all 25 current
 demos at five progress values, checking visible geometry, GPU errors, overflow
 and teardown in Chromium, WebKit and iPhone emulation.
 
@@ -111,3 +111,12 @@ The runner checks that no source media remains under a moving silhouette.
 The GPU edge regression now compares every endpoint alpha pixel at velocities
 -20, -1, 1 and 20, checks all four corners near the endpoints, and verifies that
 bending still changes the intermediate silhouette.
+
+`node harness/morph/playback.mjs` verifies automatic playback and changing GPU
+pixels in the first and final demos, global Image / Video switching across all 25 demos, and
+recovery through Play video when autoplay is blocked. It runs in Chromium,
+WebKit, and iPhone emulation and is included in `pnpm test:morph`.
+
+`node harness/morph/demo-shapes.mjs --media=image` executes all 25 scenes using
+the shared A/B photographs. The image and video matrices are both part of
+`pnpm test:morph`; either mode accepts an optional engine and demo ID.
