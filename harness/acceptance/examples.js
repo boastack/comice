@@ -51,7 +51,7 @@ export const examples = {
     run() {
       // given: .card tiles, and an <img class="hero"> below the fold
       comice('.card').use(spotlight()).driver(hover({ intent: 80 }))
-      comice('.hero').use(morph({ operation: 'breakout' })).driver(scroll({ threshold: 0.5 }))
+      comice('.hero').use(morph({ to: '/demo/morph/assets/fan.svg', join: true })).driver(scroll({ threshold: 0.5 }))
     },
   },
 
@@ -61,8 +61,8 @@ export const examples = {
     run() {
       // given: an <img id="film">; the spec's path is cut short ('M12 2L2 7…'), this is its closed first layer
       comice('#film').use(morph({
-        operation: 'mask', into: 'svg', path: 'M12 2L2 7l10 5 10-5-10-5z',
-        liquid: 0.7, thread: { sag: 6, dissolve: 4 }
+        to: { type: 'shape', path: 'M12 2L2 7l10 5 10-5-10-5z', viewBox: [0, 0, 24, 24] },
+        liquid: 0.7
       })).driver(scroll())
     },
   },
