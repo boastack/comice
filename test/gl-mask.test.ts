@@ -195,7 +195,7 @@ describe('createRasterizedMask — with a real 2D context (faked)', () => {
 
 // ─────────────────────────────────────────────────────────────────────────
 // RASTERIZED: sdf: true — the signed-distance-field bake, the mechanism
-// legacy/index.html's appleLogo layout and legacy/african.html's whole
+// the prototype apple-logo layout and its whole
 // 17-shape catalogue both use for a smooth, liquid-morphable edge, ported
 // here as one shared option on the existing rasterizer rather than a
 // second producer.

@@ -34,6 +34,8 @@
  * union (MaskField), one sampling function (the MASK_SAMPLE_GLSL chunk),
  * and the branch between "texture" and "analytic-cursor" lives once, here
  * — never copied into reveal/morph/dissolve/distort/vision individually.
+ * Opt-in half-float SDFs are signed texel distances; their producer reports
+ * distanceEncoding so distance consumers can decode them without a 0.5 bias.
  *
  * Lifecycle matches every other primitive in this package: rasterized
  * masks allocate their render target once at creation; derived masks reuse
@@ -44,6 +46,7 @@
 
 import { effectiveDPR } from './context.js'
 import type { GLContext } from './context.js'
+import { maskComponents } from './components.js'
 
 // ─────────────────────────────────────────────────────────────────────────
 // THE CONTRACT
@@ -186,8 +189,9 @@ function destroyRenderTarget(gl: WebGL2RenderingContext, target: RenderTarget | 
  *  readable bounds: without a viewBox it's drawn as is. Text is centred
  *  and sized to fit. */
 export type RasterizedMaskSource =
-  | { type: 'shape'; path: Path2D | string; viewBox?: readonly [number, number, number, number] }
+  | { type: 'shape'; path: Path2D | string; viewBox?: readonly [number, number, number, number]; fit?: 'contain' | 'stretch'; fillRule?: CanvasFillRule }
   | { type: 'text'; text: string; font?: string }
+  | { type: 'image'; source: HTMLImageElement }
 
 /** How much of the box a fitted shape or text fills. */
 const FIT = 0.8
@@ -215,17 +219,29 @@ export function pathBounds(doc: Document, d: string): [number, number, number, n
 
 /** The transform [scale, x, y] that fits `bounds` into width x height,
  *  centred, filling FIT of it. */
-export function fitTransform(bounds: readonly [number, number, number, number], width: number, height: number): [number, number, number] {
+export function fitTransform(bounds: readonly [number, number, number, number], width: number, height: number, fill = FIT): [number, number, number] {
   const [x, y, w, h] = bounds
-  const scale = Math.min((width * FIT) / w, (height * FIT) / h)
+  const scale = Math.min((width * fill) / w, (height * fill) / h)
   return [scale, width / 2 - (x + w / 2) * scale, height / 2 - (y + h / 2) * scale]
 }
 
 export type RasterizeOptions = {
+  /** SDF storage: normalized R8 by default, or signed texel distances in R16F. */
+  precision?: 'byte' | 'half'
+  /** Count the canvas boundary as outside, including fully filled frames. */
+  bounded?: boolean
+  /** Extract opaque component centers when a consumer needs automatic joins. */
+  components?: boolean
+  /** Fixed bake dimensions in texels; otherwise follows the media and capped DPR. */
+  resolution?: readonly [number, number]
+  /** Fraction of the bake box filled by the shape. Default 0.8. */
+  fill?: number
+  /** Alpha threshold used when baking an SDF, 0..255. Default 96. */
+  alphaThreshold?: number
   /**
    * When true, bakes a signed-distance FIELD instead of a hard 0/1
-   * coverage mask — the mechanism `legacy/index.html`'s `appleLogo` layout
-   * and `legacy/african.html`'s whole 17-shape catalogue both use to get a
+   * coverage mask — the mechanism the prototype apple-logo layout
+   * and the prototype 17-shape catalogue both use to get a
    * smooth, liquid-morphable edge instead of a hard cutout. Ported here,
    * generalized from "one hardcoded logo" (appleLogo) or "one hand-rolled
    * table of 17 shapes plus its own copy of this exact sweep"
@@ -243,9 +259,22 @@ export type RasterizeOptions = {
    *  varies per instance, unlike legacy's fixed-size offscreen bakes.
    *  Default 96. */
   maxDistance?: number
+  /**
+   * Run the expensive part of an SDF or component bake (the distance
+   * transform, the encoding, finding the islands) on a background worker, so
+   * the page keeps scrolling while it works. rasterize() then returns a
+   * promise that resolves `true` once the new field is on the GPU, or `false`
+   * if a later rasterize() or destroy() made it obsolete; until then `field`
+   * keeps the previous bake (or null). Falls back to the main thread where
+   * workers are unavailable. Default false.
+   */
+  background?: boolean
 }
 
 export type RasterizedMask = {
+  /** Half-float SDFs store signed texel distances around zero; byte fields use [0,1]. */
+  readonly distanceEncoding: 'normalized' | 'signed'
+  readonly components: readonly (readonly [number, number])[]
   /** Null until the first rasterize() call has actually run (e.g. context
    *  was null at creation — degrade-never-disappear, same shape as
    *  Plane['texture']). */
@@ -255,85 +284,288 @@ export type RasterizedMask = {
    *  the element's size actually changes — never per frame, per §07's
    *  "Re-rasterized only when the source path or text actually changes."
    *  See RasterizeOptions for the coverage-vs-signed-distance-field choice. */
-  rasterize(source: RasterizedMaskSource, cssWidth: number, cssHeight: number, options?: RasterizeOptions): void
+  rasterize(source: RasterizedMaskSource, cssWidth: number, cssHeight: number, options?: RasterizeOptions): void | Promise<boolean>
   destroy(): void
 }
 
 /**
- * The two-pass chamfer distance transform legacy uses in three places
- * (`legacy/index.html`'s `createWordmarkTexture`/`createAppleLogoTexture`,
- * `legacy/african.html`'s `distanceTransform`) — identical math in all
- * three, ported here once as the shared implementation every rasterized
- * SDF mask in this package goes through, rather than a fourth copy.
- * `inside` is a 0/1 mask (1 = inside the shape); returns, per pixel, the
- * approximate distance (in texel units) to the nearest pixel matching
- * `target` (0 or 1). Two sweeps (forward raster order, then reverse)
- * approximate the true Euclidean distance cheaply — the standard
- * "chamfer"/two-pass distance transform, not an exact Euclidean one, which
- * is exactly what legacy already used and is more than adequate for a
- * soft mask edge.
+ * The exact Euclidean distance transform (Felzenszwalb and Huttenlocher), the
+ * shared implementation every rasterized SDF mask in this package goes
+ * through. `inside` is a 0/1 mask (1 = inside the shape); returns, per pixel,
+ * the distance (in texel units) to the nearest pixel matching `target` (0 or
+ * 1). Legacy used a two-pass chamfer approximation, which is off by several
+ * percent over long distances; that error is invisible at a soft edge but
+ * shows when two fields are blended, because halfway through a morph the
+ * interior is only a few dozen texels deep, so a few percent of a long
+ * distance is enough to open thin slits through the shape.
  */
-function distanceTransform(inside: Uint8Array, width: number, height: number, target: 0 | 1): Float32Array {
-  const distances = new Float32Array(width * height)
+export function distanceTransform(inside: Uint8Array, width: number, height: number, target: 0 | 1): Float32Array {
   const infinity = 1e6
-  const diagonal = Math.SQRT2
+  const far = infinity * infinity
+  const squared = new Float32Array(width * height)
+  for (let index = 0; index < squared.length; index += 1) squared[index] = inside[index] === target ? 0 : far
 
-  for (let index = 0; index < distances.length; index += 1) {
-    distances[index] = inside[index] === target ? 0 : infinity
+  const size = Math.max(width, height)
+  const line = new Float32Array(size)
+  const out = new Float32Array(size)
+  const parabola = new Int32Array(size)
+  const bounds = new Float32Array(size + 1)
+
+  // Lower envelope of the parabolas rooted at each sample, read back per position.
+  const pass = (count: number) => {
+    let last = 0
+    parabola[0] = 0
+    bounds[0] = -Infinity
+    bounds[1] = Infinity
+    for (let q = 1; q < count; q += 1) {
+      let crossing = 0
+      for (;;) {
+        const p = parabola[last]!
+        crossing = ((line[q]! + q * q) - (line[p]! + p * p)) / (2 * q - 2 * p)
+        if (crossing > bounds[last]!) break
+        last -= 1
+      }
+      last += 1
+      parabola[last] = q
+      bounds[last] = crossing
+      bounds[last + 1] = Infinity
+    }
+    last = 0
+    for (let q = 0; q < count; q += 1) {
+      while (bounds[last + 1]! < q) last += 1
+      const p = parabola[last]!
+      out[q] = (q - p) * (q - p) + line[p]!
+    }
   }
 
+  for (let x = 0; x < width; x += 1) {
+    for (let y = 0; y < height; y += 1) line[y] = squared[y * width + x]!
+    pass(height)
+    for (let y = 0; y < height; y += 1) squared[y * width + x] = out[y]!
+  }
   for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const index = y * width + x
-      let value = distances[index]
-      if (x) value = Math.min(value, distances[index - 1] + 1)
-      if (y) value = Math.min(value, distances[index - width] + 1)
-      if (x && y) value = Math.min(value, distances[index - width - 1] + diagonal)
-      if (x + 1 < width && y) value = Math.min(value, distances[index - width + 1] + diagonal)
-      distances[index] = value
-    }
+    for (let x = 0; x < width; x += 1) line[x] = squared[y * width + x]!
+    pass(width)
+    for (let x = 0; x < width; x += 1) squared[y * width + x] = out[x]!
   }
 
-  for (let y = height - 1; y >= 0; y -= 1) {
-    for (let x = width - 1; x >= 0; x -= 1) {
-      const index = y * width + x
-      let value = distances[index]
-      if (x + 1 < width) value = Math.min(value, distances[index + 1] + 1)
-      if (y + 1 < height) value = Math.min(value, distances[index + width] + 1)
-      if (x + 1 < width && y + 1 < height) value = Math.min(value, distances[index + width + 1] + diagonal)
-      if (x && y + 1 < height) value = Math.min(value, distances[index + width - 1] + diagonal)
-      distances[index] = value
-    }
-  }
-
+  const distances = squared
+  for (let index = 0; index < distances.length; index += 1) distances[index] = Math.min(infinity, Math.sqrt(distances[index]!))
   return distances
 }
 
 /**
  * Bakes `imageData`'s alpha channel into an R8 signed-distance field,
  * encoded exactly the way legacy encodes it: `0.5 * 255` at the shape
- * boundary, ramping toward 0 outside and 255 inside over `maxDistance`
+ * boundary, ramping toward 0 inside and 255 outside over `maxDistance`
  * texels, clamped beyond that. A consuming shader recovers a distance
  * value via `(sample - 0.5) * (2.0 * maxDistanceInUvUnits)`, the same
  * `(appleSdf - 0.5) * 0.345`-shaped expression legacy's own shaders use.
+ * Half-float fields instead store signed texel distances around zero,
+ * keeping subpixel contour detail precise even when maxDistance is large.
  */
-function bakeSignedDistanceField(imageData: ImageData, maxDistance: number): Uint8Array {
+function bakeSignedDistanceField(imageData: ImageData, maxDistance: number, threshold = 96, half = false, bounded = false): Uint8Array | Float32Array {
   const { width, height, data: rgba } = imageData
   const inside = new Uint8Array(width * height)
   for (let index = 0; index < inside.length; index += 1) {
-    inside[index] = rgba[index * 4 + 3] > 96 ? 1 : 0
+    inside[index] = rgba[index * 4 + 3] > threshold ? 1 : 0
   }
 
   const toInside = distanceTransform(inside, width, height, 1)
   const toOutside = distanceTransform(inside, width, height, 0)
+  if (bounded) for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const i = y * width + x
+    toOutside[i] = Math.min(toOutside[i], x + 1, width - x, y + 1, height - y)
+  }
 
-  const encoded = new Uint8Array(width * height)
+  const encoded = half ? new Float32Array(width * height) : new Uint8Array(width * height)
   for (let index = 0; index < inside.length; index += 1) {
-    const signed = inside[index] ? -toOutside[index] : toInside[index]
-    encoded[index] = Math.round((Math.max(-maxDistance, Math.min(maxDistance, signed)) / maxDistance) * 0.5 * 255 + 0.5 * 255)
+    const alpha = rgba[index * 4 + 3]
+    // Float fields retain the vector rasterizer's fractional edge coverage.
+    // Thresholding it away makes curved contours jump by a whole bake texel.
+    // Only ON the edge, though (within a texel and a half of the other side):
+    // a faint stray sliver of coverage far from the shape used to read as a
+    // distance of almost zero, and a morph drew it as a thin straight line.
+    const distance = inside[index] ? -toOutside[index] : toInside[index]
+    const signed = half && alpha > 0 && alpha < 255 && Math.abs(distance) <= 1.5
+      ? (threshold - alpha) / 255
+      : distance
+    encoded[index] = half ? Math.max(-maxDistance, Math.min(maxDistance, signed)) : Math.round((Math.max(-maxDistance, Math.min(maxDistance, signed)) / maxDistance) * .5 * 255 + .5 * 255)
   }
   return encoded
 }
+
+/** The pixels and settings of one bake; what the worker receives. */
+type BakeJob = { id: number; width: number; height: number; pixels: ArrayBuffer; sdf: boolean; maxDistance: number; threshold: number; half: boolean; bounded: boolean; components: boolean }
+type BakeResult = { id: number; field: ArrayBuffer | null; packed: boolean; components: Array<[number, number]> }
+
+/**
+ * One bake, from raw RGBA pixels: the islands (when asked) and the encoded
+ * field (when an SDF). Pure and self-contained, because the background worker
+ * runs this very function from its source text; it may only call
+ * distanceTransform, bakeSignedDistanceField, maskComponents, smoothFar and toHalf.
+ */
+export function bakeMask(job: BakeJob): BakeResult {
+  const image = { width: job.width, height: job.height, data: new Uint8ClampedArray(job.pixels) }
+  const components = job.components ? maskComponents(image as ImageData, job.threshold) : []
+  if (!job.sdf) return { id: job.id, field: null, packed: false, components }
+  const encoded = bakeSignedDistanceField(image as ImageData, job.maxDistance, job.threshold, job.half, job.bounded)
+  // Half-float fields are smoothed far from the edge (see smoothFar), then go
+  // back packed as 16-bit halves (see toHalf).
+  const field = job.half ? toHalf(smoothFar(encoded as Float32Array, job.width, job.height)) : encoded
+  return { id: job.id, field: field.buffer as ArrayBuffer, packed: job.half, components }
+}
+
+/**
+ * Rounds off the creases a distance field has far from its shape, keeping it
+ * exact near the edge. A distance field has a hard ridge wherever the nearest
+ * part of the shape switches (between two circles, say), and a morph that
+ * blends two fields draws that ridge as a sharp kink in the moving outline.
+ * Away from the edge the field is replaced, gradually, by a blurred copy (two
+ * box blurs, close to a Gaussian); within a few texels of the edge it is left
+ * alone, so the shape itself (where the field crosses zero) does not move. The
+ * blend never changes a value by more than its own distance, so no sign flips.
+ */
+export function smoothFar(field: Float32Array, width: number, height: number): Float32Array {
+  const radius = Math.max(2, Math.round(Math.min(width, height) * 0.03))
+  const near = 6
+  const far = near + radius * 2
+  const blurred = new Float32Array(field)
+  const line = new Float32Array(Math.max(width, height))
+  const box = (stride: number, count: number, step: number, lines: number, lineStep: number) => {
+    for (let l = 0; l < lines; l++) {
+      const base = l * lineStep
+      for (let i = 0; i < count; i++) line[i] = blurred[base + i * step]!
+      let sum = 0
+      for (let i = -radius; i <= radius; i++) sum += line[Math.min(count - 1, Math.max(0, i))]!
+      for (let i = 0; i < count; i++) {
+        blurred[base + i * step] = sum / (radius * 2 + 1)
+        sum += line[Math.min(count - 1, i + radius + 1)]! - line[Math.max(0, i - radius)]!
+      }
+    }
+    return stride
+  }
+  for (let pass = 0; pass < 2; pass++) {
+    box(1, width, 1, height, width)
+    box(width, height, width, width, 1)
+  }
+  for (let i = 0; i < field.length; i++) {
+    const t = Math.min(1, Math.max(0, (Math.abs(field[i]!) - near) / (far - near)))
+    field[i] = field[i]! + (blurred[i]! - field[i]!) * t * t * (3 - 2 * t)
+  }
+  return field
+}
+
+/**
+ * IEEE half floats from float32, as the 16-bit patterns WebGL's HALF_FLOAT
+ * upload takes. Packing here (on the worker) halves the upload and spares
+ * the driver converting a float32 field on the main thread. Rounds to
+ * nearest; overflow saturates to infinity, tiny values flush through
+ * subnormals to zero.
+ */
+export function toHalf(values: Float32Array): Uint16Array {
+  const out = new Uint16Array(values.length)
+  const f32 = new Float32Array(1)
+  const u32 = new Uint32Array(f32.buffer)
+  for (let i = 0; i < values.length; i++) {
+    f32[0] = values[i]!
+    const x = u32[0]!
+    const sign = (x >>> 16) & 0x8000
+    const exponent = ((x >>> 23) & 0xff) - 127 + 15
+    let mantissa = x & 0x7fffff
+    if (exponent <= 0) {
+      if (exponent < -10) { out[i] = sign; continue }
+      mantissa = (mantissa | 0x800000) >> (1 - exponent)
+      out[i] = sign | ((mantissa + 0x1000) >> 13)
+    } else if (exponent >= 31) {
+      out[i] = sign | 0x7c00
+    } else {
+      // Added, not OR-ed: rounding the mantissa up can carry into the
+      // exponent (127.99 rounds to 128). OR-ing dropped that carry whenever
+      // the exponent was odd, halving the value (128 read back as 64), and a
+      // morph drew each such texel as a thin line through the shape.
+      out[i] = sign | Math.min(0x7c00, (exponent << 10) + ((mantissa + 0x1000) >> 13))
+    }
+  }
+  return out
+}
+
+/**
+ * The shared bake workers, built from bakeMask's own source (and the
+ * functions it calls) so there is one implementation, not a copy. Two of them
+ * where the device has the cores, so a page mounting several effects at once
+ * (each with a `from` and a `to`) is not left queueing behind one. Created on
+ * first use; null where workers or blob URLs are unavailable (a strict
+ * Content-Security-Policy, a test DOM), in which case bakes run inline.
+ */
+// mask.ts keeps its own copy of the __DEV__ guard (same pattern as scheduler.ts).
+declare const process: { env: { NODE_ENV?: string } } | undefined
+const __DEV__ = typeof process === 'undefined' || process.env?.NODE_ENV !== 'production'
+
+let bakeWorkers: Worker[] | null | undefined
+let nextWorker = 0
+const pendingBakes = new Map<number, (result: BakeResult | null) => void>()
+function createBakeWorkers(): Worker[] | null {
+  try {
+    if (typeof Worker === 'undefined' || typeof Blob === 'undefined' || typeof URL?.createObjectURL !== 'function') return null
+    const source = [distanceTransform, bakeSignedDistanceField, maskComponents, smoothFar, toHalf, bakeMask].map((fn) => fn.toString()).join('\n') +
+      `\nself.onmessage = (event) => { const result = ${bakeMask.name}(event.data); self.postMessage(result, result.field ? [result.field] : []) }`
+    const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }))
+    const count = Math.max(1, Math.min(2, (globalThis.navigator?.hardwareConcurrency ?? 2) - 1))
+    const workers: Worker[] = []
+    try {
+      for (let i = 0; i < count; i++) {
+        const worker = new Worker(url)
+        worker.onmessage = (event: MessageEvent<BakeResult>) => {
+          pendingBakes.get(event.data.id)?.(event.data)
+          pendingBakes.delete(event.data.id)
+        }
+        // A worker that fails (blocked, crashed) hands every waiting bake back
+        // to the main thread, and later bakes stay there.
+        worker.onerror = (event?: ErrorEvent) => {
+          if (__DEV__) console.warn('[comice] A shape bake worker failed; bakes run on the main thread from now on.', event?.message)
+          bakeWorkers?.forEach((each) => each.terminate())
+          bakeWorkers = null
+          for (const [id, done] of pendingBakes) { pendingBakes.delete(id); done(null) }
+        }
+        workers.push(worker)
+      }
+    } finally {
+      URL.revokeObjectURL(url)
+    }
+    return workers
+  } catch {
+    return null
+  }
+}
+function getBakeWorker(): Worker | null {
+  if (bakeWorkers === undefined) bakeWorkers = createBakeWorkers()
+  if (!bakeWorkers) return null
+  return bakeWorkers[nextWorker++ % bakeWorkers.length]!
+}
+
+/** Runs a bake on a worker, or inline when there is none (or it fails). */
+function runBake(job: BakeJob): Promise<BakeResult> {
+  const worker = getBakeWorker()
+  if (!worker) return Promise.resolve(bakeMask(job))
+  return new Promise((resolve) => {
+    pendingBakes.set(job.id, (result) => resolve(result ?? bakeMask(job)))
+    // Copied, not transferred: if the worker fails, this bake falls back to the
+    // main thread and still needs its pixels (a transferred buffer would be
+    // detached). The copy is about a millisecond; the bake it saves is far more.
+    worker.postMessage(job)
+  })
+}
+
+/** Test seam: forget the workers, so the next bake builds them afresh. */
+export function resetBakeWorker(): void {
+  bakeWorkers?.forEach((worker) => worker.terminate())
+  bakeWorkers = undefined
+  nextWorker = 0
+  pendingBakes.clear()
+}
+
+let bakeIds = 0
 
 /**
  * Creates a rasterized mask producer (shape or text) against `context`.
@@ -358,6 +590,8 @@ export function createRasterizedMask(context: GLContext | null): RasterizedMask 
   if (!context) {
     return {
       field: null,
+      distanceEncoding: 'normalized',
+      components: [],
       rasterize() {},
       destroy() {},
     }
@@ -365,18 +599,26 @@ export function createRasterizedMask(context: GLContext | null): RasterizedMask 
 
   const { gl, canvas } = context
   let target: RenderTarget | null = null
+  let components: Array<[number, number]> = []
+  let distanceEncoding: 'normalized' | 'signed' = 'normalized'
+  let newest = 0 // the latest rasterize() call; an older background bake is dropped
 
   function rasterize(
     source: RasterizedMaskSource,
     cssWidth: number,
     cssHeight: number,
     options: RasterizeOptions = {},
-  ): void {
+  ): void | Promise<boolean> {
     if (destroyed) return
     const { sdf = false, maxDistance = 96 } = options
+    if (options.precision !== undefined && !['byte', 'half'].includes(options.precision)) throw new Error('[comice] Mask precision must be byte or half.')
+    if (!Number.isFinite(maxDistance) || maxDistance <= 0) throw new RangeError('[comice] Mask maxDistance must be positive and finite.')
+    if (options.fill !== undefined && (!Number.isFinite(options.fill) || options.fill <= 0 || options.fill > 1)) throw new RangeError('[comice] Mask fill must be in (0, 1].')
+    if (options.resolution?.some((dimension) => !Number.isInteger(dimension) || dimension <= 0 || dimension > 4096)) throw new RangeError('[comice] Mask resolution must contain positive integers up to 4096.')
+    distanceEncoding = sdf && options.precision === 'half' ? 'signed' : 'normalized'
     const dpr = effectiveDPR()
-    const width = Math.max(1, Math.round(cssWidth * dpr))
-    const height = Math.max(1, Math.round(cssHeight * dpr))
+    const width = Math.max(1, Math.round(options.resolution?.[0] ?? cssWidth * dpr))
+    const height = Math.max(1, Math.round(options.resolution?.[1] ?? cssHeight * dpr))
 
     // Rasterize via an offscreen 2D canvas — the browser's own vector
     // rasterizer, not a hand-rolled one. White-on-black-alpha: the mask's
@@ -399,11 +641,21 @@ export function createRasterizedMask(context: GLContext | null): RasterizedMask 
       const path = typeof source.path === 'string' ? new Path2D(source.path) : source.path
       const bounds = source.viewBox ?? (typeof source.path === 'string' ? pathBounds(canvas.ownerDocument!, source.path) : null)
       if (bounds) {
-        const [scale, x, y] = fitTransform(bounds, width, height)
-        ctx2d.setTransform(scale, 0, 0, scale, x, y)
+        if (source.fit === 'stretch') {
+          ctx2d.setTransform(width / bounds[2], 0, 0, height / bounds[3], -bounds[0] * width / bounds[2], -bounds[1] * height / bounds[3])
+        } else {
+          const [scale, x, y] = fitTransform(bounds, width, height, options.fill ?? FIT)
+          ctx2d.setTransform(scale, 0, 0, scale, x, y)
+        }
       }
-      ctx2d.fill(path)
+      ctx2d.fill(path, source.fillRule ?? 'nonzero')
       ctx2d.setTransform(1, 0, 0, 1, 0, 0)
+    } else if (source.type === 'image') {
+      const fill = options.fill ?? FIT
+      const scale = Math.min(width * fill / source.source.naturalWidth, height * fill / source.source.naturalHeight)
+      const w = source.source.naturalWidth * scale
+      const h = source.source.naturalHeight * scale
+      ctx2d.drawImage(source.source, (width - w) / 2, (height - h) / 2, w, h)
     } else {
       // Centred, as large as fits FIT of the box (it used to be drawn
       // left-aligned at 80% of the height, running off a narrow box).
@@ -418,7 +670,38 @@ export function createRasterizedMask(context: GLContext | null): RasterizedMask 
       ctx2d.fillText(source.text, width / 2, height / 2)
     }
 
-    target = createOrResizeRenderTarget(gl, cssWidth, cssHeight, target)
+    const imageData = sdf || options.components ? ctx2d.getImageData(0, 0, width, height) : null
+    const latest = ++bakeIds
+    newest = latest
+    if (options.background && imageData) {
+      const half = options.precision === 'half'
+      const encoding = distanceEncoding
+      return runBake({
+        id: latest, width, height, pixels: imageData.data.buffer as ArrayBuffer, sdf, maxDistance,
+        threshold: options.alphaThreshold ?? 96, half, bounded: options.bounded ?? false, components: !!options.components,
+      }).then((result) => {
+        // A newer rasterize() or a destroy() since: this bake is obsolete.
+        if (destroyed || newest !== latest) return false
+        components = result.components
+        distanceEncoding = encoding
+        target = createOrResizeRenderTarget(gl, width / dpr, height / dpr, target)
+        if (!target) return false
+        gl.bindTexture(gl.TEXTURE_2D, target.texture)
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true)
+        if (!sdf) {
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, gl.RED, gl.UNSIGNED_BYTE, raster)
+        } else {
+          gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
+          if (result.packed) gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, width, height, 0, gl.RED, gl.HALF_FLOAT, new Uint16Array(result.field!))
+          else gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, width, height, 0, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array(result.field!))
+          gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4)
+        }
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
+        return true
+      })
+    }
+    components = options.components ? maskComponents(imageData!, options.alphaThreshold ?? 96) : []
+    target = createOrResizeRenderTarget(gl, width / dpr, height / dpr, target)
     if (!target) return
 
     gl.bindTexture(gl.TEXTURE_2D, target.texture)
@@ -445,8 +728,8 @@ export function createRasterizedMask(context: GLContext | null): RasterizedMask 
     // this can't go through the same "hand texImage2D a canvas" path
     // above, since the encoded distance values aren't literally the
     // canvas's own alpha channel.
-    const imageData = ctx2d.getImageData(0, 0, width, height)
-    const encoded = bakeSignedDistanceField(imageData, maxDistance)
+    const half = options.precision === 'half'
+    const encoded = bakeSignedDistanceField(imageData!, maxDistance, options.alphaThreshold ?? 96, half, options.bounded ?? false)
     // R8 is 1 byte/pixel — WebGL2's default UNPACK_ALIGNMENT of 4 assumes
     // each row starts on a 4-byte boundary, which an odd-width single-
     // channel buffer violates (rows silently shift for any width not a
@@ -455,12 +738,14 @@ export function createRasterizedMask(context: GLContext | null): RasterizedMask 
     // Uint8Array upload does — legacy never hit it either, since its own
     // bakes went through RGBA (4 bytes/pixel, always aligned).
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, width, height, 0, gl.RED, gl.UNSIGNED_BYTE, encoded)
+    gl.texImage2D(gl.TEXTURE_2D, 0, half ? gl.R16F : gl.R8, width, height, 0, gl.RED, half ? gl.FLOAT : gl.UNSIGNED_BYTE, encoded)
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4) // restore the default for whatever the next upload assumes
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
   }
 
   return {
+    get distanceEncoding() { return distanceEncoding },
+    get components() { return components },
     get field(): MaskField | null {
       if (!target) return null
       return { kind: 'texture', texture: target.texture, uvTransform: IDENTITY_UV_TRANSFORM }
@@ -471,6 +756,7 @@ export function createRasterizedMask(context: GLContext | null): RasterizedMask 
       destroyed = true
       destroyRenderTarget(gl, target)
       target = null
+      components = []
     },
   }
 }
