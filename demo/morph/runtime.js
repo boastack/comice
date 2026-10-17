@@ -54,6 +54,7 @@ addEventListener('resize', settingsWidth)
 document.fonts?.ready.then(settingsWidth)
 
 export const entries = []
+let selectedMediaMode = 'video'
 let active, paused = false, tracking = false
 const drivers = {
   scroll: entry => scroll({ subject: entry.section, range: 'contain', smooth: .3 }),
@@ -84,9 +85,61 @@ function release(entry) {
   ++entry.generation
   entry.abort?.abort(); entry.abort = null
   entry.media.pause?.()
+  entry.playbackBlocked = false
+  if (entry.playButton) entry.playButton.hidden = true
   unmountWord(entry)
   entry.handle?.destroy(); entry.handle = null; entry.effect = null
   entry.live = false; entry.mounting = false
+}
+export function createDemoMedia(demo, mode = demo.mediaChoices ? selectedMediaMode : demo.image ? 'image' : 'video') {
+  const image = mode === 'image'
+  const media = document.createElement(image ? 'img' : 'video')
+  media.id = `${demo.id}-media`; media.className = 'media'
+  media.setAttribute('aria-label', demo.ariaLabel ?? demo.title)
+  if (image) { media.alt = demo.title; media.loading = 'lazy' }
+  else { media.muted = true; media.loop = true; media.playsInline = true; media.preload = 'none' }
+  media.src = demo.mediaChoices?.[mode] ?? demo.src
+  return media
+}
+export function setMedia(entry, mode) {
+  if (!entry.demo.mediaChoices?.[mode] || mode === entry.mediaMode) return
+  release(entry)
+  const old = entry.media
+  entry.media = createDemoMedia(entry.demo, mode)
+  entry.mediaMode = mode; entry.failed = false
+  old.replaceWith(entry.media)
+  if (old instanceof HTMLVideoElement) { old.removeAttribute('src'); old.load() }
+  if (entry.visible && onScreen(entry)) mount(entry)
+  else if (entry.visible) { ahead.add(entry); if (!warming) warm() }
+}
+export function setMediaMode(mode) {
+  if (!['image', 'video'].includes(mode) || selectedMediaMode === mode) return
+  selectedMediaMode = mode
+  for (const entry of entries) setMedia(entry, mode)
+  for (const button of document.querySelectorAll('[data-media-mode]')) button.setAttribute('aria-pressed', String(button.dataset.mediaMode === mode))
+}
+async function playVideo(entry) {
+  if (!(entry.media instanceof HTMLVideoElement) || document.hidden || paused || !entry.visible || prefersReducedMotion()) return
+  const generation = entry.generation
+  try {
+    await entry.media.play()
+    if (generation !== entry.generation) return
+    if (document.hidden || paused || !entry.visible || prefersReducedMotion()) { entry.media.pause(); return }
+    entry.playbackBlocked = false
+    if (entry.playButton) entry.playButton.hidden = true
+    if (entry.live) status(entry, 'Live')
+  } catch (error) {
+    if (generation !== entry.generation || error.name === 'AbortError') return
+    entry.playbackBlocked = true
+    if (!entry.playButton) {
+      const button = document.createElement('button')
+      button.type = 'button'; button.className = 'video-retry'; button.textContent = 'Play video'
+      button.addEventListener('click', () => playVideo(entry))
+      entry.frame.append(button); entry.playButton = button
+    }
+    entry.playButton.hidden = false
+    status(entry, 'Live · press Play video to start playback.')
+  }
 }
 async function mount(entry) {
   release(entry)
@@ -103,7 +156,12 @@ async function mount(entry) {
     }
     if (!entry.visible || generation !== entry.generation) return
     status(entry, 'Loading…')
-    if (entry.media instanceof HTMLImageElement) await entry.media.decode()
+    if (entry.media instanceof HTMLImageElement) {
+      // Warming a nearby scene explicitly requests its image. Safari can reject
+      // decode() while native lazy loading still defers that offscreen request.
+      entry.media.loading = 'eager'
+      await entry.media.decode()
+    }
     else if (entry.media.readyState < 2) {
       entry.media.preload = 'auto'
       await new Promise((resolve, reject) => {
@@ -133,7 +191,7 @@ async function mount(entry) {
     } else handle.driver(drivers[entry.driver](entry))
     mountWord(entry)
     writeCode(entry)
-    if (entry.media instanceof HTMLVideoElement && !paused && !prefersReducedMotion()) await entry.media.play().catch(() => {})
+    await playVideo(entry)
   } catch (error) { if (generation === entry.generation && error.name !== 'AbortError') { entry.failed = true; status(entry, error.message, true) } }
   finally { if (generation === entry.generation) entry.mounting = false }
 }
@@ -197,7 +255,7 @@ function trackActive() {
   activate(closest?.entry)
 }
 export function registerDemo(config) {
-  const entry = { ...config, handle: null, effect: null, options: config.options ? structuredClone(config.options) : null, defaults: config.options ? structuredClone(config.options) : null, driver: 'scroll', visible: false, generation: 0, abort: null }
+  const entry = { ...config, handle: null, effect: null, options: config.options ? structuredClone(config.options) : null, defaults: config.options ? structuredClone(config.options) : null, driver: 'scroll', mediaMode: config.media instanceof HTMLImageElement ? 'image' : 'video', visible: false, generation: 0, abort: null }
   entries.push(entry)
   mountCodeCard(entry)
   writeCode(entry)
@@ -297,14 +355,14 @@ document.querySelector('#jump').addEventListener('change', event => {
 document.querySelector('#pause').addEventListener('click', event => {
   paused = !paused; event.target.textContent = paused ? 'Play videos' : 'Pause videos'
   for (const entry of entries) if (entry.media instanceof HTMLVideoElement) {
-    if (paused) entry.media.pause()
-    else if (entry.visible && !prefersReducedMotion()) entry.media.play().catch(() => {})
+    if (paused) { entry.media.pause(); if (entry.playButton) entry.playButton.hidden = true }
+    else playVideo(entry)
   }
 })
 document.addEventListener('visibilitychange', () => {
   for (const entry of entries) if (entry.media instanceof HTMLVideoElement) {
     if (document.hidden) entry.media.pause()
-    else if (entry.visible && !paused && !prefersReducedMotion()) entry.media.play().catch(() => {})
+    else playVideo(entry)
   }
 })
 addEventListener('pagehide', () => {
@@ -317,3 +375,7 @@ addEventListener('pageshow', event => {
   for (const entry of entries) { entry.visible = false; entry.failed = false; observer.observe(entry.section) }
   trackActive()
 })
+
+for (const event of ['pointerdown', 'keydown']) document.addEventListener(event, () => {
+  for (const entry of entries) if (entry.playbackBlocked) playVideo(entry)
+}, { passive: true })

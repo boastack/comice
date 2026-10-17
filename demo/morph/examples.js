@@ -75,4 +75,30 @@ const ranked = [...list].sort((a, b) => {
 
 // The footage splits the page in half: the hand for the twelve general demos,
 // the tailor for the twelve African shapes.
-export const examples = ranked.map((demo, index) => ({ ...demo, src: index < order.length ? video : film }))
+export const examples = ranked.map((demo, index) => ({
+  ...demo,
+  src: index < order.length ? video : film,
+  mediaChoices: {
+    image: `../assets/images/${index % 2 === 0 ? 'a' : 'b'}.jpg`,
+    video: index < order.length ? video : film,
+  },
+}))
+
+// A quiet final scene with selectable video or photography inside the text.
+examples.push({
+  id: 'name-to-role',
+  title: 'Olawale Balo',
+  ariaLabel: 'Olawale Balo, Design Engineer',
+  heading: false,
+  note: 'Footage flows from Olawale Balo into Design Engineer.',
+  src: film,
+  mediaChoices: { image: '../assets/images/b.jpg', video: film },
+  options: {
+    from: { type: 'text', text: 'Olawale Balo', font: '600 160px Geist' },
+    to: { type: 'text', text: 'Design Engineer', font: '600 160px Geist' },
+    liquid: 0,
+    cursorFollow: false,
+    liquidSheen: 0,
+    maskRasterization: { fill: .88 },
+  },
+})

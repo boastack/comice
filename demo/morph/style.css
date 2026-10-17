@@ -34,3 +34,13 @@ h1,h2{font-family:var(--font);font-weight:500;letter-spacing:-.045em}.eyebrow,.n
 .word{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;z-index:2;filter:drop-shadow(0 2px 14px #0006);transform-origin:50% 40%;transform:translateY(calc(var(--melt,0)*18px)) scaleY(calc(1 + var(--melt,0)*.4)) scaleX(calc(1 - var(--melt,0)*.06))}
 .word-count,.word-value{grid-area:1/1;justify-self:stretch;text-align:center;color:#fff;font:700 clamp(32px,6vw,60px)/1.2 var(--font);letter-spacing:-.04em;font-variant-numeric:tabular-nums}
 .word[data-phase="count"] .word-value,.word[data-phase="melt"] .word-count{opacity:0}
+
+/* The final typographic scene uses a quiet surface behind the image-filled words. */
+#name-to-role{background:var(--page)}
+
+.media-switch{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:3px;padding:4px;border:1px solid #303030;border-radius:99px;background:#151515;z-index:20}
+.media-switch button{border:0;border-radius:99px;background:transparent;padding:7px 15px;color:#888;font:500 12px var(--font);cursor:pointer}
+.media-switch button[aria-pressed=true]{background:#303030;color:#f4f4f4}
+.media-switch button:focus-visible,.video-retry:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.video-retry{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);padding:9px 16px;background:#f4f4f4;color:#111;border:0;border-radius:99px;font:500 12px var(--font);cursor:pointer;z-index:2}
+.video-retry[hidden]{display:none}

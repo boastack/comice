@@ -14,8 +14,15 @@ describe('direct endpoint morphs', () => {
   })
 
   it('all demo configurations use endpoint geometry without an intermediate stage', () => {
-    expect(examples).toHaveLength(24)
+    expect(examples).toHaveLength(25)
+    expect(examples.at(-1)?.options.from).toMatchObject({ type: 'text', text: 'Olawale Balo' })
+    expect(examples.at(-1)?.options.to).toMatchObject({ type: 'text', text: 'Design Engineer' })
+    expect(examples.at(-1)?.src).toBe('/demo/assets/video/b.mp4')
+    expect(examples.at(-1)?.mediaChoices.image).toBe('../assets/images/b.jpg')
+    expect(examples.at(-1)?.image).not.toBe(true)
+    expect(new Set(examples.map(demo => demo.mediaChoices.image)).size).toBe(2)
     for (const demo of examples) {
+      expect(demo.mediaChoices.image).toMatch(/images\/[ab]\.jpg$/)
       expect(demo.options).not.toHaveProperty('via')
       expect(() => morph({ ...demo.options, ...(demo.mask ? { to: demo.mask } : {}) })).not.toThrow()
     }
