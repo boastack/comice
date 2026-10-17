@@ -42,6 +42,7 @@ const INERTIA_SETTLE_THRESHOLD = 0.0005
 
 export function drag(options: DragOptions = {}): Driver {
   const { axis = 'x', inertia = 0.92 } = options
+  if (!Number.isFinite(inertia) || inertia < 0 || inertia > 1) throw new RangeError('[comice] Drag inertia must be in [0, 1].')
 
   return {
     name: 'drag',
@@ -53,7 +54,7 @@ export function drag(options: DragOptions = {}): Driver {
       let startClientPos = 0
       let startProgress = 0
       let lastClientPos = 0
-      let lastMoveTimestamp = 0
+      let lastMoveTimestamp: number | null = null
       let unregisterInertia: (() => void) | null = null
 
       function extent(): number {
@@ -78,14 +79,21 @@ export function drag(options: DragOptions = {}): Driver {
       function startInertia(): void {
         stopInertia()
         unregisterInertia = getSharedScheduler().add(
-          () => {
+          (deltaMs) => {
+            if (prefersReducedMotion()) { velocity = 0; stopInertia(); report(); return }
             if (Math.abs(velocity) < INERTIA_SETTLE_THRESHOLD) {
               velocity = 0
               stopInertia()
               return
             }
-            progress = Math.max(0, Math.min(1, progress + velocity))
-            velocity *= inertia
+            // Integrate exponential decay over elapsed time. This reproduces
+            // the 60 Hz step while giving identical travel at other refresh rates.
+            const frames = Math.max(0, Math.min(deltaMs, 50)) * 60 / 1000
+            const retention = Math.pow(inertia, frames)
+            const travel = inertia === 1 ? velocity * frames : velocity * (1 - retention) / (1 - inertia)
+            progress = Math.max(0, Math.min(1, progress + travel))
+            velocity *= retention
+            if (progress === 0 || progress === 1) { velocity = 0; stopInertia() }
             report()
           },
           () => !dragging,
@@ -105,7 +113,7 @@ export function drag(options: DragOptions = {}): Driver {
         lastClientPos = startClientPos
         startProgress = progress
         velocity = 0
-        lastMoveTimestamp = 0
+        lastMoveTimestamp = null
         // No setPointerCapture: moves and the release are already tracked
         // on the document, so the drag keeps following the pointer outside
         // the target without it — and capture retargets the browser's own
@@ -118,13 +126,13 @@ export function drag(options: DragOptions = {}): Driver {
         const pos = clientPos(event)
         const delta = (pos - startClientPos) / extent()
         const now = event.timeStamp
-        const dt = lastMoveTimestamp ? now - lastMoveTimestamp : 16.67
+        const dt = lastMoveTimestamp !== null ? now - lastMoveTimestamp : 1000 / 60
 
         const nextProgress = Math.max(0, Math.min(1, startProgress + delta))
         // Velocity tracked per-frame-at-60fps, matching the units
         // startInertia()'s decay loop expects — frame-rate-independent by
         // scaling the raw per-ms delta up to a 16.67ms-equivalent step.
-        velocity = dt > 0 ? ((nextProgress - progress) / dt) * 16.67 : 0
+        velocity = dt > 0 ? ((nextProgress - progress) / dt) * (1000 / 60) : 0
         progress = nextProgress
         lastClientPos = pos
         lastMoveTimestamp = now
@@ -136,6 +144,7 @@ export function drag(options: DragOptions = {}): Driver {
         if (!dragging || event.pointerId !== pointerId) return
         dragging = false
         pointerId = null
+        if (event.type === 'pointercancel' || inertia === 0) { velocity = 0; report(); return }
         // Under reduced motion a release stops where the pointer let go —
         // no coasting on after the person has stopped moving.
         if (Math.abs(velocity) >= INERTIA_SETTLE_THRESHOLD && !prefersReducedMotion()) {

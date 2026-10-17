@@ -272,6 +272,50 @@ describe('drag driver', () => {
     teardown()
   })
 
+  it('coasts the same distance at 30, 60 and 120 Hz', () => {
+    const runs = [30, 60, 120].map(hz => {
+      queued = []
+      let latest = { progress: 0, velocity: 0 }
+      const teardown = drag({ inertia: .9 }).attach(target, signal => { latest = { progress: signal.progress, velocity: signal.velocity ?? 0 } })
+      target.dispatchEvent(makePointerEvent('pointerdown', 0, 50, 1, 0))
+      target.dispatchEvent(makePointerEvent('pointermove', 2, 50, 1, 16))
+      target.dispatchEvent(makePointerEvent('pointerup', 2, 50, 1, 32))
+      flushOneFrame(0)
+      for (let i = 1; i <= hz / 10; i++) flushOneFrame(i * 1000 / hz)
+      teardown(); getSharedScheduler().stop()
+      return latest
+    })
+    for (const result of runs) {
+      expect(result.progress).toBeCloseTo(runs[0]!.progress, 8)
+      expect(result.velocity).toBeCloseTo(runs[0]!.velocity, 8)
+    }
+  })
+
+  it('zero inertia and cancelled gestures stop at release without scheduling a coast', () => {
+    for (const [inertia, end] of [[0, 'pointerup'], [.9, 'pointercancel']] as const) {
+      let latestVelocity = 1
+      const teardown = drag({ inertia }).attach(target, signal => { latestVelocity = signal.velocity ?? 0 })
+      target.dispatchEvent(makePointerEvent('pointerdown', 0, 50, 1, 0))
+      target.dispatchEvent(makePointerEvent('pointermove', 20, 50, 1, 16))
+      target.dispatchEvent(makePointerEvent(end, 20, 50, 1, 32))
+      expect(queued.length).toBe(0); expect(latestVelocity).toBe(0)
+      teardown()
+    }
+  })
+
+  it('rejects unstable inertia and handles constant-velocity coasting', () => {
+    for (const inertia of [-.1, 1.1, NaN, Infinity]) expect(() => drag({ inertia })).toThrow(/inertia/)
+    const signals: number[] = []
+    const teardown = drag({ inertia: 1 }).attach(target, signal => signals.push(signal.progress))
+    target.dispatchEvent(makePointerEvent('pointerdown', 0, 50, 1, 0))
+    target.dispatchEvent(makePointerEvent('pointermove', 2, 50, 1, 0))
+    target.dispatchEvent(makePointerEvent('pointermove', 4, 50, 1, 10))
+    target.dispatchEvent(makePointerEvent('pointerup', 4, 50, 1, 20))
+    flushOneFrame(0); flushOneFrame(1000 / 60)
+    expect(signals.at(-1)).toBeCloseTo(.02 + (.01 / 10 * (1000 / 60)) * (1 + 16.67 * .06), 5)
+    teardown()
+  })
+
   it('defaults axis to "x" and inertia to 0.92', () => {
     const signals: number[] = []
     const teardown = drag().attach(target, (signal) => signals.push(signal.progress))
