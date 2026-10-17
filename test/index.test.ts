@@ -157,7 +157,7 @@ describe('comice() — .driver() with a plain Driver', () => {
     expect(handle.progress).toBeCloseTo(0.5)
   })
 
-  it('transitions idle -> entering -> active -> leaving -> idle, one transition per signal', () => {
+  it('transitions idle -> entering -> active -> leaving -> idle, settling endpoints on a single signal', () => {
     const handle = comice(el) as ComiceHandle
     const driver = fakeDriver()
     handle.driver(driver)
@@ -168,12 +168,7 @@ describe('comice() — .driver() with a plain Driver', () => {
     driver.fire({ progress: 1 })
     expect(handle.state).toBe('active')
 
-    // A single progress <= 0 signal advances exactly one transition
-    // (active -> leaving), not two (active -> leaving -> idle) in one
-    // call — see index.ts's `else if` chain.
-    driver.fire({ progress: 0 })
-    expect(handle.state).toBe('leaving')
-
+    // A single endpoint signal settles through legal transitions.
     driver.fire({ progress: 0 })
     expect(handle.state).toBe('idle')
   })

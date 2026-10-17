@@ -13,7 +13,6 @@
 
 import { createInstance } from './machine.js'
 import { createMapping } from './mapping.js'
-import { createVisibilityGate, getSharedScheduler } from './scheduler.js'
 import type {
   ComiceInstance,
   Driver,
@@ -75,7 +74,7 @@ export type ComiceHandle = ComiceInstance & {
   /**
    * Starts a mapping from a named signal on the most recently attached
    * named-signal driver to a plugin parameter. `.driver(audio()).map('bass').to(distort, 'amount')`.
-   * Throws if no named-signal driver has been attached yet — a mapping
+   * Throws if no driver has been attached yet — a mapping
    * with nothing to read from is a configuration error, not a silent
    * no-op.
    */
@@ -103,142 +102,139 @@ export type ComiceHandle = ComiceInstance & {
 /** Values for `.set()`: plugin parameters by name, plus `progress`. */
 export type SetProps = { progress?: number } & Record<string, number>
 
-const sharedScheduler = getSharedScheduler()
-
 function isNamedSignalDriver(driver: Driver | NamedSignalDriver): driver is NamedSignalDriver {
   return typeof (driver as NamedSignalDriver).attachSignals === 'function'
 }
+
+const pluginOwners = new WeakMap<ComicePlugin, ComiceHandle>()
+const detachPlugin = new WeakMap<ComiceHandle, (plugin: ComicePlugin) => void>()
 
 function wrap(target: Element): ComiceHandle {
   const instance = createInstance()
   const plugins: ComicePlugin[] = []
   const driverTeardowns: Array<() => void> = []
-  const visibility = createVisibilityGate(target)
+  let destroyed = false
 
-  // The most recently attached named-signal driver's live signal bag.
-  // `.map()` reads from this — "the most recently attached driver" matches
-  // the brief's `.driver(audio()).map('bass').to(...)` chaining, and
-  // multiple `.driver()` calls each get their own mappings registry so two
-  // drivers on one instance (e.g. pointer() and audio()) don't collide.
-  let latestSignals: Readonly<SignalValues> = {}
-  const mappings: Array<{ apply(signals: Readonly<SignalValues>): void }> = []
+  type SignalChannel = { active: boolean; values: Readonly<SignalValues>; mappings: Array<{ apply(signals: Readonly<SignalValues>): void }> }
+  const channels: SignalChannel[] = []
+  let latestChannel: SignalChannel | null = null
+  const publish = (channel: SignalChannel, values: Readonly<SignalValues>) => {
+    if (destroyed || !channel.active) return
+    channel.values = values
+    for (const mapping of channel.mappings) {
+      try {
+        mapping.apply(values)
+      } catch (err) {
+        if (__DEV__) console.warn('[comice] A mapping threw and was skipped this update.', err)
+      }
+    }
+  }
 
   const handle = instance as ComiceInstance as ComiceHandle
   ;(handle as { handles: readonly ComiceHandle[] }).handles = [handle]
 
   handle.use = (plugin: ComicePlugin): ComiceHandle => {
+    if (destroyed) throw new Error('[comice] Cannot attach a plugin to a destroyed handle.')
+    if (pluginOwners.has(plugin)) throw new Error('[comice] This plugin is already attached; use create() for another element.')
+    try { plugin.setup(target, instance) }
+    catch (error) {
+      try { plugin.teardown?.() } catch { /* Preserve the setup error. */ }
+      throw error
+    }
     plugins.push(plugin)
-    plugin.setup(target, instance)
+    pluginOwners.set(plugin, handle)
     return handle
   }
 
-  handle.driver = (driver: Driver | NamedSignalDriver): ComiceHandle => {
-    ;(instance as { driven: boolean }).driven = true
-    if (typeof driver.attach === 'function') {
-      const teardown = driver.attach(target, (signal: DriverSignal) => {
-        instance.setProgress(signal.progress)
-
-        // A driver reporting progress > 0 for the first time enters; falling
-        // back to 0 leaves. Plugins that need finer control call
-        // instance.transition() directly instead of relying on this default.
-        //
-        // `else if` deliberately, not four independent `if`s: each branch
-        // below both reads AND mutates instance.state, so with plain `if`s
-        // a single signal.progress <= 0 signal could cascade through two
-        // transitions in one call (active -> leaving -> idle) instead of
-        // the intended one driver signal, at most one transition. A
-        // caller wanting the second half of that cascade sees it on the
-        // *next* signal, same as every other progress <= 0 report.
-        if (signal.progress > 0 && instance.state === 'idle') {
-          instance.transition('entering')
-        } else if (signal.progress >= 1 && instance.state === 'entering') {
-          instance.transition('active')
-        } else if (signal.progress <= 0 && (instance.state === 'active' || instance.state === 'entering')) {
-          instance.transition('leaving')
-        } else if (signal.progress <= 0 && instance.state === 'leaving') {
-          instance.transition('idle')
-        }
-
-        // A transition resets progress to 0 (machine.ts), which threw away
-        // the driver's real progress for the rest of this frame: a click
-        // animation's first frame set 0.63 in 'idle', the transition to
-        // 'entering' reset it to 0, and both happened in one task, so the
-        // in-between value was never painted. At 60fps the next frames
-        // recover; on a slow device, where 400ms is two frames, the melt
-        // never showed at all (seen on harness/site/). The driver's
-        // progress is the progress — re-apply it. A no-op when nothing
-        // transitioned (setProgress ignores an unchanged value).
-        instance.setProgress(signal.progress)
-
-        // signal.pointer (DriverSignal's optional field, types.ts)
-        // previously had no path to a plugin at all — pointer() reports
-        // it, but a plain Driver never flows through .map() (that's
-        // NamedSignalDriver-only), so a field-based plugin (distort's
-        // bulge/lens/glass, spotlight's cursor-follow) had no way to read
-        // live pointer position through the driver abstraction at all.
-        // Routed here into instance.setDisplay(), which already exists
-        // for exactly this ("what is actually rendered this frame" per
-        // machine.ts's own rest-vs-display split — live pointer position
-        // is display-side data, never rest, so hovering one element's
-        // field can't leak into another's geometry the way machine.ts's
-        // header comment already guards against for rest). A plugin
-        // reads it via instance.on('*', (snapshot) => snapshot.display.x/y)
-        // or instance.display directly — no new API surface, just a
-        // previously-unrouted signal now reaching an existing channel.
-        //
-        // signal.velocity has NO equally clean existing slot — Transform
-        // has no velocity field, and forcing it into an unrelated field
-        // (scale, say) would collide with that field's real meaning for
-        // any plugin wanting both. Left unrouted deliberately rather than
-        // shoehorned in; a real fix (extending the public Transform type)
-        // is a bigger, more consequential decision than this pass should
-        // make unilaterally. distort's initial scope (bulge/lens/glass)
-        // doesn't need it — only a future 'smear' effect would.
-        if (signal.pointer) {
-          instance.setDisplay({ x: signal.pointer.x, y: signal.pointer.y })
-        }
-      })
-      driverTeardowns.push(teardown)
-    }
-
-    if (isNamedSignalDriver(driver) && driver.attachSignals) {
-      const teardown = driver.attachSignals(target, (signals) => {
-        latestSignals = signals
-        // Mappings are applied here, synchronously, as signals arrive —
-        // not from a separate scheduler entry — so a mapping never reads
-        // a signal bag older than the frame that produced it, and there
-        // is exactly one write to each plugin param per driver update.
-        // Each mapping runs in isolation: one mapping's target.setParam()
-        // throwing (a plugin's own validation, say) must not stop every
-        // OTHER mapping on this instance from applying its signal.
-        mappings.forEach((mapping) => {
-          try {
-            mapping.apply(latestSignals)
-          } catch (err) {
-            if (__DEV__) console.warn('[comice] A .map().to() mapping threw and was skipped this update.', err)
-          }
-        })
-      })
-      driverTeardowns.push(teardown)
-    }
-
-    return handle
-  }
-
-  handle.map = (sourceKey: string) => ({
-    to(pluginTarget: ComicePlugin, paramName: string, options?: MappingOptions) {
-      if (!pluginTarget.params) {
-        throw new Error(
-          `[comice] .map('${sourceKey}').to(plugin, '${paramName}') failed: the plugin passed to ` +
-            `.to() has no params — only a plugin with a \`params\` MappableTarget can be mapped to.`,
-        )
-      }
-      mappings.push(createMapping(sourceKey, pluginTarget.params, paramName, options))
-      return handle
-    },
+  detachPlugin.set(handle, (plugin) => {
+    const index = plugins.indexOf(plugin)
+    if (index < 0) return
+    plugins.splice(index, 1)
+    pluginOwners.delete(plugin)
+    try { plugin.teardown?.() } catch (err) { if (__DEV__) console.warn('[comice] Plugin rollback teardown failed.', err) }
   })
 
+  handle.driver = (driver: Driver | NamedSignalDriver): ComiceHandle => {
+    if (destroyed) throw new Error('[comice] Cannot attach a driver to a destroyed handle.')
+    const previousChannel = latestChannel
+    const previousDriven = instance.driven
+    const teardownStart = driverTeardowns.length
+    const channel: SignalChannel = { active: true, values: {}, mappings: [] }
+    latestChannel = channel
+    ;(instance as { driven: boolean }).driven = true
+    try {
+      if (typeof driver.attach === 'function') {
+        const teardown = driver.attach(target, (signal: DriverSignal) => {
+          if (destroyed || !channel.active || !Number.isFinite(signal.progress)) return
+          const progress = Math.max(0, Math.min(1, signal.progress))
+          const previous = instance.progress
+          // Continuous inputs can reverse between endpoints. Endpoint-only inputs
+          // (native scroll, custom drivers) must settle without a duplicate sample.
+          if (progress > 0 && (instance.state === 'idle' || (instance.state === 'leaving' && progress > previous))) {
+            instance.transition('entering')
+          } else if (progress < previous && (instance.state === 'active' || instance.state === 'entering')) {
+            instance.transition('leaving')
+          }
+          if (progress >= 1 && instance.state === 'entering') instance.transition('active')
+          if (progress <= 0) {
+            if (instance.state === 'active' || instance.state === 'entering') instance.transition('leaving')
+            if (instance.state === 'leaving') instance.transition('idle')
+          }
+          instance.setProgress(progress)
+
+          if (signal.pointer) instance.setDisplay({ x: signal.pointer.x, y: signal.pointer.y })
+          publish(channel, {
+            progress: signal.progress,
+            ...(signal.pointer ? { pointerX: signal.pointer.x, pointerY: signal.pointer.y } : {}),
+            ...(signal.velocity !== undefined ? { velocity: signal.velocity } : {}),
+          })
+        })
+        driverTeardowns.push(teardown)
+      }
+
+      if (isNamedSignalDriver(driver) && driver.attachSignals) {
+        const teardown = driver.attachSignals(target, (signals) => {
+          publish(channel, signals)
+        })
+        driverTeardowns.push(teardown)
+      }
+
+    } catch (error) {
+      channel.active = false
+      for (const teardown of driverTeardowns.splice(teardownStart)) {
+        try { teardown() } catch { /* Preserve the attach error. */ }
+      }
+      latestChannel = previousChannel
+      ;(instance as { driven: boolean }).driven = previousDriven
+      throw error
+    }
+    channels.push(channel)
+    return handle
+  }
+
+  handle.map = (sourceKey: string) => {
+    if (destroyed) throw new Error('[comice] Cannot attach a mapping to a destroyed handle.')
+    const channel = latestChannel
+    return {
+      to(pluginTarget: ComicePlugin, paramName: string, options?: MappingOptions) {
+        if (destroyed) throw new Error('[comice] Cannot attach a mapping to a destroyed handle.')
+        if (!pluginTarget.params) {
+          throw new Error(
+            `[comice] .map('${sourceKey}').to(plugin, '${paramName}') failed: the plugin passed to ` +
+              `.to() has no params — only a plugin with a \`params\` MappableTarget can be mapped to.`,
+          )
+        }
+        if (!channel) throw new Error('[comice] Attach a driver before creating a mapping.')
+        const mapping = createMapping(sourceKey, pluginTarget.params, paramName, options)
+        channel.mappings.push(mapping)
+        mapping.apply(channel.values)
+        return handle
+      },
+    }
+  }
+
   handle.set = (first: SetProps | ComicePlugin, scoped?: SetProps): ComiceHandle => {
+    if (destroyed) return handle
     const only = scoped ? (first as ComicePlugin) : null
     const props = scoped ?? (first as SetProps)
     for (const [name, value] of Object.entries(props)) {
@@ -255,6 +251,8 @@ function wrap(target: Element): ComiceHandle {
 
   const originalDestroy = instance.destroy
   handle.destroy = (): void => {
+    if (destroyed) return
+    destroyed = true
     // Every teardown runs in isolation. destroy() is a cleanup path —
     // one driver's or plugin's teardown throwing must not stop the
     // REST of the teardowns from running, or every plugin/driver after
@@ -268,13 +266,22 @@ function wrap(target: Element): ComiceHandle {
       }
     })
     plugins.forEach((plugin) => {
+      pluginOwners.delete(plugin)
       try {
         plugin.teardown?.()
       } catch (err) {
         if (__DEV__) console.warn(`[comice] Plugin "${plugin.name}" teardown threw during destroy().`, err)
       }
     })
-    visibility.destroy()
+    driverTeardowns.length = 0
+    plugins.length = 0
+    for (const channel of channels) {
+      channel.active = false
+      channel.mappings.length = 0
+      channel.values = {}
+    }
+    channels.length = 0
+    latestChannel = null
     originalDestroy()
   }
 
@@ -333,8 +340,14 @@ function group(handles: ComiceHandle[]): ComiceHandle {
         }
         return plugin.create()
       })
+      const attached: number[] = []
+      try {
+        handles.forEach((handle, index) => { handle.use(perElement[index]!); attached.push(index) })
+      } catch (error) {
+        attached.reverse().forEach((index) => detachPlugin.get(handles[index]!)?.(perElement[index]!))
+        throw error
+      }
       copies.set(plugin, perElement)
-      handles.forEach((handle, index) => handle.use(perElement[index]!))
       return g
     },
     driver(driver) {
@@ -342,9 +355,10 @@ function group(handles: ComiceHandle[]): ComiceHandle {
       return g
     },
     map(sourceKey) {
+      const builders = handles.map((handle) => handle.map(sourceKey))
       return {
         to(plugin, paramName, options) {
-          handles.forEach((handle, index) => handle.map(sourceKey).to(copyFor(plugin, index), paramName, options))
+          builders.forEach((builder, index) => builder.to(copyFor(plugin, index), paramName, options))
           return g
         },
       }
@@ -367,7 +381,10 @@ function group(handles: ComiceHandle[]): ComiceHandle {
       return () => offs.forEach((off) => off())
     },
     off: (type, listener) => handles.forEach((handle) => handle.off(type, listener)),
-    destroy: () => handles.forEach((handle) => handle.destroy()),
+    destroy() {
+      handles.forEach((handle) => handle.destroy())
+      copies.clear()
+    },
   }
   return g
 }

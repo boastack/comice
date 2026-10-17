@@ -208,6 +208,7 @@ export function createInstance(options: ComiceOptions = {}): ComiceInstance {
    * attached (scroll, pointer, drag, time).
    */
   function setProgress(value: number): void {
+    if (!Number.isFinite(value)) return
     const clamped = Math.max(0, Math.min(1, value))
     if (clamped === state.progress) return
     applyState({ progress: clamped }, { type: 'progress', value: clamped })
