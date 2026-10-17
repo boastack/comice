@@ -37,6 +37,7 @@ const FAST_MS = 1000 / 55 // averaging faster than this has headroom
 const IGNORE_OVER_MS = 1000 // a tab switch or a debugger pause, not rendering cost — a 3fps page's 333ms frames still count
 
 let level: QualityLevel = 0
+let quietUntil = 0
 let adaptive = true
 let sum = 0
 let count = 0
@@ -46,6 +47,7 @@ let slowWindows = 0
 /** Records one frame's duration. Called by the scheduler every tick. */
 export function recordFrame(deltaMs: number): void {
   if (!adaptive || level === POSTER || deltaMs <= 0 || deltaMs > IGNORE_OVER_MS) return
+  if (performance.now() < quietUntil) return
   sum += deltaMs
   count++
   if (sum < WINDOW_MS) return
@@ -77,6 +79,22 @@ export function recordFrame(deltaMs: number): void {
   }
 }
 
+/**
+ * Stops counting frames for `ms` (default two seconds). Mounting an effect is
+ * one-off work (compiling a shader, baking a mask, the first uploads) that
+ * stalls a few frames; that is setup, not sustained rendering cost. Without
+ * this, an app that remounts an effect repeatedly, such as a settings panel
+ * that rebuilds it on every slider move, read as "too slow", stepped down to
+ * the poster, and froze every effect on the page until reload. Frames already
+ * counted stay counted; only the frames inside the window are skipped.
+ */
+export function quietFor(ms = 2000): void {
+  quietUntil = performance.now() + ms
+  sum = 0
+  count = 0
+  slowWindows = 0
+}
+
 /** The current quality level, 0 (full) to 3 (poster). */
 export function qualityLevel(): QualityLevel {
   return level
@@ -102,6 +120,7 @@ export function setAdaptiveQuality(enabled: boolean): void {
 /** Back to full quality with a fresh measurement window. */
 export function resetQuality(): void {
   level = 0
+  quietUntil = 0
   sum = 0
   count = 0
   fastWindows = 0

@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import {
   isPoster,
   qualityLevel,
+  quietFor,
   recordFrame,
   renderScale,
   resetQuality,
@@ -179,5 +180,53 @@ describe('very slow pages', () => {
   it('a 3fps page (333ms frames) still steps down — its frames are slow, not pauses', () => {
     for (let i = 0; i < 8; i++) recordFrame(333) // two seconds at 3fps
     expect(qualityLevel()).toBe(1)
+  })
+})
+
+describe('quiet windows', () => {
+  it('skips frames while quiet, so a mount stall is not mistaken for slow rendering', () => {
+    quietFor(60_000)
+    for (let i = 0; i < 6; i++) slowStep()
+    expect(qualityLevel()).toBe(0)
+    expect(isPoster()).toBe(false)
+  })
+
+  it('counts frames again once the window has passed', () => {
+    quietFor(0)
+    for (let i = 0; i < 3; i++) slowStep()
+    expect(isPoster()).toBe(true)
+  })
+
+  it('forgets a half-measured window when it starts', () => {
+    window(33)
+    quietFor(0)
+    window(10)
+    expect(qualityLevel()).toBe(0)
+  })
+
+  it('is cleared by resetQuality', () => {
+    quietFor(60_000)
+    resetQuality()
+    for (let i = 0; i < 3; i++) slowStep()
+    expect(isPoster()).toBe(true)
+  })
+
+  it('mounting an effect starts one, so a settings panel that remounts on every slider move cannot freeze the page', async () => {
+    const { mountCanvas } = await import('../packages/core/src/gl/context.js')
+    const original = HTMLCanvasElement.prototype.getContext
+    ;(HTMLCanvasElement.prototype as any).getContext = function (type: string) {
+      return type === 'webgl2' ? createFakeGL2() : original.call(this, type)
+    }
+    try {
+      const media = document.createElement('video')
+      document.body.append(media)
+      const context = createGLContext(media)!
+      mountCanvas(context, media, { owner: 'test', hideTarget: true }).release()
+      for (let i = 0; i < 6; i++) slowStep()
+      expect(isPoster()).toBe(false)
+      media.remove()
+    } finally {
+      HTMLCanvasElement.prototype.getContext = original
+    }
   })
 })
