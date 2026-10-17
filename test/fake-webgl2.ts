@@ -123,6 +123,8 @@ export function createFakeGL2(
     FRAMEBUFFER: 24,
     COLOR_ATTACHMENT0: 25,
     R8: 26,
+    R16F: 0x822d,
+    HALF_FLOAT: 0x140b,
     RED: 27,
     RGBA8: 28,
     UNPACK_ALIGNMENT: 29,
@@ -213,6 +215,8 @@ export function createFakeGL2(
     getUniformLocation(_program: WebGLProgram, name: string) {
       return { __id: name } as unknown as WebGLUniformLocation
     },
+    uniform4fv(_loc: WebGLUniformLocation | null, _value: Float32List) {},
+    uniform2fv(_loc: WebGLUniformLocation | null, _value: Float32List) {},
     uniform2f(_loc: WebGLUniformLocation | null, _x: number, _y: number) {},
     uniform1i(_loc: WebGLUniformLocation | null, _v: number) {},
     uniform1iv(_loc: WebGLUniformLocation | null, _v: number[] | Int32Array) {},
