@@ -1,138 +1,332 @@
-<h1 align="center">comice</h1>
-
-<h3 align="center">
-  A GPU interaction engine for images and video, with native scroll, hover, pointer, drag, click, time, and audio drivers.
-</h3>
+<h1 align="center">Comice</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-pre--release-orange" alt="Pre-release" />&nbsp;
-  <img src="https://img.shields.io/badge/dependencies-0-20C55C" alt="Zero dependencies" />&nbsp;
-  <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-strict-20C55C" alt="TypeScript" /></a>&nbsp;
-  <img src="https://img.shields.io/badge/node-%3E%3D18-20C55C" alt="Node >=18" />&nbsp;
-  <img src="https://img.shields.io/badge/license-MIT-20C55C" alt="MIT License" />
+  Interactive images, video, and typography for the web.<br />
+  A modular TypeScript engine with GPU effects and native input drivers.
 </p>
 
----
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#plugins">Plugins</a> ·
+  <a href="#demos">Demos</a> ·
+  <a href="#development">Development</a> ·
+  <a href="./LICENSE">MIT license</a>
+</p>
 
-## Overview
+Comice connects media effects to scroll, hover, pointer movement, drag, click, time, and audio. Morph a video into an SVG silhouette, reveal a gallery as it enters the viewport, turn an image into particles, or let a soundtrack shape the visual treatment.
 
-A web page normally draws an image by handing it to the browser and letting the browser paint it, and you get no say over individual pixels. Comice puts that image or video on the graphics card instead, as a texture on a flat rectangle that sits exactly where the original element was. Once it's there, a small program runs over every pixel every frame, and that program can react to scrolling, the cursor, a drag, or audio.
+The core manages state, input, parameter mapping, and scheduling. Effects live in independent packages, so an application imports only the capabilities it uses. GPU plugins share a WebGL2 foundation; layout, loading, navigation, and text plugins also work with the DOM and CSS.
 
-That's the whole idea. Everything else is plugins deciding what that per-pixel program does. Underneath, every plugin is driven by a **state machine** (`idle → entering → active → leaving`), reacting to real events rather than a timeline of guessed durations. Interrupt one mid-transition and it reverses from wherever it actually is, rather than snapping back to a hardcoded start.
+**Release status:** pre-release. This repository contains the working packages, local showcases, and regression harnesses. APIs may change before a stable release. The setup below uses the source workspace.
+
+## Why Comice
+
+- **One interaction model.** Connect plugins and drivers through a chainable API, or set progress from your application's own animation system.
+- **Independent effects.** Choose from 15 plugins without loading the entire catalog. The core has no runtime dependencies.
+- **Interruptible transitions.** Interactive state changes continue from their current progress when input reverses.
+- **Media that remains part of the page.** Effects follow existing elements and preserve the original media as a fallback when GPU rendering fails.
+- **Managed rendering.** A shared scheduler, visibility checks, adaptive quality, and explicit teardown control rendering cost.
+- **Typed integration.** Packages include TypeScript declarations and ESM and CommonJS builds.
+
+## Quick start
+
+### Set up the repository
+
+Install Node.js 18 or newer, pnpm 10 or newer, and Bun for the test runner and local server. The repository pins its pnpm version in [`package.json`](./package.json).
+
+```sh
+git clone https://github.com/boastack/comice.git
+cd comice
+pnpm install
+pnpm build
+pnpm demo
+```
+
+Open the [main showcase](http://localhost:8750/demo/) or [morph showcase](http://localhost:8750/demo/morph/). Keep the server running while exploring the examples. See [demo assets](#demo-assets) for media files that need to be supplied locally.
+
+Inside an application package in this pnpm workspace, declare the packages you use as workspace dependencies:
+
+```sh
+pnpm add comice@workspace:* @comice/morph@workspace:*
+```
+
+### Create a scroll-driven morph
+
+Give the media a defined size and place it inside a positioned stage. This section gives the page enough travel for the morph to reach both endpoints.
+
+```html
+<section id="scene">
+  <div class="stage">
+    <img id="hero" src="/images/landscape.jpg" alt="Mountain landscape" />
+  </div>
+</section>
+
+<style>
+  #scene { height: 200svh; }
+  .stage {
+    position: sticky;
+    top: 0;
+    height: 100svh;
+    display: grid;
+    place-items: center;
+  }
+  #hero {
+    display: block;
+    width: min(80vw, 960px);
+    height: min(60svh, 540px);
+    object-fit: cover;
+    border-radius: 24px;
+  }
+</style>
+```
 
 ```js
-comice('.hero')
-  .use(distort())
-  .driver(audio({ source: '#track' }))
-  .map('bass').to(distort_instance, 'amount', { output: [0, 0.8], smoothing: 0.15 })
+import { comice, scroll } from 'comice'
+import { morph } from '@comice/morph'
+
+const effect = morph({
+  to: 'circle(40%)',
+  liquid: 0,
+  cursorFollow: false,
+})
+
+const handle = comice('#hero')
+  .use(effect)
+  .driver(scroll({ subject: '#scene', range: 'contain', smooth: 0.3 }))
+
+handle.on('error', (_state, event) => {
+  console.error(event.error)
+})
+
+// In your component's unmount or dispose callback:
+// handle.destroy()
 ```
 
-`distort()` never mentions audio. `audio()` never mentions distort. The mapping in between is the only thing that knows both names exist, so every driver works with every plugin without either side being rewritten for the other.
+The starting shape comes from the media's computed CSS frame. Scroll forward to reach the circle and back to return. SVG URLs, SVG markup, CSS clip paths, and additional surface controls are documented in the [morph guide](./packages/morph/README.md).
 
-### A different layer than GSAP
+For video, use a sized `<video>` element with `muted`, `playsinline`, and your application's playback controls. Comice does not start playback or manage audio permissions for you.
 
-GSAP and Motion animate properties: move this left, fade that to half opacity, count a number up. A property is the whole element at once, so no animation library can reach inside a picture and change what individual pixels are doing, turn a video into dots, or make a headline sit behind someone's shoulder. That's not a gap in GSAP, it's a different layer, working one level deeper.
+## How it works
 
-The natural setup is GSAP (or Motion, or Lenis) drives, Comice renders: a timeline produces a number from 0 to 1, and Comice turns that number into per-pixel work. Nobody has to throw away what they already use.
-
----
-
-## Status
-
-**Pre-release.** The state machine, all seven drivers, the Driver → Signal → Mapping → Plugin Parameter layer, the full WebGL2 pipeline (texture-on-plane, multi-texture residency, the mask field, temporal feedback, the noise/displacement library), and fifteen plugins are built and tested — `reveal`, `morph`, `dissolve`, `distort`, `spotlight`, `rail`, `color`, `seed`, `mosaic`, `ascii`, `aura`, `type`, `layout`, `particles`, `persist`. Each implements its full spec card, except three options that need `vision` (on-device depth and subject detection, not built yet): color's `dof`, seed's `focal: 'subject'`, and layout's `focal: 'subject'` / `shape: 'contour'` — each throws a clear error rather than faking it. Not yet published to npm. See [`ROADMAP.md`](./ROADMAP.md) for the full per-file status and what's next (it's gitignored, internal notes, read it locally rather than on GitHub).
-
----
-
-## Architecture
-
-```
-comice/                required, under 10 kB, zero effects
-  ├── the state machine (idle/entering/active/leaving)
-  ├── native drivers (scroll, hover, pointer, drag, click, time — no dependency on anything)
-  ├── the shared render loop (one requestAnimationFrame for every instance on the page)
-  └── the Driver → Signal → Mapping → Plugin Parameter layer
-
-comice/gl              opt-in, its own bundle entry — the WebGL2 pipeline
-                        (texture-on-plane, multi-texture residency, the
-                        mask field, temporal feedback, noise/displacement)
-
-comice/drivers/audio   opt-in, its own bundle entry, importing comice
-                        core never pulls in Web Audio boilerplate
-
-@comice/*              opt-in plugins, built and tested: reveal, morph,
-                        dissolve, distort, spotlight, rail, color, seed,
-                        mosaic, ascii, aura, type, layout, particles.
-                        Not yet published to npm.
+```text
+Input driver → Signals → Parameter mapping → Plugin → Media or DOM output
+                         Core state and shared scheduling
 ```
 
-Comice core ships with **zero effects**. Every visual effect is a plugin, registered explicitly and tree-shaken when unused, the same shape GSAP uses (core changes a number over time; ScrollTrigger and SplitText are separate add-ons), except Comice's core puts media on the GPU rather than tweening DOM properties.
+A **driver** reads input. A **plugin** owns an effect. A **mapping** routes a driver signal into a plugin parameter. The core coordinates these pieces without requiring an effect to understand each input source.
 
-### Core methods
+Standard drivers can update the instance's progress from `0` to `1`. Audio exposes several named signals, which you map explicitly. The state machine tracks `idle`, `entering`, `active`, and `leaving` and emits events as progress changes.
 
-| | |
-|---|---|
-| `comice(target)` | Wraps a CSS selector, an element, or a NodeList. Always returns one chainable handle: with several matches, each call applies to every element, and each element gets its own copy of every plugin. |
-| `.use(plugin)` | Attaches a plugin. Chainable. One GPU effect per element: a second shader plugin on the same element throws, naming both, instead of silently replacing the first. So the spec's stacked audio example (`.use(distort()).use(aura()).use(particles())` on one element) runs as one element per effect, each mapped from its own `audio()`. |
-| `.driver(driver)` | Attaches an input source, `scroll()`, `hover()`, `pointer()`, `audio()`, or a custom one. |
-| `.map(sourceKey).to(plugin, paramName, options)` | Routes one named signal from the most recently attached driver into one plugin parameter, through a clamp/remap/invert/multiplier/offset/easing/smoothing pipeline. |
-| `.set(props)` / `.set(plugin, props)` | Applies values immediately, no transition (like `gsap.set()`): plugin parameters by name, plus `progress`. Scoped to one plugin when two share a parameter name. |
-| `.transition(state)` | Forces a state change through the normal interrupt-safe rules. |
-| `.on(event, fn)` / `.off()` | State events (`idle`, `entering`, `active`, `leaving`, `progress`, `rest`, `display`) and lifecycle events: `ready` when a plugin's effect is first on screen, `error` when it can't run (no WebGL2, a shader that won't compile, cross-origin media without CORS) — with the reason. The media still shows either way. |
-| `.destroy()` | Tears down every driver and plugin attached to this instance and releases its resources. |
+### Core API
+
+| Method | Purpose |
+| --- | --- |
+| `comice(target)` | Create a handle for a selector, element, or NodeList. Multiple matches receive separate plugin instances. |
+| `.use(plugin)` | Attach a configured effect. |
+| `.driver(driver)` | Attach an input source. |
+| `.map(signal).to(plugin, parameter, options)` | Map a signal from the most recently attached driver to a plugin parameter. |
+| `.set(values)` | Set progress or named plugin parameters immediately. |
+| `.set(plugin, values)` | Set parameters on a specific attached plugin. |
+| `.transition(state)` | Request a state transition. |
+| `.on(event, callback)` / `.off(event, callback)` | Subscribe to or remove state and lifecycle listeners. |
+| `.destroy()` | Detach drivers and plugins and release instance resources. |
+
+Attach each plugin instance to one handle. When a selector matches several elements, official plugins provide fresh instances for each match. One element can own one GPU effect; attaching another GPU effect to that element produces an error. Use separate elements when an experience needs several rendered surfaces.
+
+See the [core reference](./packages/core/README.md) for lifecycle events, mapping options, and custom plugin integration.
 
 ### Drivers
 
-`scroll()`, `hover()`, `pointer()`, `drag()`, `click()`, and `time()` each drive the state machine directly through a single `progress` value (0..1) — all six state-machine drivers are built. `click()` and `hover()` animate progress over a `duration` (default 400ms) and reverse mid-way when interrupted. `audio()` is different: it's a `NamedSignalDriver`, reporting a bag of named values every frame (`bass`, `mid`, `high`, `energy`, `amplitude`, `spectrum`) plus discrete `beat`/`onset`/`drop` events, routed to plugin parameters through `.map()` rather than driving `progress` directly, since audio has no single honest notion of "how far along" it is.
+| Driver | Input | Import |
+| --- | --- | --- |
+| `scroll()` | Viewport or container progress, section ranges, optional smoothing | `comice` |
+| `hover()` | Pointer entry and exit with reversible progress | `comice` |
+| `pointer()` | Pointer position and interaction signals | `comice` |
+| `drag()` | Drag progress with optional inertia | `comice` |
+| `click()` | Click or tap transitions | `comice` |
+| `time()` | Time-based progress | `comice` |
+| `audio()` | Frequency bands, energy, amplitude, and beat callbacks | `comice/drivers/audio` |
 
-### Where a plugin's work lands
+Some plugins manage their own input. For example, rail owns its drag and keyboard interactions, and reveal can play when it enters the viewport without an attached driver. Each package documents its behavior.
 
-Every plugin reduces to one of five operations: **merge** (many pieces become one), **breakout** (one piece becomes many), **distribute** (pieces travel into an arrangement), **mask** (media takes the shape of something), or **recompose** (one layout becomes another). The full catalogue is 18 plugins across this shape. Fifteen ship today — `reveal`, `morph`, `dissolve`, `distort`, `spotlight`, `rail`, `color`, `seed`, `mosaic`, `ascii`, `aura`, `type`, `layout`, `particles`, `persist` — each with either its complete spec card or a genuine, documented, tested subset. The remaining three — `vision`, `spatial`, `footage` — wait on `vision` (on-device ML for depth/segmentation), which needs its own design pass before it or anything depending on it can be built.
+### Map audio to an effect
 
-### Built-in budgets
+This example assumes an existing image and a playing `<audio id="track">` element. Start playback through your application's controls in response to a user gesture.
 
-- **Render only when visible.** Effects scrolled off screen or in a hidden tab do no work.
-- **Frame budget.** When a device keeps missing ~40fps for two seconds, effects step down to 75% resolution, then 50%, then hold their last frame as a still. `setAdaptiveQuality(false)` opts out; `qualityLevel()` reports the current level.
-- **Reduced motion.** With `prefers-reduced-motion`, effects that move jump straight to their end state; effects that only change how media looks (colour grading, placeholders, text wrap) keep working. `prefersReducedMotion()` exposes the live setting.
+```js
+import { comice } from 'comice'
+import { audio } from 'comice/drivers/audio'
+import { distort } from '@comice/distort'
 
-### Design principles
+const effect = distort({ effect: 'bulge', anchor: [0.5, 0.5] })
 
-1. **Core earns its size in every project.** Nothing enters core unless every user needs it. Target: under 10 kB.
-2. **Plugins are peers, not favourites.** Official plugins use the same public API a stranger would.
-3. **Degrade, never disappear.** No GPU, reduced motion, a weak phone, a failed load: the media still shows.
-4. **The page stays real.** Real text, real links, real layout underneath. The canvas mirrors the page, it never replaces it.
-5. **States, not durations.** Every interactive plugin is a state machine driven by real events, interrupt-safe by construction.
-6. **Presets are data, not code.** Anything a preset does, a user can write by hand and change halfway through.
-7. **Say no in public.** The list below is what Comice will never do — it protects the core from the catalogue.
+const handle = comice('#hero')
+  .use(effect)
+  .driver(audio({
+    source: '#track',
+    normalize: true,
+    attack: 40,
+    release: 320,
+  }))
+  .map('bass').to(effect, 'strength', { output: [0, 0.8] })
 
-### What Comice will never do
+// Dispose of the handle when this experience is removed.
+// handle.destroy()
+```
 
-The line isn't file formats, it's whether media is involved. SVG, text, canvas and the DOM all take part — as masks, sources, companions or targets — but if a feature still makes sense with no image or video present, it belongs somewhere else.
+### Use an external animation system
 
-- **Not general animation.** If it animates something that isn't media, GSAP and Motion already do it well. Comice works alongside them: GSAP drives, Comice renders.
-- **Not a 3D engine.** Flat planes with clever shaders. Meshes, lights and cameras belong to Three.js.
-- **Not AI image generation.** Reading an image with ML — depth, subject, colour — is in scope. Rewriting it is a different product.
-- **Not scroll fades.** Browsers do scroll-linked fades natively now, on the compositor. A JavaScript version would be worse.
-- **Not a video player.** No controls, captions UI, HLS or DRM. Comice takes a video element someone else configured and gives it a GPU surface.
-- **Not an effect gallery.** The plugin catalogue documents what the engine reaches; it is not an inventory owed to anyone.
-- **No fake fallbacks.** Without a GPU, with reduced motion, on a weak phone or after a failed load, the original media shows — never a CSS imitation of an effect that can't run.
+Your application can supply progress directly, including from a router, a timeline, or another scroll controller:
 
----
+```js
+const effect = morph({ to: 'ellipse(45% 40%)', cursorFollow: false })
+const handle = comice('#hero').use(effect)
+
+function update(progress) {
+  handle.set(effect, { progress })
+}
+
+update(0.5)
+```
+
+Use this approach when an existing system already owns timing. An additional Comice driver is optional.
+
+## Plugins
+
+Every plugin is an independent workspace package. Follow its guide for supported targets, options, mappable parameters, and limitations.
+
+| Package | Capabilities |
+| --- | --- |
+| [`@comice/reveal`](./packages/reveal/README.md) | Viewport reveals, wipes, masks, blinds, scaling, and staggered entrances. |
+| [`@comice/morph`](./packages/morph/README.md) | SVG and CSS silhouette morphing with optional joining, glass, outlines, and pointer interaction. |
+| [`@comice/dissolve`](./packages/dissolve/README.md) | Transitions between images or videos, including noise, displacement, wipes, masks, and sequences. |
+| [`@comice/distort`](./packages/distort/README.md) | Pointer fields, bulges, lenses, ripples, glass, and liquid distortion. |
+| [`@comice/spotlight`](./packages/spotlight/README.md) | Focused items, peer dimming and blur, captions, and flexible expansion. |
+| [`@comice/rail`](./packages/rail/README.md) | Interactive collections with strip, coverflow, compare, stack, marquee, arc, and canvas modes. |
+| [`@comice/color`](./packages/color/README.md) | Duotone, LUT grading, grain, bloom, chromatic aberration, and hue shifts. |
+| [`@comice/seed`](./packages/seed/README.md) | ThumbHash, BlurHash, and image placeholders, loading priority, and focal points. |
+| [`@comice/mosaic`](./packages/mosaic/README.md) | Halftone, dithering, risograph, pixel, crosshatch, and image-tile treatments. |
+| [`@comice/ascii`](./packages/ascii/README.md) | Live character-based image and video rendering. |
+| [`@comice/aura`](./packages/aura/README.md) | Edge and palette sampling, ambient glow, and CSS color variables. |
+| [`@comice/type`](./packages/type/README.md) | Media fills, knockout text, layered text, and liquid word transitions. |
+| [`@comice/layout`](./packages/layout/README.md) | Text wrapping, avoidance, anchoring, and responsive focal cropping. |
+| [`@comice/particles`](./packages/particles/README.md) | Point clouds and image-tile shattering with image, text, and shape targets. |
+| [`@comice/persist`](./packages/persist/README.md) | Shared media and playback continuity across client-side navigation. |
+
+Vision-dependent features, including automatic subject detection and depth-based effects, are not implemented. Options that require them fail explicitly. Persist retains live media across client-side route changes; a full document reload cannot preserve the same live element.
+
+## Performance and accessibility
+
+GPU effects use visibility checks and pause rendering when their target is offscreen or the document is hidden. Adaptive quality can reduce render resolution when sustained frame times exceed the budget. Import `qualityLevel()` and `setAdaptiveQuality()` from `comice` to inspect or control that behavior.
+
+Morph keeps geometry bakes independent of adaptive canvas resolution. Resized endpoint fields become active together, and still-image rendering settles when progress and pointer interaction stop changing. Large galleries should mount effects near the viewport and destroy distant instances to release GPU contexts and textures.
+
+Motion-sensitive effects respect `prefers-reduced-motion`. Keep meaningful alternative text, accessible controls, and keyboard navigation in the underlying document. GPU fallback preserves the original media when initialization or rendering fails. Invalid configuration still needs to be handled as an application error.
+
+## Browser and integration requirements
+
+- **GPU effects:** WebGL2 and a browser that permits GPU context creation. DOM and CSS plugins have their own requirements.
+- **Media sizing:** Explicit dimensions or a stable aspect ratio, with a positioned parent for GPU overlays.
+- **Cross-origin media:** Appropriate CORS headers and the media element's `crossorigin` configuration before loading.
+- **Video and audio:** Application-owned playback, controls, and user-gesture handling.
+- **Component frameworks:** Create handles after the DOM mounts and call `destroy()` during unmount or route disposal.
+- **Server rendering:** Initialize DOM-dependent effects on the client.
+
+The browser harnesses exercise Chromium, WebKit, Firefox, and selected mobile emulation profiles across different suites. Emulated mobile results do not replace testing on physical devices. See the [acceptance guide](./harness/acceptance/README.md) and [morph regression guide](./harness/morph/README.md) for exact coverage.
+
+## Demos
+
+Run `pnpm demo` from the repository root, then open:
+
+| Page | Local address |
+| --- | --- |
+| Main plugin showcase | [localhost:8750/demo/](http://localhost:8750/demo/) |
+| Morph showcase and inspector | [localhost:8750/demo/morph/](http://localhost:8750/demo/morph/) |
+
+The morph showcase includes editable shapes, driver and surface controls, and copyable integration snippets. Its code lives in [`demo/morph/`](./demo/morph/README.md).
+
+### Demo assets
+
+Shared images and helper files live in [`demo/assets/`](./demo/assets/README.md). Morph silhouettes, fonts, and source artwork live in [`demo/morph/assets/`](./demo/morph/assets/). Package builds include their declared distribution files rather than the demo assets.
+
+Video and audio are intentionally excluded from Git. Supply your own media at these paths to reproduce the complete showcases:
+
+```text
+demo/assets/video/bg.mp4
+demo/assets/video/canvas.mp4
+demo/assets/audio/fela.mp3       # Optional soundtrack
+```
+
+The [showcase guide](./demo/morph/README.md) explains local media behavior. Bundled Geist fonts retain their [Open Font License](./demo/morph/assets/fonts/OFL.txt).
+
+## Project structure
+
+```text
+packages/
+  core/                  State machine, drivers, mappings, scheduler, WebGL utilities
+  <plugin>/              Independent effect packages and package documentation
+demo/
+  assets/                Shared showcase images, helpers, and local media
+  morph/                 Morph showcase, inspector, and integration snippets
+    assets/              Silhouettes, fonts, masks, and original source artwork
+harness/
+  acceptance/            Cross-browser interaction examples and local server
+  morph/                 Geometry, GPU, inspector, and fast-scroll regressions
+test/                    Unit tests and deterministic browser/GPU fixtures
+comice.html              Historical design specification
+```
+
+`comice/gl` exposes shared rendering primitives for plugin authors. `comice/machine`, `comice/scheduler`, and `comice/mapping` provide focused core entry points. `comice/drivers/audio` keeps Web Audio code in its own import path.
+
+The historical morph engine is retained under `harness/morph/legacy-engine/` for regression comparisons. The current public morph API is documented in its package guide; the historical design specification is not an API reference.
 
 ## Development
 
-```bash
-pnpm install
-pnpm build           # tsup build across all packages
-pnpm typecheck        # tsc --noEmit across all packages
-pnpm test             # bun test
-pnpm test:coverage     # bun test --coverage, enforces 100% line/function coverage on every package
-pnpm size              # size-limit check against the 10kB core budget
+Run commands from the repository root. Build before running unit tests because some tests import built workspace entry points.
+
+| Command | Purpose |
+| --- | --- |
+| `pnpm install` | Install workspace dependencies. |
+| `pnpm build` | Build all packages with Turborepo and tsup. |
+| `pnpm dev` | Rebuild packages as source files change. |
+| `pnpm typecheck` | Check package TypeScript types. |
+| `pnpm test` | Run the Bun unit test suite. |
+| `pnpm test:coverage` | Run unit tests with the configured coverage thresholds. |
+| `pnpm size` | Check the configured 10 kB core bundle budget. |
+| `pnpm demo` | Build packages and start the showcase server on port 8750. |
+| `pnpm acceptance` | Run the acceptance browser suite against a running server. |
+| `pnpm test:morph` | Build and run morph parity, CSS geometry, demo, and inspector suites. |
+
+Install the browser engines before running browser checks:
+
+```sh
+pnpm exec playwright install chromium webkit firefox
 ```
 
-Requires Node ≥18 and pnpm ≥10. Tests run on [Bun](https://bun.sh)'s test runner.
+A typical validation run is:
 
----
+```sh
+pnpm build
+pnpm typecheck
+pnpm test
+```
+
+For browser checks, keep `bun harness/acceptance/serve.ts` running in another terminal, then run:
+
+```sh
+pnpm acceptance
+pnpm test:morph
+node harness/morph/fast-scroll.mjs
+```
+
+Browser reports, screenshots, and generated test bundles stay in ignored output directories. Detailed setup and suite-specific options are documented in the [acceptance](./harness/acceptance/README.md) and [morph](./harness/morph/README.md) guides.
+
+## Contributing and support
+
+Read [CONTRIBUTING.md](./CONTRIBUTING.md) for repository conventions and contribution checks. Keep changes focused, include validation relevant to the behavior, and document public API changes in the affected package.
+
+Use [GitHub Issues](https://github.com/boastack/comice/issues) for reproducible bugs and feature proposals. Include the package, browser, a minimal reproduction, and expected behavior. Follow the [security policy](./SECURITY.md) when reporting vulnerabilities. Release notes are recorded in [CHANGELOG.md](./CHANGELOG.md).
 
 ## License
 
-MIT
+Comice is [MIT licensed](./LICENSE), copyright Olawale Balo. Third-party code and assets retain their own notices, including the morph package's [Viscose attribution](./packages/morph/LICENSE) and the bundled font license.
