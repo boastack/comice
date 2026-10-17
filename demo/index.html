@@ -19,10 +19,12 @@
     --accent: #ffb547;
     --code: #c9c3b8;
     --gutter: clamp(16px, 4vw, 48px);
+    --radius: 16px;
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 Inter, system-ui, sans-serif; overflow-x: hidden; }
+  html, body { overflow-x: clip; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 Inter, system-ui, sans-serif; }
   img { display: block; max-width: 100%; }
   a { color: inherit; }
 
@@ -34,7 +36,7 @@
   .eyebrow { font: 500 12px/1 'JetBrains Mono', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin: 0 0 14px; }
   h2 { font: 800 clamp(34px, 6vw, 72px)/1.02 Fraunces, Georgia, serif; letter-spacing: -0.02em; margin: 0 0 16px; max-width: 16ch; }
   .lede { color: var(--muted); max-width: 56ch; margin: 0 0 28px; font-size: 17px; }
-  pre { background: var(--panel); border: 1px solid var(--line); color: var(--code); padding: 14px 16px; border-radius: 10px; font: 13px/1.6 'JetBrains Mono', monospace; overflow-x: auto; margin: 0 0 32px; max-width: 760px; }
+  pre { background: var(--panel); border: 1px solid var(--line); color: var(--code); padding: 14px 16px; border-radius: var(--radius); font: 13px/1.6 'JetBrains Mono', monospace; overflow-x: auto; margin: 0 0 32px; max-width: 760px; }
   .hint { font-size: 13px; color: var(--muted); margin-top: 12px; }
 
   /* ── pinned, scroll-driven sections ─────────────────────── */
@@ -49,18 +51,19 @@
   .hero p { color: var(--muted); max-width: 46ch; margin: 12px 0 0; }
   #stage { position: absolute; inset: 0; color: var(--fg); font-family: Fraunces, Georgia, serif; font-weight: 800; }
 
-  #film { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 16px; }
-  #gallery { position: absolute; inset: 0; border-radius: 16px; overflow: hidden; }
+  #film { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius); }
+  video { display: block; max-width: 100%; }
+  #gallery { position: absolute; inset: 0; border-radius: var(--radius); overflow: hidden; }
 
   /* distort */
   .trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
   .trio figure { margin: 0; }
-  .trio img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 14px; }
+  .trio img, .trio video { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: var(--radius); }
   .trio figcaption { font: 13px 'JetBrains Mono', monospace; color: var(--muted); margin-top: 10px; }
 
   /* spotlight */
   .projects { display: flex; gap: 14px; height: 420px; }
-  .project { flex: 1; position: relative; border-radius: 14px; overflow: hidden; min-width: 0; cursor: pointer; }
+  .project { flex: 1; position: relative; border-radius: var(--radius); overflow: hidden; min-width: 0; cursor: pointer; }
   .project img { width: 100%; height: 100%; object-fit: cover; }
   .project .meta { position: absolute; left: 16px; bottom: 14px; right: 16px; }
   .project .meta b { display: block; font: 800 22px Fraunces, serif; }
@@ -68,26 +71,32 @@
 
   /* rail + type */
   .rail { display: flex; gap: 20px; height: 360px; align-items: center; user-select: none; }
-  .slide { width: 260px; height: 300px; border-radius: 14px; overflow: hidden; }
+  .slide { width: 260px; height: 300px; border-radius: var(--radius); overflow: hidden; }
   .slide img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
   .name { font: 800 clamp(40px, 7vw, 88px)/1 Fraunces, Georgia, serif; letter-spacing: -0.02em; margin: 8px 0 0; color: var(--fg); }
 
   /* reveal */
   .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
   .grid figure { margin: 0; }
-  .grid img { width: 100%; aspect-ratio: 16 / 11; object-fit: cover; border-radius: 12px; }
+  .grid img { width: 100%; aspect-ratio: 16 / 11; object-fit: cover; border-radius: var(--radius); }
 
   /* rebuilt */
   .pair { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-  .pair img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; }
+  .pair img, .pair video { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius); }
   .control { display: flex; align-items: center; gap: 12px; margin-top: 20px; font: 13px 'JetBrains Mono', monospace; color: var(--muted); }
   input[type=range] { accent-color: var(--accent); width: min(320px, 60vw); }
 
   /* audio */
   .play { border: 0; border-radius: 999px; padding: 12px 22px; background: var(--accent); color: #1a1206; font: 700 15px Inter; cursor: pointer; }
   .bars { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 24px; }
-  .bars img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 12px; }
+  .bars img, .bars video { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: var(--radius); background: #fff; }
 
+  #s-aura { max-width: none; transition: background 0.6s ease; }
+  #s-aura > * { max-width: 1144px; margin-left: auto; margin-right: auto; }
+  .reel-wrap { position: relative; }
+  #reel { width: 100%; max-width: 760px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--radius); }
+  .swatches { display: flex; gap: 10px; margin-top: 16px; }
+  .swatches i { width: 56px; height: 56px; border-radius: var(--radius); border: 1px solid #ffffff22; transition: background 0.6s ease; }
   footer { padding: 12vh var(--gutter); text-align: center; color: var(--muted); }
   footer b { display: block; font: 800 clamp(32px, 6vw, 64px) Fraunces, serif; color: var(--fg); margin-bottom: 8px; }
 
@@ -116,7 +125,8 @@
     "@comice/reveal": "../packages/reveal/dist/index.js",
     "@comice/ascii": "../packages/ascii/dist/index.js",
     "@comice/mosaic": "../packages/mosaic/dist/index.js",
-    "@comice/color": "../packages/color/dist/index.js"
+    "@comice/color": "../packages/color/dist/index.js",
+    "@comice/aura": "../packages/aura/dist/index.js"
   }
 }
 </script>
@@ -141,16 +151,16 @@
   <div class="sticky">
     <div>
       <p class="eyebrow">morph</p>
-      <h2>Footage collapsing into a logo.</h2>
+      <h2>Live footage collapsing into a logo.</h2>
     </div>
-    <div class="stage"><img id="film" src="../harness/acceptance/assets/photo-a.png" alt="A landscape" /><div class="meter"><i></i></div></div>
+    <div class="stage"><video id="film" src="./assets/video/canvas.mp4" muted loop playsinline autoplay></video><div class="meter"><i></i></div></div>
   </div>
 </section>
 <div class="section" style="padding-top:4vh">
   <p class="lede">The connecting tissue stretches and snaps, like honey or wax pulling apart, instead of fading.</p>
   <pre>comice('#film').use(morph({
-  operation: 'mask', into: 'svg', path: 'M12 2L2 7l10 5 10-5-10-5z',
-  liquid: 0.7, thread: { sag: 6, dissolve: 4 },
+  to: { type: 'shape', path: applePath, viewBox: [0, 0, 24, 24] },
+  liquid: 0.7, join: { style: 'slab', sag: 6, dissolve: 4 },
 })).driver(scroll())</pre>
 </div>
 
@@ -160,9 +170,9 @@
   <h2>The cursor is a force in the field.</h2>
   <p class="lede">Not a shape drawn at a point: the image itself bends around the pointer. Move over each one.</p>
   <div class="trio">
-    <figure><img class="fx-glass" src="../harness/acceptance/assets/photo-b.png" alt="" /><figcaption>effect: 'glass'</figcaption></figure>
-    <figure><img class="fx-ripple" src="../harness/acceptance/assets/photo-a.png" alt="" /><figcaption>effect: 'ripple'</figcaption></figure>
-    <figure><img class="fx-liquid" src="../harness/acceptance/assets/founder.png" alt="" /><figcaption>effect: 'liquid'</figcaption></figure>
+    <figure><img class="fx-glass" src="media/hand-a.jpg" alt="" /><figcaption>effect: 'glass'</figcaption></figure>
+    <figure><img class="fx-ripple" src="media/tailor-b.jpg" alt="" /><figcaption>effect: 'ripple'</figcaption></figure>
+    <figure><video class="fx-liquid" src="./assets/video/canvas.mp4" muted loop playsinline autoplay></video><figcaption>effect: 'liquid', on video</figcaption></figure>
   </div>
   <pre style="margin-top:24px">comice('.fx-glass').use(distort({ effect: 'glass' })).driver(pointer())</pre>
 </section>
@@ -173,10 +183,10 @@
   <h2>One item emphasised, the rest recede.</h2>
   <p class="lede">Hover (or tap) a project. It widens, its peers soften and dim, and a real, selectable caption appears.</p>
   <div class="projects">
-    <div class="project"><img src="../harness/acceptance/assets/photo-a.png" alt="" /><div class="meta"><b>North</b><span>Landscape film, 2026</span></div></div>
-    <div class="project"><img src="../harness/acceptance/assets/photo-b.png" alt="" /><div class="meta"><b>Basalt</b><span>City at night</span></div></div>
-    <div class="project"><img src="../harness/acceptance/assets/founder.png" alt="" /><div class="meta"><b>Aurora</b><span>Portrait series</span></div></div>
-    <div class="project"><img src="../harness/acceptance/assets/photo-a.png" alt="" style="filter:hue-rotate(140deg)" /><div class="meta"><b>Meridian</b><span>Brand identity</span></div></div>
+    <div class="project"><img src="media/portrait.jpg" alt="" /><div class="meta"><b>Adaeze</b><span>Portrait, fabric market</span></div></div>
+    <div class="project"><img src="media/hand-a.jpg" alt="" /><div class="meta"><b>Gold</b><span>Product film, 2026</span></div></div>
+    <div class="project"><img src="media/tailor-a.jpg" alt="" /><div class="meta"><b>Atelier</b><span>Tailoring series</span></div></div>
+    <div class="project"><img src="media/hand-b.jpg" alt="" /><div class="meta"><b>Ember</b><span>Brand identity</span></div></div>
   </div>
   <pre style="margin-top:24px">comice('.project').use(spotlight({
   peers: { selector: '.project', blur: 4, dim: 0.4 },
@@ -190,13 +200,13 @@
   <h2>Drag through. Names melt into each other.</h2>
   <p class="lede">Real momentum and a snap into place; arrow keys work, and screen readers hear which one is active. The name is live text that melts word to word.</p>
   <div class="rail" id="rail">
-    <div class="slide"><img src="../harness/acceptance/assets/photo-a.png" alt="North" /></div>
-    <div class="slide"><img src="../harness/acceptance/assets/photo-b.png" alt="Basalt" /></div>
-    <div class="slide"><img src="../harness/acceptance/assets/founder.png" alt="Aurora" /></div>
-    <div class="slide"><img src="../harness/acceptance/assets/photo-b.png" alt="Meridian" style="filter:hue-rotate(200deg)" /></div>
-    <div class="slide"><img src="../harness/acceptance/assets/photo-a.png" alt="Atelier" style="filter:hue-rotate(90deg)" /></div>
+    <div class="slide"><img src="media/portrait.jpg" alt="Adaeze" /></div>
+    <div class="slide"><img src="media/hand-a.jpg" alt="Gold" /></div>
+    <div class="slide"><img src="media/tailor-a.jpg" alt="Atelier" /></div>
+    <div class="slide"><img src="media/hand-b.jpg" alt="Ember" /></div>
+    <div class="slide"><img src="media/tailor-b.jpg" alt="Kente" /></div>
   </div>
-  <p class="name" id="name">North</p>
+  <p class="name" id="name">Adaeze</p>
   <pre style="margin-top:24px">comice('.name').use(type({ mode: 'melt', melt: { blur: 14, threshold: [0.5, 18] } }))
 comice('#rail').use(rail({
   mode: 'coverflow', inertia: 0.94, snap: true,
@@ -209,14 +219,14 @@ comice('#rail').use(rail({
   <div class="sticky">
     <div>
       <p class="eyebrow">dissolve</p>
-      <h2>A to B to C, regions crossing at their own time.</h2>
+      <h2>One shot into the next, region by region.</h2>
     </div>
     <div class="stage"><div id="gallery"></div><div class="meter"><i></i></div></div>
   </div>
 </section>
 <div class="section" style="padding-top:4vh">
   <pre>comice('#gallery').use(dissolve({
-  transition: 'noise', to: [landscape, city, portrait],
+  transition: 'noise', to: [gold, ember, atelier],
   noise: { scale: 2, intensity: 1, softness: 0.2 },
 })).driver(scroll())</pre>
 </div>
@@ -227,12 +237,12 @@ comice('#rail').use(rail({
   <h2>A grid opening as it arrives.</h2>
   <p class="lede">No driver at all: each image slats open when it scrolls into view, as a wave from the corner. It never shows a blank frame: it waits for the image to decode.</p>
   <div class="grid">
-    <figure><img src="../harness/acceptance/assets/photo-a.png" alt="" /></figure>
-    <figure><img src="../harness/acceptance/assets/photo-b.png" alt="" /></figure>
-    <figure><img src="../harness/acceptance/assets/founder.png" alt="" /></figure>
-    <figure><img src="../harness/acceptance/assets/photo-b.png" alt="" /></figure>
-    <figure><img src="../harness/acceptance/assets/founder.png" alt="" /></figure>
-    <figure><img src="../harness/acceptance/assets/photo-a.png" alt="" /></figure>
+    <figure><img src="media/portrait.jpg" alt="" /></figure>
+    <figure><img src="media/hand-a.jpg" alt="" /></figure>
+    <figure><img src="media/tailor-a.jpg" alt="" /></figure>
+    <figure><img src="media/hand-b.jpg" alt="" /></figure>
+    <figure><img src="media/tailor-b.jpg" alt="" /></figure>
+    <figure><img src="media/portrait.jpg" alt="" /></figure>
   </div>
   <pre style="margin-top:24px">comice('.grid figure').use(reveal({ effect: 'blinds', stagger: { each: 0.06, grid: 'auto' } }))</pre>
 </section>
@@ -241,11 +251,11 @@ comice('#rail').use(rail({
 <section class="section">
   <p class="eyebrow">ascii · mosaic · color</p>
   <h2>The same picture, rebuilt live on the GPU.</h2>
-  <p class="lede">Characters, a halftone in brand colours, a duotone with film grain. Every parameter is live: drag the slider.</p>
+  <p class="lede">Live video as characters, a halftone in brand colours, a duotone with film grain. Every parameter is live: drag the slider.</p>
   <div class="pair">
-    <img id="as-ascii" src="../harness/acceptance/assets/founder.png" alt="" />
-    <img id="as-mosaic" src="../harness/acceptance/assets/founder.png" alt="" />
-    <img id="as-color" src="../harness/acceptance/assets/photo-a.png" alt="" />
+    <video id="as-ascii" src="./assets/video/canvas.mp4" muted loop playsinline autoplay></video>
+    <img id="as-mosaic" src="media/portrait.jpg" alt="" />
+    <img id="as-color" src="media/tailor-b.jpg" alt="" />
   </div>
   <label class="control">cell <input id="cell" type="range" min="6" max="28" value="10" /> <output id="cell-out">10px</output></label>
   <pre style="margin-top:24px">const art = ascii({ cell: 10 })
@@ -257,17 +267,30 @@ slider.oninput = () => asciiHandle.set(art, { cell: slider.value })</pre>
 <section class="section">
   <p class="eyebrow">signals → parameters</p>
   <h2>Sound driving the picture.</h2>
-  <p class="lede">The bass pushes the lens, the highs turn the hue. Neither plugin knows audio exists: one line of mapping connects them.</p>
+  <p class="lede">Fela on the speakers: the bass pushes the lens, the highs turn the hue. Neither plugin knows audio exists: one line of mapping connects them.</p>
   <button class="play" id="play">▶ Play the track</button>
-  <audio id="track" src="../harness/acceptance/assets/track.wav" loop></audio>
+  <audio id="track" src="./assets/audio/fela.mp3" loop></audio>
   <div class="bars">
-    <img id="au-distort" src="../harness/acceptance/assets/photo-b.png" alt="" />
-    <img id="au-color" src="../harness/acceptance/assets/photo-a.png" alt="" />
+    <video id="au-distort" src="./assets/video/bg.mp4" muted loop playsinline autoplay></video>
+    <img id="au-color" src="media/tailor-a.jpg" alt="" />
   </div>
   <pre style="margin-top:24px">comice('#au-distort').use(lens).driver(audio({ source: '#track' }))
   .map('bass').to(lens, 'strength', { output: [0, 0.9] })
 comice('#au-color').use(grade).driver(audio({ source: '#track' }))
   .map('high').to(grade, 'shift')</pre>
+</section>
+
+<!-- 10. aura -->
+<section class="section" id="s-aura">
+  <p class="eyebrow">aura</p>
+  <h2>The picture colouring the page around it.</h2>
+  <p class="lede">The playing video is sampled a few times a second; its palette becomes this section's background and the swatches below, clamped so text stays readable.</p>
+  <div class="reel-wrap"><video id="reel" src="./assets/video/canvas.mp4" muted loop playsinline autoplay></video></div>
+  <div class="swatches" id="swatches"></div>
+  <pre style="margin-top:24px">comice('#reel').use(aura({
+  sample: 'palette', colors: 5, contrast: 4.5,
+  onSample: (colors) => paint(colors),
+}))</pre>
 </section>
 
 <footer>
@@ -289,8 +312,9 @@ comice('#au-color').use(grade).driver(audio({ source: '#track' }))
   import { ascii } from '@comice/ascii'
   import { mosaic } from '@comice/mosaic'
   import { color } from '@comice/color'
+  import { aura } from '@comice/aura'
 
-  const asset = (name) => `../harness/acceptance/assets/${name}.png`
+  const asset = (name) => `media/${name}.jpg`
   const load = async (name) => {
     const image = new Image()
     image.src = asset(name)
@@ -319,14 +343,16 @@ comice('#au-color').use(grade).driver(audio({ source: '#track' }))
 
   // 1. particles: portrait -> wordmark -> back
   comice('#stage').use(particles({
-    mode: 'cloud', from: { image: asset('founder') }, to: { text: 'COMICE' },
+    mode: 'cloud', from: { image: asset('portrait') }, to: { text: 'COMICE' },
     count: 120000, motion: { noise: 0.3 },
   })).driver(through(document.getElementById('s-particles')))
 
   // 2. morph: footage collapsing into a logo
+  const svg = await (await fetch('./morph/assets/masks/apple.svg')).text()
+  const applePath = new DOMParser().parseFromString(svg, 'image/svg+xml').querySelector('path').getAttribute('d')
   comice('#film').use(morph({
-    operation: 'mask', into: 'svg', path: 'M12 2L2 7l10 5 10-5-10-5z',
-    liquid: 0.7, thread: { sag: 6, dissolve: 4 },
+    to: { type: 'shape', path: applePath, viewBox: [0, 0, 24, 24] },
+    liquid: 0.7, join: { style: 'slab', sag: 6, dissolve: 4 },
   })).driver(through(document.getElementById('s-morph')))
 
   // 3. distort: three fields following the pointer
@@ -341,7 +367,7 @@ comice('#au-color').use(grade).driver(audio({ source: '#track' }))
   })).driver(hover())
 
   // 5. rail + type melt
-  const names = ['North', 'Basalt', 'Aurora', 'Meridian', 'Atelier']
+  const names = ['Adaeze', 'Gold', 'Atelier', 'Ember', 'Kente']
   const name = document.getElementById('name')
   comice('.name').use(type({ mode: 'melt', melt: { blur: 14, threshold: [0.5, 18] } }))
   comice('#rail').use(rail({
@@ -350,9 +376,9 @@ comice('#au-color').use(grade).driver(audio({ source: '#track' }))
   }))
 
   // 6. dissolve: a sequence of three, pinned
-  const [landscape, city, portrait] = await Promise.all(['photo-a', 'photo-b', 'founder'].map(load))
+  const [gold, ember, atelier] = await Promise.all(['hand-a', 'hand-b', 'tailor-a'].map(load))
   comice('#gallery').use(dissolve({
-    transition: 'noise', to: [landscape, city, portrait],
+    transition: 'noise', to: [gold, ember, atelier],
     noise: { scale: 2, intensity: 1, softness: 0.2 },
   })).driver(through(document.getElementById('s-dissolve')))
 
@@ -380,6 +406,19 @@ comice('#au-color').use(grade).driver(audio({ source: '#track' }))
     .map('bass').to(lens, 'strength', { output: [0, 0.9] })
   comice('#au-color').use(grade).driver(audio({ source: '#track' }))
     .map('high').to(grade, 'shift')
+  // 10. aura: the palette, as data, painting the section
+  const section = document.getElementById('s-aura')
+  const swatches = document.getElementById('swatches')
+  swatches.innerHTML = '<i></i>'.repeat(5)
+  const css = ([r, g, b]) => `rgb(${r} ${g} ${b})`
+  comice('#reel').use(aura({
+    sample: 'palette', colors: 5, contrast: 4.5,
+    onSample: (colors) => {
+      section.style.background = `linear-gradient(160deg, ${css(colors[0])}33, var(--bg) 70%)`
+      colors.forEach((c, i) => swatches.children[i] && (swatches.children[i].style.background = css(c)))
+    },
+  }))
+
   const track = document.getElementById('track')
   document.getElementById('play').onclick = () => {
     if (track.paused) track.play()
