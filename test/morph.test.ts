@@ -37,7 +37,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { comice, type ComiceHandle } from 'comice'
 import { getSharedScheduler } from 'comice/scheduler'
-import { morph } from '../packages/morph/src/index.js'
+import { legacyMorph as morph } from '../harness/morph/legacy-engine/index.js'
 import { createFakeGL2, installFake2DContext } from './fake-webgl2.js'
 
 function readyImage(): HTMLImageElement {

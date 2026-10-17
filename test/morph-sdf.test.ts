@@ -15,7 +15,7 @@ import {
   SD_ELLIPSE_APPROX_GLSL,
   SD_ROUNDED_BOX_GLSL,
   SMIN_GLSL,
-} from '../packages/morph/src/sdf.js'
+} from '../harness/morph/legacy-engine/sdf.js'
 
 function countChar(source: string, char: string): number {
   return source.split(char).length - 1

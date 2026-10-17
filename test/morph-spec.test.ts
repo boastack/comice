@@ -15,9 +15,9 @@ import { afterEach, describe, expect, it } from 'bun:test'
 import { comice } from 'comice'
 import { fitTransform, pathBounds } from '../packages/core/src/gl/mask.js'
 import { createRasterizedMask } from '../packages/core/src/gl/mask.js'
-import { morph } from '../packages/morph/src/index.js'
-import { compileMorphProgram, type MorphShaderOptions } from '../packages/morph/src/shader.js'
-import { SD_THREAD_GLSL } from '../packages/morph/src/thread.js'
+import { legacyMorph as morph } from '../harness/morph/legacy-engine/index.js'
+import { compileMorphProgram, type MorphShaderOptions } from '../harness/morph/legacy-engine/shader.js'
+import { SD_THREAD_GLSL } from '../harness/morph/legacy-engine/thread.js'
 import { createFakeGLContext, installFake2DContext } from './fake-webgl2.js'
 
 function fragmentSource(options: MorphShaderOptions): string {

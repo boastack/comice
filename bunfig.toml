@@ -8,4 +8,5 @@ preload = ["./test/happydom.ts"]
 # test:coverage` runs the enforced version; CI should use that, not
 # plain `bun test`.
 coverageThreshold = { lines = 1.0, functions = 1.0 }
-coveragePathIgnorePatterns = ["**/dist/**"]
+# Historical preset engine is not part of the shipped source/bundle.
+coveragePathIgnorePatterns = ["**/dist/**", "**/harness/morph/legacy-engine/**"]

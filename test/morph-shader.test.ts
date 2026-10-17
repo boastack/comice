@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { compileMorphProgram, destroyMorphProgram, drawMorph } from '../packages/morph/src/shader.js'
+import { compileMorphProgram, destroyMorphProgram, drawMorph } from '../harness/morph/legacy-engine/shader.js'
 import { getResidencyPool } from '../packages/core/src/gl/residency.js'
 import { createFakeGLContext } from './fake-webgl2.js'
 import type { Plane } from '../packages/core/src/gl/plane.js'

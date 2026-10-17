@@ -7,8 +7,8 @@
  */
 
 import { describe, expect, it } from 'bun:test'
-import { LAYOUT_SDF_DEPENDENCIES, perPieceProgress, type LayoutName } from '../packages/morph/src/layouts.js'
-import { compileMorphProgram, orderRanks, type MorphShaderOptions } from '../packages/morph/src/shader.js'
+import { LAYOUT_SDF_DEPENDENCIES, perPieceProgress, type LayoutName } from '../harness/morph/legacy-engine/layouts.js'
+import { compileMorphProgram, orderRanks, type MorphShaderOptions } from '../harness/morph/legacy-engine/shader.js'
 import { createFakeGLContext } from './fake-webgl2.js'
 
 function fragmentSource(options: MorphShaderOptions): string {

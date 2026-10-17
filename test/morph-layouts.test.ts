@@ -23,7 +23,7 @@ import {
   symbolsLayout,
   waveTilesLayout,
   type LayoutName,
-} from '../packages/morph/src/layouts.js'
+} from '../harness/morph/legacy-engine/layouts.js'
 
 function countChar(source: string, char: string): number {
   return source.split(char).length - 1
