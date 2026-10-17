@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Comice · Morph</title>
+<meta name="description" content="Bring your SVG or clip-path. Scroll-driven Comice morph demos with live code and a floating inspector.">
+<link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./fonts.css">
+<link rel="stylesheet" href="./style.css">
+<script type="importmap">{"imports":{"comice":"/packages/core/dist/index.js","comice/gl":"/packages/core/dist/gl/index.js","comice/drivers/audio":"/packages/core/dist/drivers/audio.js","comice/scheduler":"/packages/core/dist/scheduler.js","@comice/morph":"/packages/morph/dist/index.js","@comice/type":"/packages/type/dist/index.js"}}</script>
+</head>
+<body>
+<nav><a class="brand" href="/demo/morph/">Comice<span>.</span><small>Morph</small></a><span class="nav-label">A shape is just the beginning</span></nav>
+<header class="intro">
+  <h1>Comice <span>+ Morph</span></h1>
+  <p>Comice Morph turns your media into a live shape signal, creating fluid transformations with a driver. Open Settings to tune the motion, refine the effect, or reverse the morph.</p>
+</header>
+<main id="collection"></main>
+<button id="code-toggle" type="button" title="Code" aria-label="Show code" aria-expanded="false" aria-controls="code-card"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 6 3 10l4 4M13 6l4 4-4 4"/></svg></button>
+<div id="code-card" class="code-card" role="dialog" aria-label="Code" hidden><div class="code-bar"><span class="code-title"></span><button class="copy-button" type="button" aria-label="Copy code"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M12 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2"/></svg><span class="copy-feedback" aria-live="polite"></span></button></div><pre><code></code></pre></div>
+<button id="settings-toggle" class="settings-button" type="button" aria-label="Morph settings" aria-expanded="false" aria-controls="inspector"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14"/><circle cx="7" cy="5" r="2"/><circle cx="13" cy="10" r="2"/><circle cx="8" cy="15" r="2"/></svg><span>Settings</span></button>
+<aside id="inspector" hidden aria-label="Morph settings inspector">
+  <header class="inspector-heading"><div><span class="eyebrow">Inspector</span><h2>Morph settings</h2></div><button data-close type="button" aria-label="Close settings">×</button></header>
+  <div class="inspector-navigation"><span class="active-demo"></span><label>Demo<select id="jump" aria-label="Choose demo"></select></label></div>
+  <div class="inspector-content"></div>
+  <p class="inspector-error" role="alert"></p>
+  <footer class="inspector-footer"><button data-reset type="button">Reset demo</button><button id="pause" type="button">Pause videos</button></footer>
+</aside>
+<script type="module" src="./main.js"></script>
+<script type="module" src="./sidebar.js"></script>
+<script type="module" src="./soundtrack.js"></script>
+</body>
+</html>
