@@ -44,6 +44,9 @@ export type Plane = {
    *  The plane still degrades quietly (no texture, media shows as-is);
    *  this lets the plugin say why, through `instance.fail()`. */
   readonly error?: Error | null
+  /** Counts uploads: it changes exactly when the texture shows a new frame,
+   *  so a plugin can skip redrawing a frame it already drew. */
+  readonly frame: number
   destroy(): void
 }
 
@@ -203,6 +206,7 @@ export function createPlane(context: GLContext | null, source: PlaneSource): Pla
   if (!context) {
     return {
       texture: null,
+      frame: 0,
       upload() {},
       syncLayout() {},
       get box() {
@@ -215,7 +219,9 @@ export function createPlane(context: GLContext | null, source: PlaneSource): Pla
   const { gl, canvas } = context
   const texture = gl.createTexture()
   let hasUploadedOnce = false
+  let frame = 0
   let uploadError: Error | null = null
+  let svgCanvas: HTMLCanvasElement | null = null
 
   function configureTexture(): void {
     if (!texture) return
@@ -239,10 +245,27 @@ export function createPlane(context: GLContext | null, source: PlaneSource): Pla
     // Reset right after so no other upload on this shared context inherits it.
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true)
     try {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source)
+      let pixels: PlaneSource | HTMLCanvasElement = source
+      // Chromium rejects direct uploads of some SVG images (including a
+      // viewBox-only SVG rendered at a CSS size different from its intrinsic
+      // size). Rasterize at the decoded size so all engines upload identical
+      // dimensions and preserve transparent pixels. Reuse this still-image
+      // scratch canvas rather than allocating it on each source reload.
+      if (source instanceof HTMLImageElement && /(?:\.svg(?:[?#]|$)|^data:image\/svg\+xml)/i.test(source.currentSrc || source.src)) {
+        svgCanvas ??= source.ownerDocument.createElement('canvas')
+        svgCanvas.width = source.naturalWidth
+        svgCanvas.height = source.naturalHeight
+        const raster = svgCanvas.getContext('2d')
+        if (!raster) throw new Error('SVG media needs a 2D raster context.')
+        raster.drawImage(source, 0, 0, svgCanvas.width, svgCanvas.height)
+        pixels = svgCanvas
+      }
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+      frame++
       hasUploadedOnce = true
       uploadError = null
     } catch (err) {
+      hasUploadedOnce = false
       uploadError = new Error(
         'This media could not be read by WebGL — usually a cross-origin image or video served without CORS headers ' +
           '(add crossorigin="anonymous" and an Access-Control-Allow-Origin header). The original media is shown unchanged.',
@@ -271,7 +294,15 @@ export function createPlane(context: GLContext | null, source: PlaneSource): Pla
     }
   }
 
-  waitForMediaReady(source).then(() => {
+  const readyAbort = new AbortController()
+  const onLoadError = () => {
+    uploadError = new Error('[comice] The media failed to load. The original media element is shown.')
+    hasUploadedOnce = false
+  }
+  source.addEventListener('error', onLoadError)
+  const onSourceLoad = () => upload()
+  source.addEventListener(source instanceof HTMLVideoElement ? 'loadeddata' : 'load', onSourceLoad)
+  waitForMediaReady(source, readyAbort.signal).then(() => {
     if (destroyed) return
     upload()
     syncLayout()
@@ -303,10 +334,30 @@ export function createPlane(context: GLContext | null, source: PlaneSource): Pla
   // the plugin drawing it is the one that is visible or not.
   let unregisterFromScheduler: (() => void) | null = null
   let visibility: ReturnType<typeof createVisibilityGate> | null = null
+  // Only a NEW frame is uploaded. A video makes 24-30 frames a second and the
+  // loop runs at 60 or more, and a full-size frame upload is the costliest
+  // GPU work an effect does (10-15ms a frame on an M1 at 2x, measured): copying
+  // the same frame twice was most of it. requestVideoFrameCallback says when
+  // the video has a frame we have not seen; without it, every tick uploads.
+  let fresh = true
+  let videoFrameHandle = 0
+  const watchesFrames = source instanceof HTMLVideoElement && typeof source.requestVideoFrameCallback === 'function'
+  const onVideoFrame = () => {
+    fresh = true
+    if (!destroyed) videoFrameHandle = (source as HTMLVideoElement).requestVideoFrameCallback(onVideoFrame)
+  }
+  // A seek while paused shows a new still frame that the playing loop never sees.
+  const onSeeked = () => upload()
   if (source instanceof HTMLVideoElement) {
+    if (watchesFrames) videoFrameHandle = source.requestVideoFrameCallback(onVideoFrame)
+    source.addEventListener('seeked', onSeeked)
     visibility = createVisibilityGate(source)
     unregisterFromScheduler = getSharedScheduler().add(
-      () => upload(),
+      () => {
+        if (watchesFrames && !fresh) return
+        fresh = false
+        upload()
+      },
       () => !destroyed && !source.paused && !source.ended && (!source.isConnected || visibility!.shouldDraw()),
     )
   }
@@ -314,6 +365,9 @@ export function createPlane(context: GLContext | null, source: PlaneSource): Pla
   return {
     get texture() {
       return hasUploadedOnce ? texture : null
+    },
+    get frame() {
+      return frame
     },
     get error() {
       return uploadError
@@ -326,9 +380,15 @@ export function createPlane(context: GLContext | null, source: PlaneSource): Pla
     destroy(): void {
       if (destroyed) return
       destroyed = true
+      readyAbort.abort()
+      source.removeEventListener('error', onLoadError)
+      source.removeEventListener(source instanceof HTMLVideoElement ? 'loadeddata' : 'load', onSourceLoad)
+      source.removeEventListener('seeked', onSeeked)
+      if (watchesFrames) (source as HTMLVideoElement).cancelVideoFrameCallback?.(videoFrameHandle)
       unregisterFromScheduler?.()
       visibility?.destroy()
       resizeObserver.disconnect()
+      svgCanvas = null
       if (texture) gl.deleteTexture(texture)
     },
   }

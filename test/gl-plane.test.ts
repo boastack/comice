@@ -199,6 +199,40 @@ describe('createPlane — video source', () => {
     Object.defineProperty(v, 'ended', { value: false, configurable: true })
   }
 
+  it('uploads only new video frames when the browser can say when one arrives, and counts them', () => {
+    playing(video)
+    let next: (() => void) | null = null
+    let cancelled = 0
+    Object.assign(video, {
+      requestVideoFrameCallback: (cb: () => void) => { next = cb; return 7 },
+      cancelVideoFrameCallback: (handle: number) => { if (handle === 7) cancelled++ },
+    })
+    const context = createFakeGLContext(canvas)
+    let uploads = 0
+    const texImage2D = context.gl.texImage2D.bind(context.gl)
+    context.gl.texImage2D = ((...args: unknown[]) => { uploads++; return (texImage2D as (...a: unknown[]) => void)(...args) }) as typeof context.gl.texImage2D
+    withFrames((frame) => {
+      const plane = createPlane(context, video)
+      const start = uploads
+      frame() // the first tick always uploads
+      const afterFirst = uploads
+      expect(afterFirst).toBe(start + 1)
+      frame(); frame() // no new video frame: nothing to copy
+      expect(uploads).toBe(afterFirst)
+      next!() // the video presents a frame
+      frame()
+      expect(uploads).toBe(afterFirst + 1)
+      expect(plane.frame).toBeGreaterThan(0)
+      const counted = plane.frame
+      video.dispatchEvent(new Event('seeked')) // a seek shows a new still frame
+      expect(uploads).toBe(afterFirst + 2)
+      expect(plane.frame).toBe(counted + 1)
+      plane.destroy()
+      expect(cancelled).toBe(1)
+      next!() // a frame landing after destroy does not re-arm
+    })
+  })
+
   function withFrames(run: (frame: () => void) => void): void {
     const original = globalThis.requestAnimationFrame
     let pending: FrameRequestCallback | null = null
