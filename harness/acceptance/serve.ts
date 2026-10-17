@@ -26,7 +26,20 @@ Bun.serve({
     if (pathname.endsWith('/')) path = join(path, 'index.html')
     const file = Bun.file(path)
     if (!(await file.exists())) return new Response('Not found', { status: 404 })
-    return new Response(file, { headers: { 'Cache-Control': 'no-store' } })
+    // Byte ranges, which <video> relies on for seeking and looping (Safari will
+    // not play video without them). A request without one gets the whole file.
+    const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('range') ?? '')
+    if (range && (range[1] || range[2])) {
+      const size = file.size
+      const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]))
+      const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1
+      if (start >= size || start > end) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } })
+      return new Response(file.slice(start, end + 1), {
+        status: 206,
+        headers: { 'Content-Range': `bytes ${start}-${end}/${size}`, 'Accept-Ranges': 'bytes', 'Content-Length': String(end - start + 1), 'Content-Type': file.type, 'Cache-Control': 'no-store' },
+      })
+    }
+    return new Response(file, { headers: { 'Cache-Control': 'no-store', 'Accept-Ranges': 'bytes' } })
   },
 })
 
