@@ -207,12 +207,44 @@ Every plugin is an independent workspace package. Follow its guide for supported
 | [`@comice/mosaic`](./packages/mosaic/README.md) | Halftone, dithering, risograph, pixel, crosshatch, and image-tile treatments. |
 | [`@comice/ascii`](./packages/ascii/README.md) | Live character-based image and video rendering. |
 | [`@comice/aura`](./packages/aura/README.md) | Edge and palette sampling, ambient glow, and CSS color variables. |
-| [`@comice/type`](./packages/type/README.md) | Media fills, knockout text, layered text, and liquid word transitions. |
+| [`@comice/type`](./packages/type/README.md) | Media-text interaction, liquid transitions, and the GPU typography specification below. |
 | [`@comice/layout`](./packages/layout/README.md) | Text wrapping, avoidance, anchoring, and responsive focal cropping. |
 | [`@comice/particles`](./packages/particles/README.md) | Point clouds and image-tile shattering with image, text, and shape targets. |
 | [`@comice/persist`](./packages/persist/README.md) | Shared media and playback continuity across client-side navigation. |
 
 Vision-dependent features, including automatic subject detection and depth-based effects, are not implemented. Options that require them fail explicitly. Persist retains live media across client-side route changes; a full document reload cannot preserve the same live element.
+
+## GPU typography specification
+
+`@comice/type` owns expressive text surfaces, including standalone typography and text that interacts with images or video. The following effect families define its rendering scope.
+
+| Effect family | Rendering behavior |
+| --- | --- |
+| Melt and liquid transitions | Merge and separate words or lines through text distance fields, with controlled viscosity, connecting necks, and clean endpoints. |
+| Glyph and shape morphing | Interpolate text silhouettes into other words, logos, or SVG shapes while preserving holes and exact endpoint geometry. |
+| Waves, bends, and stretching | Apply sine waves, arches, twists, elastic stretch, and squash to whole text or glyph groups without changing document layout. |
+| Pointer fields and wakes | Use the pointer as a local bulge, lens, repulsion field, ripple source, or fading liquid wake. |
+| Noise and displacement | Distort text with procedural turbulence, displacement maps, flowing noise, and directional ripples. |
+| Glass and refraction | Refract image or video pixels through glyphs with optional chromatic fringe and directional edge lighting. |
+| Media and gradient fills | Fill glyphs with images, playing video, animated gradients, or procedural textures; support knockout and media-text layering. |
+| Strokes, glow, and surface finishes | Animate distance-based outlines, inner and outer glow, soft shadows, sheen, bevel-style shading, blur, and chromatic separation. |
+| Reveals, masks, and dissolves | Reveal or remove text with wipes, clipping, noise thresholds, ink, erosion, scan lines, and pixel dissolves. |
+| Glitch and pixel treatments | Apply channel offsets, scan distortion, displacement slices, pixelation, and halftone or dither treatments to text surfaces. |
+| Glyph, word, and line motion | Offset, rotate, scale, stagger, and arrange GPU glyph groups along paths using shared progress and per-group timing. |
+| Particle text | Sample glyphs into points that scatter, flow, attract to the pointer, and reassemble into text, images, or shapes. |
+| Shatter and fragment transitions | Break a text surface into glyph pieces or tiles, then scatter and reassemble those fragments with intact endpoint coverage. |
+| Trails, echoes, and feedback | Accumulate controlled motion trails, afterimages, and fluid smearing through shared temporal feedback buffers. |
+| Audio-reactive typography | Map bass, frequency bands, energy, amplitude, and beat callbacks to any compatible text effect parameter. |
+
+### Rendering contract
+
+The rendering contract uses Comice's WebGL2 foundation, cached text geometry and textures, and distance-field masks where appropriate. Glyph groups use shared GPU resources rather than one canvas or context per letter. Driver signals map to text parameters through the existing mapping layer. Effects reuse shared mask, displacement, particle, and feedback primitives without dependencies between plugin packages. Settled effects stop drawing unless their media, procedural motion, or feedback still requires updates; offscreen and hidden effects pause.
+
+Real HTML text is the content and layout source. The visual canvas is decorative and excluded from the accessibility tree. Native text remains visible and selectable at rest, with reduced motion, or after a rendering failure. During an active GPU effect, selection must restore the native text rather than leave selection invisible. Ordinary text continues to use browser rendering.
+
+Rendering must preserve font loading, shaping, kerning, ligatures, complex scripts, multiline layout, text alignment, and responsive wrapping. Font changes, content edits, resizing, and pixel-density changes invalidate the relevant caches without stretching old glyphs or showing mixed frames. Effects must respect reduced motion, bound their drawing surfaces and feedback memory, preserve crisp endpoints, and release every resource on teardown. Validate these requirements across desktop browsers and physical mobile devices.
+
+**Implementation status:** The current package implements fill, behind, knockout, and melt using DOM, CSS, and SVG filters. This section defines the GPU rendering specification; these effect families are not additional options in the current runtime API.
 
 ## Performance and accessibility
 
@@ -246,17 +278,17 @@ The morph showcase includes editable shapes, driver and surface controls, and co
 
 ### Demo assets
 
-Shared images and helper files live in [`demo/assets/`](./demo/assets/README.md). Morph silhouettes, fonts, and source artwork live in [`demo/morph/assets/`](./demo/morph/assets/). Package builds include their declared distribution files rather than the demo assets.
+All showcase images, SVG silhouettes, fonts, media, and shared helpers live in [`demo/assets/`](./demo/assets/README.md). The Morph directory contains only its page, styles, and behavior. Package builds include their declared distribution files rather than the demo assets.
 
 Video and audio are intentionally excluded from Git. Supply your own media at these paths to reproduce the complete showcases:
 
 ```text
-demo/assets/video/bg.mp4
-demo/assets/video/canvas.mp4
+demo/assets/video/a.mp4
+demo/assets/video/b.mp4
 demo/assets/audio/fela.mp3       # Optional soundtrack
 ```
 
-The [showcase guide](./demo/morph/README.md) explains local media behavior. Bundled Geist fonts retain their [Open Font License](./demo/morph/assets/fonts/OFL.txt).
+The [showcase guide](./demo/morph/README.md) explains local media behavior. Bundled Geist fonts retain their [Open Font License](./demo/assets/fonts/OFL.txt).
 
 ## Project structure
 
@@ -265,9 +297,8 @@ packages/
   core/                  State machine, drivers, mappings, scheduler, WebGL utilities
   <plugin>/              Independent effect packages and package documentation
 demo/
-  assets/                Shared showcase images, helpers, and local media
+  assets/                Shared images, SVGs, fonts, media, and helpers
   morph/                 Morph showcase, inspector, and integration snippets
-    assets/              Silhouettes, fonts, masks, and original source artwork
 harness/
   acceptance/            Cross-browser interaction examples and local server
   morph/                 Geometry, GPU, inspector, and fast-scroll regressions

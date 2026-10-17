@@ -32,7 +32,7 @@ export function validateSurface(options: SurfaceOptions): void {
   if (options.outline && (options.outline.opacity ?? 1) > 1) throw new RangeError('[comice] Outline opacity must be in [0, 1].')
 }
 
-/** Viscose's circular glass profile, applied to the actual moving silhouette.
+/** Circular glass profile, applied to the actual moving silhouette.
  * Its inward sampling bend and chromatic fringe are independent of the stroke. */
 export function surfaceGLSL(options: SurfaceOptions): string {
   const glass = options.glass && (options.glass.width ?? 24) > 0 ? options.glass : undefined

@@ -2,7 +2,7 @@ import { surfaceGLSL, type SurfaceOptions } from './surface.js'
 
 export type JoinOptions = {
   /** Growing midpoint drops from the supplied liquid-frame reference (default),
-   * or Viscose's tapered slab. Both use the caller's SVG component centers. */
+   * or tapered slabs. Both use the caller's SVG component centers. */
   style?: 'metaball' | 'slab'
   /** Neighbor centers in top-left normalized coordinates, ordered along the connection. */
   points?: readonly (readonly [number, number])[]
@@ -22,8 +22,7 @@ export type JoinOptions = {
   dissolve?: number
 }
 
-// Adapted from Canyon/Viscose's sdBridge (MIT, copyright 2026 Yousuf Soomro).
-// The accompanying license notice is retained in this package's LICENSE.
+// The shader license notice is retained in this package's LICENSE.
 // A swept slab keeps flat silhouettes flat as neighbors fuse.
 export const BRIDGE_GLSL = `
 float sdBridge(vec2 point, vec2 a, vec2 b, float rEnd, float rMid, float sag) {

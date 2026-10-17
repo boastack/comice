@@ -1,6 +1,6 @@
 {
   "name": "comice",
-  "description": "A state machine and event system for images and video interaction.",
+  "description": "Comice is a GPU interaction engine for images, video, and typography, with native scroll, hover, pointer, drag, click, time, and audio drivers.",
   "private": true,
   "license": "MIT",
   "engines": {

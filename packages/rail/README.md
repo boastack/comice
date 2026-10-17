@@ -38,4 +38,4 @@ With `prefers-reduced-motion`, a release stops where it is instead of coasting.
 
 ## License
 
-MIT © Olawale Balo
+MIT © 2026 [Olawale Balo](https://github.com/walebuilds)

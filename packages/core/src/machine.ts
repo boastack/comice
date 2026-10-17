@@ -36,9 +36,8 @@
  * with no interaction applied. `display` is what is actually rendered this
  * frame. Plugins read `rest` when computing relationships between elements
  * (distance, adjacency, field strength) so that one element's hover does not
- * feed back into another element's geometry. This is the fix the Viscose
- * audit surfaced: hover moves what you see, never what a field is computed
- * from.
+ * feed back into another element's geometry. Hover moves the displayed
+ * element while field calculations continue to use its resting geometry.
  */
 
 import type {

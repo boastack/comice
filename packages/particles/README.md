@@ -53,4 +53,4 @@ Does no work while off screen or in a hidden tab. With `prefers-reduced-motion` 
 
 ## License
 
-MIT © Olawale Balo
+MIT © 2026 [Olawale Balo](https://github.com/walebuilds)

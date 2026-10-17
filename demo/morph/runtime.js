@@ -281,7 +281,7 @@ export function currentDemo() { return active }
 // melt (which reacts to any text change) away from the counting.
 const COUNT_END = .6
 const MELT = [.6, .98]
-// The look of the melt, after Viscose's: a near-binary threshold (gain 400) with a
+// The melt uses a near-binary threshold (gain 400) with a
 // third of a pixel of blur after it, so the ink edge is crisp but never stepped, on
 // a blur wide enough to fuse the digits, pushed around by liquid turbulence (`wobble`) so they pool into one wavy
 // blob that shrinks away, like ink in water. Linear, so the fusing and the draining

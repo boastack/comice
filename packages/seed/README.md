@@ -35,4 +35,4 @@ Changes nothing about the media itself; only what shows before it is ready.
 
 ## License
 
-MIT © Olawale Balo
+MIT © 2026 [Olawale Balo](https://github.com/walebuilds)

@@ -43,4 +43,4 @@ Reads the media without changing how it looks. Does no work while off screen. Wi
 
 ## License
 
-MIT © Olawale Balo
+MIT © 2026 [Olawale Balo](https://github.com/walebuilds)

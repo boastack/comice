@@ -93,7 +93,7 @@ comice('.hero')
 
 ## License
 
-MIT © Olawale Balo
+MIT © 2026 [Olawale Balo](https://github.com/walebuilds)
 
 ## Sticky sections and independent input mappings
 

@@ -55,4 +55,4 @@ With `prefers-reduced-motion` the element appears in its end state instead of an
 
 ## License
 
-MIT © Olawale Balo
+MIT © 2026 [Olawale Balo](https://github.com/walebuilds)

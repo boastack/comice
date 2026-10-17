@@ -17,7 +17,7 @@ describe('caller-supplied morph shapes', () => {
     expect(() => morph({ to: '' })).toThrow(/empty/)
     expect(() => morph({ to: {} as never })).toThrow(/SVG/)
   })
-  it('validates optional Viscose interaction and thread controls', () => {
+  it('validates optional pointer interaction and thread controls', () => {
     expect(() => morph({ to: 'circle(40%)', interaction: true, join: { style: 'slab', thin: .4, dissolve: 3 }, glass: { rim: .06 } })).not.toThrow()
     for (const interaction of [1, null, [], { radius: 0 }, { decay: 1 }, { wake: -1 }, { radius: NaN }, { bogus: 2 }]) expect(() => morph({ to: 'circle(40%)', interaction: interaction as never })).toThrow(/Interaction|Interaction|interaction/)
     for (const join of [{ thin: 0 }, { thin: -1 }, { dissolve: Infinity }]) expect(() => morph({ to: 'circle(40%)', join })).toThrow(/thin|finite/)

@@ -39,4 +39,4 @@ With `prefers-reduced-motion` the emphasis changes without animating.
 
 ## License
 
-MIT © Olawale Balo
+MIT © 2026 [Olawale Balo](https://github.com/walebuilds)

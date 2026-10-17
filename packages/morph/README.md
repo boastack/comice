@@ -210,7 +210,7 @@ on long galleries mount effects near the viewport and release distant ones.
   media height. Drops grow over progress 0–.15, merge over .10–.90, then settle
   over .85–1; separation uses the reverse profile.
 - `join: { style: 'slab', pinch: .35, sag: 0, fillet: 8, thin: .4, dissolve: 2.9 }`:
-  tapered connections adapted from Viscose. Thickness is inferred from supplied
+  tapered connections whose thickness is inferred from supplied
   component fields; optional `width` overrides it in CSS pixels. The midpoint's
   distance field determines gap opening, driving thinning, sag and final fade
   below zero width so no hairline remains. `thin` is positive; pinch is 0–1.
@@ -249,4 +249,7 @@ Reduced-motion settings snap to an endpoint. GPU resources, image loads, observe
 and subscriptions release on `handle.destroy()`. Offscreen effects stop drawing.
 
 See the [demo](../../demo/morph/index.html) for editable inputs and runnable code.
-Viscose's MIT attribution is retained in this package's LICENSE.
+
+## License
+
+MIT © 2026 [Olawale Balo](https://github.com/walebuilds)

@@ -35,3 +35,7 @@ If a route change happens and you know the next page will **not** have a matchin
 ## Try it
 
 `packages/persist/demo/index.html` is a real, two-"route" (same-document) demo — open it after `pnpm build` and click a thumbnail to watch the actual DOM node grow into the detail hero. Serve the repo root with any static server (`python3 -m http.server`, `pnpm harness` from the root once the `tools/browser-glsl-harness` branch lands) and open `packages/persist/demo/index.html`.
+
+## License
+
+MIT © 2026 [Olawale Balo](https://github.com/walebuilds)

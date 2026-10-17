@@ -40,4 +40,4 @@ Does no work while off screen or in a hidden tab, and steps down resolution on d
 
 ## License
 
-MIT © Olawale Balo
+MIT © 2026 [Olawale Balo](https://github.com/walebuilds)

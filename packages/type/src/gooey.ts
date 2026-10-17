@@ -37,7 +37,7 @@ export type MeltOptions = {
   /** Blur after the threshold, px. A sharp threshold (a high `sharpness`)
    *  sets a crisp, solid edge; a fraction of a pixel of blur after it stands
    *  in for antialiasing, so the edge is clean instead of stair-stepped.
-   *  Viscose's melt uses .35 after a gain of 400. Default 0. */
+   *  A value of .35 works with a threshold gain of 400. Default 0. */
   soften?: number
   /** Easing over the melt. Default 'easeInOut'. */
   curve?: MeltCurve

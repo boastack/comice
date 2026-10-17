@@ -1,7 +1,7 @@
 {
   "name": "comice",
   "version": "0.1.0",
-  "description": "A GPU interaction engine for images and video.",
+  "description": "Comice is a GPU interaction engine for images, video, and typography, with native scroll, hover, pointer, drag, click, time, and audio drivers.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

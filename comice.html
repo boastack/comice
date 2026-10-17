@@ -105,6 +105,8 @@
 
   .tbl-wrap{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);overflow:hidden;overflow-x:auto}
   table{width:100%;border-collapse:collapse;font-size:13px;min-width:540px}
+  .type-effects{min-width:0;table-layout:fixed}
+  .type-effects th:first-child{width:36%}
   th{
     font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;
     color:var(--ink-dim);text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);font-weight:500;
@@ -213,13 +215,14 @@
 
   <header class="mast">
     <h1 class="title">Comice</h1>
-    <p class="posline">A GPU interaction engine for images and video.</p>
+    <p class="posline">Comice is a GPU interaction engine for images, video, and typography, with native scroll, hover, pointer, drag, click, time, and audio drivers.</p>
     <p class="standfirst">
-      A small engine that puts images and video on the graphics card and keeps them locked to the page,
-      plus plugins for everything you would want them to do. No dependencies, native scroll and pointer
-      handling built in, and every plugin is a state machine driven by real events, not a timeline of
-      guessed durations. Everything runs on one path, a driver produces a signal, a mapping turns it
-      into a plugin parameter, and the parameter reaches the GPU.
+      Comice brings interactive images, video, and expressive typography to the web through
+      independent plugins and a core with no runtime dependencies. Native drivers connect scroll,
+      hover, pointer, drag, click, time, and audio input to effect parameters through a shared mapping
+      system. State and progress respond to live input, so transitions can reverse smoothly when an
+      interaction changes. GPU effects stay aligned with the page, while DOM and CSS plugins preserve
+      native content and layout. The typography specification covers liquid transitions, shader treatments, glyph motion, and text particles.
     </p>
     <nav class="toc">
       <div class="tl">Contents</div>
@@ -459,15 +462,17 @@ comice(<span class="s">'.hero'</span>).use(morph({ operation: <span class="s">'b
     <div class="plain">
       <div class="pl">In plain terms</div>
       <p>
-        The line is not file formats, it is whether media is involved. SVG, text, canvas and the DOM
-        are all legitimate participants, as masks, sources, companions or targets. If a feature still
-        makes sense with no image or video present, it belongs somewhere else, not here.
+        Images, video, and expressive typography are in scope. SVG, text, canvas and the DOM
+        participate as masks, sources, companions or targets. Typography may be a standalone GPU
+        surface for liquid transitions, distortion, refraction, or particles. Ordinary text layout,
+        general element animation, and DOM splitting utilities remain the responsibility of the browser
+        or an application's animation system.
       </p>
     </div>
 
     <dl class="rows">
       <div class="row no"><dt>Not an effect gallery</dt><dd>The catalogue documents what the engine reaches, it is not an inventory owed to anyone.</dd></div>
-      <div class="row no"><dt>Not general animation</dt><dd>If it animates something that is not media, GSAP and Motion already do it well.</dd></div>
+      <div class="row no"><dt>Not general animation</dt><dd>Comice owns media and typography surface effects. GPU glyph motion belongs to the text renderer; general DOM transforms, splitting utilities, and timeline choreography belong to the application or its animation system.</dd></div>
       <div class="row no"><dt>Not a 3D engine</dt><dd>Flat planes with clever shaders. Meshes, lights and cameras belong to Three.js.</dd></div>
       <div class="row no"><dt>Not AI image generation</dt><dd>Reading an image with ML, depth, subject, colour, is in scope. Rewriting it is a different product.</dd></div>
       <div class="row no"><dt>Not scroll fades</dt><dd>Browsers do scroll linked fades natively now, on the compositor. A JavaScript version would be worse.</dd></div>
@@ -673,7 +678,7 @@ comice(<span class="s">'.hero'</span>).use(morph({ operation: <span class="s">'b
           <tr><td><b>ascii</b></td><td>new</td><td>Media rebuilt from characters</td></tr>
           <tr><td><b>color</b></td><td>new</td><td>Grading and physical post processing</td></tr>
           <tr><td><b>aura</b></td><td>ambient</td><td>Media colour pushed into the page</td></tr>
-          <tr><td><b>type</b></td><td>new</td><td>Media and text meeting, including melt</td></tr>
+          <tr><td><b>type</b></td><td>new</td><td>Media-text interaction and GPU typography, including melt, distortion, glyph motion, and particles</td></tr>
           <tr><td><b>layout</b></td><td>new</td><td>Page reacts to media</td></tr>
           <tr><td><b>spatial</b></td><td>new</td><td>Media on generated 3D geometry</td></tr>
           <tr><td><b>particles</b></td><td>particles, shatter</td><td>Point clouds and tile scatter</td></tr>
@@ -942,10 +947,11 @@ comice(<span class="s">'.hero'</span>).use(dissolve({
     </div>
 
     <div class="ps t1">
-      <div class="ph"><span class="pn">type</span><span class="pk">@comice/type</span><span class="pv">ships v0.4</span></div>
+      <div class="ph"><span class="pn">type</span><span class="pk">@comice/type</span><span class="pv">Typography specification</span></div>
       <div class="pb">
-        <p class="job"><b>Owns:</b> media and live text meeting, and text behaving like media. The text stays real DOM, selectable, styleable, indexable.</p>
-        <div class="lbl">Modes</div>
+        <p class="job"><b>Owns:</b> media and live text meeting, and expressive typography surfaces. Real HTML text remains the source for content, layout, accessibility, and fallback.</p>
+        <div class="use"><b>Implementation status:</b> The current package implements fill, behind, knockout, and melt using DOM, CSS, and SVG filters. This section defines the GPU rendering specification; these effect families are not additional options in the current runtime API.</div>
+        <div class="lbl">Current modes</div>
         <div class="chips"><span class="chip">fill</span><span class="chip">behind</span><span class="chip">knockout</span><span class="chip">melt</span></div>
         <div class="lbl">Options</div>
         <table class="opts">
@@ -957,8 +963,35 @@ comice(<span class="s">'.hero'</span>).use(dissolve({
   <span class="k">mode</span>: <span class="s">'melt'</span>, <span class="k">melt</span>: { <span class="k">blur</span>: 14, <span class="k">threshold</span>: [0.5, 18], <span class="k">hold</span>: <span class="s">true</span> }
 }))</pre>
         <div class="use"><b>Real usage:</b> a carousel of project names that blur into one another as the rail turns, rather than crossfading flatly, and a project name that does not change between two consecutive slides stays perfectly still instead of visibly thickening.</div>
-        <div class="lbl">Excludes</div>
-        <p class="excl">Not text animation, splitting and staggering letters belong to SplitText. Melt is the one exception, it is the text side twin of smin.</p>
+        <div class="lbl" id="gpu-typography">GPU typography specification</div>
+        <p class="job">Text is a rendering source alongside images and video. These effect families define the typography surface, including standalone text effects.</p>
+        <div class="tbl-wrap">
+          <table class="opts type-effects">
+            <thead><tr><th>Effect family</th><th>Rendering behavior</th></tr></thead>
+            <tbody>
+              <tr><td><b>Melt and liquid transitions</b></td><td>Merge and separate words or lines through text distance fields, with controlled viscosity, connecting necks, and clean endpoints.</td></tr>
+              <tr><td><b>Glyph and shape morphing</b></td><td>Interpolate text silhouettes into other words, logos, or SVG shapes while preserving holes and exact endpoint geometry.</td></tr>
+              <tr><td><b>Waves, bends, and stretching</b></td><td>Apply sine waves, arches, twists, elastic stretch, and squash to whole text or glyph groups without changing document layout.</td></tr>
+              <tr><td><b>Pointer fields and wakes</b></td><td>Use the pointer as a local bulge, lens, repulsion field, ripple source, or fading liquid wake.</td></tr>
+              <tr><td><b>Noise and displacement</b></td><td>Distort text with procedural turbulence, displacement maps, flowing noise, and directional ripples.</td></tr>
+              <tr><td><b>Glass and refraction</b></td><td>Refract image or video pixels through glyphs with optional chromatic fringe and directional edge lighting.</td></tr>
+              <tr><td><b>Media and gradient fills</b></td><td>Fill glyphs with images, playing video, animated gradients, or procedural textures; support knockout and media-text layering.</td></tr>
+              <tr><td><b>Strokes, glow, and surface finishes</b></td><td>Animate distance-based outlines, inner and outer glow, soft shadows, sheen, bevel-style shading, blur, and chromatic separation.</td></tr>
+              <tr><td><b>Reveals, masks, and dissolves</b></td><td>Reveal or remove text with wipes, clipping, noise thresholds, ink, erosion, scan lines, and pixel dissolves.</td></tr>
+              <tr><td><b>Glitch and pixel treatments</b></td><td>Apply channel offsets, scan distortion, displacement slices, pixelation, and halftone or dither treatments to text surfaces.</td></tr>
+              <tr><td><b>Glyph, word, and line motion</b></td><td>Offset, rotate, scale, stagger, and arrange GPU glyph groups along paths using shared progress and per-group timing.</td></tr>
+              <tr><td><b>Particle text</b></td><td>Sample glyphs into points that scatter, flow, attract to the pointer, and reassemble into text, images, or shapes.</td></tr>
+              <tr><td><b>Shatter and fragment transitions</b></td><td>Break a text surface into glyph pieces or tiles, then scatter and reassemble those fragments with intact endpoint coverage.</td></tr>
+              <tr><td><b>Trails, echoes, and feedback</b></td><td>Accumulate controlled motion trails, afterimages, and fluid smearing through shared temporal feedback buffers.</td></tr>
+              <tr><td><b>Audio-reactive typography</b></td><td>Map bass, frequency bands, energy, amplitude, and beat callbacks to any compatible text effect parameter.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="use"><b>Rendering contract:</b> The rendering contract uses Comice&#x27;s WebGL2 foundation, cached text geometry and textures, and distance-field masks where appropriate. Glyph groups use shared GPU resources rather than one canvas or context per letter. Driver signals map to text parameters through the existing mapping layer. Effects reuse shared mask, displacement, particle, and feedback primitives without dependencies between plugin packages. Settled effects stop drawing unless their media, procedural motion, or feedback still requires updates; offscreen and hidden effects pause.</div>
+        <div class="use"><b>Text contract:</b> Real HTML text is the content and layout source. The visual canvas is decorative and excluded from the accessibility tree. Native text remains visible and selectable at rest, with reduced motion, or after a rendering failure. During an active GPU effect, selection must restore the native text rather than leave selection invisible. Ordinary text continues to use browser rendering.</div>
+        <div class="use"><b>Rendering requirements:</b> Rendering must preserve font loading, shaping, kerning, ligatures, complex scripts, multiline layout, text alignment, and responsive wrapping. Font changes, content edits, resizing, and pixel-density changes invalidate the relevant caches without stretching old glyphs or showing mixed frames. Effects must respect reduced motion, bound their drawing surfaces and feedback memory, preserve crisp endpoints, and release every resource on teardown. Validate these requirements across desktop browsers and physical mobile devices.</div>
+        <div class="lbl">Scope</div>
+        <p class="excl">GPU glyph grouping and stagger belong to the text renderer. Ordinary text layout, DOM splitting utilities, general UI animation, and application timeline choreography stay outside the plugin. The renderer follows browser-shaped text rather than replacing document layout.</p>
       </div>
     </div>
 

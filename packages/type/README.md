@@ -59,4 +59,4 @@ With `prefers-reduced-motion`, the new text simply replaces the old.
 
 ## License
 
-MIT © Olawale Balo
+MIT © 2026 [Olawale Balo](https://github.com/walebuilds)

@@ -40,4 +40,4 @@ Uses CSS `shape-outside`, so the text stays real, selectable text.
 
 ## License
 
-MIT © Olawale Balo
+MIT © 2026 [Olawale Balo](https://github.com/walebuilds)

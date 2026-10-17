@@ -21,10 +21,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-Viscose attribution
--------------------
-The swept center bridge and circular glass profile in src/shape-shader.ts
-and src/surface.ts are adapted from Canyon/Viscose, distributed under:
+Third-party shader license
+--------------------------
+The shader portions in src/shape-shader.ts and src/surface.ts
+include code under the following license:
 
 MIT License
 
