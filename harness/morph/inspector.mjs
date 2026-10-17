@@ -10,7 +10,7 @@ for (const name of projects) {
   await page.route('https://fonts.googleapis.com/**',r=>r.abort())
   try {
     await page.goto('http://localhost:8750/demo/morph/',{waitUntil:'domcontentloaded'})
-    await page.waitForFunction(()=>window.__demos?.length === 24)
+    await page.waitForFunction(async () => window.__demos?.length === (await import('/demo/morph/examples.js')).examples.length)
     await page.evaluate(async()=>{(await import('comice')).setAdaptiveQuality(false)})
     const scrollToStage=async(id,fraction=.5)=>{
       await page.evaluate(({id,fraction})=>{const e=__demos.find(e=>e.id===id);const s=e.section;scrollTo(0,s.offsetTop+(s.offsetHeight-innerHeight)*fraction)}, {id,fraction})

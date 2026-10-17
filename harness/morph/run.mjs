@@ -16,7 +16,7 @@ for (const name of process.argv.slice(2).length ? process.argv.slice(2) : ['chro
   for (const r of results) { console.log(`${r.ok ? 'PASS' : 'FAIL'} ${name} ${r.id} ${r.error ?? `mean=${r.mean.toFixed(4)} mask=${r.maskMean.toFixed(3)} changed=${(r.changed * 100).toFixed(3)}% alpha=${(r.alpha * 100).toFixed(3)}%`}`); if (!r.ok) failures++ }
   await page.screenshot({ path: new URL(`${name}-parity.png`, out).pathname, fullPage: true })
   await page.goto(`${base}/demo/morph/`)
-  await page.waitForFunction(() => window.__demos?.length === 24)
+  await page.waitForFunction(async () => window.__demos?.length === (await import('/demo/morph/examples.js')).examples.length)
   await page.evaluate(async () => (await import('/packages/core/dist/index.js')).setAdaptiveQuality(false))
   const integration = []
   for (const id of ['hero-merge', 'apple', 'africa', 'circles', 'sunflower']) {
@@ -46,6 +46,10 @@ for (const name of process.argv.slice(2).length ? process.argv.slice(2) : ['chro
     }, id)
     console.log(`${ok ? 'PASS' : 'FAIL'} ${name} demo ${id}`)
   }
+  // Offscreen scenes are deliberately released after a short grace period.
+  // Bring this scene back before testing teardown rather than racing that cleanup.
+  await page.locator('#circles').scrollIntoViewIfNeeded()
+  await page.waitForFunction(() => __demos.find(e => e.demo.id === 'circles')?.live)
   await page.evaluate(() => { const e = __demos.find((e) => e.demo.id === 'circles'); e.handle.destroy() })
   if (await page.locator('#circles-media').evaluate((el) => el.style.visibility === 'hidden')) { errors.push('destroy left media hidden'); failures++ }
   await page.screenshot({ path: new URL(`${name}-demo.png`, out).pathname })

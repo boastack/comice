@@ -9,7 +9,7 @@ for (const name of process.argv.slice(2).length ? process.argv.slice(2) : ['chro
   const errors = []; page.on('pageerror', e => errors.push(e.message))
   try {
     await page.goto('http://localhost:8750/demo/morph/')
-    await page.waitForFunction(() => window.__demos?.length === 24)
+    await page.waitForFunction(async () => window.__demos?.length === (await import('/demo/morph/examples.js')).examples.length)
     await page.evaluate(async () => (await import('comice')).setAdaptiveQuality(false))
     const records = []
     for (const id of ['hero-merge', 'circles', 'arches', 'deck', 'petals', 'apple']) {

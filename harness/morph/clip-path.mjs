@@ -22,10 +22,18 @@ for (const name of ['chromium', 'webkit', 'iphone']) {
   await page.evaluate(async () => {
     const core = await import('comice'); core.setAdaptiveQuality(false)
     const { morph } = await import('@comice/morph')
-    window.mount = async (options, progress = 1, width = 400, height = 200, style = '') => {
+    window.mount = async (options, progress = 1, width = 400, height = 200, style = '', mediaKind = 'image') => {
       const texture = document.createElement('canvas'); texture.width = texture.height = 8
       const ctx = texture.getContext('2d'); ctx.fillStyle = 'white'; ctx.fillRect(0, 0, 8, 8)
-      const media = new Image(); media.src = texture.toDataURL(); await media.decode()
+      const media = mediaKind === 'video' ? document.createElement('video') : new Image()
+      if (mediaKind === 'video') {
+        media.muted = true; media.playsInline = true; media.preload = 'auto'
+        await new Promise((resolve, reject) => {
+          media.addEventListener('loadeddata', resolve, { once: true })
+          media.addEventListener('error', () => reject(Error('Video fixture failed to load')), { once: true })
+          media.src = '/demo/assets/video/a.mp4'
+        })
+      } else { media.src = texture.toDataURL(); await media.decode() }
       media.style.cssText = `width:${width}px;height:${height}px;${style}`
       document.body.append(media)
       const effect = morph(options), handle = core.comice(media).use(effect)
@@ -217,6 +225,50 @@ for (const name of ['chromium', 'webkit', 'iphone']) {
         const actual=window.pixels(progress)
         if(actual.data.some((v,i)=>v!==expected.data[i]))throw Error('Interaction changed supplied endpoint')
       }
+      window.cleanup()
+    })
+    await check('custom-font text endpoints fit, reverse and resize without clipping', async () => {
+      const face = new FontFace('MorphTextCheck', 'url(/demo/assets/fonts/Geist-700.ttf)', { weight: '700' })
+      document.fonts.add(face)
+      const options = {
+        from: { type: 'text', text: 'Olawale Balo', font: '700 160px MorphTextCheck' },
+        to: { type: 'text', text: 'Design Engineer', font: '700 160px MorphTextCheck' },
+        cursorFollow: false, liquid: 0, maskRasterization: { fill: .9 },
+      }
+      try {
+        await window.mount(options, 0, 400, 200)
+        if (face.status !== 'loaded') throw Error('Text baked before the requested font loaded')
+        const bounds = pixels => {
+          let left = pixels.width, right = -1, top = pixels.height, bottom = -1, area = 0
+          for (let y = 0; y < pixels.height; y++) for (let x = 0; x < pixels.width; x++) {
+            if (pixels.data[(y * pixels.width + x) * 4 + 3] > 127) {
+              left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y); area++
+            }
+          }
+          if (!area || left < pixels.width * .04 || right > pixels.width * .96 || top < 1 || bottom >= pixels.height - 1) throw Error('Text is blank or clipped: ' + JSON.stringify({ left, right, top, bottom, area }))
+          if (right - left < pixels.width * .87) throw Error('Text did not refit to the stage')
+          return area
+        }
+        const start = window.pixels(0), end = window.pixels(1)
+        bounds(start); bounds(end)
+        if (start.data.every((value, i) => value === end.data[i])) throw Error('Text endpoints did not change')
+        bounds(window.pixels(.5))
+        const replay = window.pixels(0)
+        if (replay.data.some((value, i) => value !== start.data[i])) throw Error('Reversing changed the name endpoint')
+        window.active.media.style.width = '300px'; window.active.media.style.height = '300px'
+        await new Promise(resolve => setTimeout(resolve, 600))
+        bounds(window.pixels(0)); bounds(window.pixels(1))
+        window.cleanup()
+      } finally { document.fonts.delete(face) }
+    })
+    await check('video morphs to text and reverses to its full frame', async () => {
+      await window.mount({ to: { type: 'text', text: 'Design Engineer', font: '700 160px sans-serif' }, liquid: 0, maskRasterization: { fill: .9 } }, 0, 400, 200, '', 'video')
+      const frame = window.pixels(0), text = window.pixels(1), middle = window.pixels(.5)
+      const area = data => { let sum = 0; for (let i = 3; i < data.length; i += 4) if (data[i] > 127) sum++; return sum }
+      if (area(frame.data) < 79000 || area(text.data) < 100 || area(text.data) > 30000 || !area(middle.data)) throw Error('Video-to-text silhouette or frame is missing')
+      const back = window.pixels(0)
+      if (area(back.data) !== area(frame.data)) throw Error('Video did not return to its full frame')
+      if (window.active.media.tagName !== 'VIDEO') throw Error('Video source was replaced')
       window.cleanup()
     })
     await check('unsupported syntax and catalog rejected', async () => {

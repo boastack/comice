@@ -1,16 +1,20 @@
 import { chromium, webkit, devices } from 'playwright'
 let failed = false
-const engines = process.argv[2] ? [process.argv[2]] : ['chromium', 'webkit', 'iphone']
+const positional = process.argv.slice(2).filter(arg => !arg.startsWith('--'))
+const engines = positional[0] ? [positional[0]] : ['chromium', 'webkit', 'iphone']
+const mediaMode = process.argv.find(arg => arg.startsWith('--media='))?.split('=')[1] ?? 'video'
+if (!['image', 'video'].includes(mediaMode)) throw Error('Choose --media=image or --media=video.')
 if (engines.some(name => !['chromium','webkit','iphone'].includes(name))) throw Error('Choose chromium, webkit or iphone.')
 for (const name of engines) {
   const browser = await (name === 'chromium' ? chromium : webkit).launch()
   const page = await browser.newPage(name === 'iphone' ? { ...devices['iPhone 15'], deviceScaleFactor: 1 } : { viewport: { width: 1000, height: 800 }, deviceScaleFactor: 1 })
   const errors = []; page.on('pageerror', e => errors.push(e.message))
   await page.goto('http://localhost:8750/demo/morph/')
-  await page.waitForFunction(() => window.__demos?.length === 24)
+  await page.waitForFunction(async () => window.__demos?.length === (await import('/demo/morph/examples.js')).examples.length)
   await page.evaluate(async () => (await import('comice')).setAdaptiveQuality(false))
+  if (mediaMode === 'image') await page.locator('.media-switch [data-media-mode=image]').click()
   const ids = await page.evaluate(() => window.__demos.map(e => e.demo.id))
-  for (const id of ids.filter(id => !process.argv[3] || id === process.argv[3])) {
+  for (const id of ids.filter(id => !positional[1] || id === positional[1])) {
     try {
       await page.evaluate(id => { const s = document.getElementById(id); scrollTo(0, s.offsetTop + (s.offsetHeight - innerHeight) * .5) }, id)
       await page.waitForFunction(id => window.__demos.find(e => e.demo.id === id)?.panel.querySelector('.status').textContent.startsWith('Live'), id, { timeout: 30000 })
@@ -39,7 +43,7 @@ for (const name of engines) {
         if(e.media.nextElementSibling?.tagName==='CANVAS')throw Error('Teardown left canvas')
         return {areas}
       },id)
-      console.log('PASS',name,id,JSON.stringify(result))
+      console.log('PASS',name,mediaMode,id,JSON.stringify(result))
     } catch(error){failed=true;console.error('FAIL',name,id,error.message)}
   }
   if(errors.length){failed=true;console.error(name,'page errors',JSON.stringify(errors))}

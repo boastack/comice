@@ -20,7 +20,7 @@
     "acceptance:serve": "bun harness/acceptance/serve.ts",
     "acceptance": "node harness/acceptance/run.mjs",
     "demo": "pnpm build && bun harness/acceptance/serve.ts",
-    "test:morph": "pnpm build && bun build harness/morph/legacy-engine/shader.ts --target browser --external comice/gl --outdir harness/morph/build && node harness/morph/run.mjs && node harness/morph/clip-path.mjs && node harness/morph/demo-shapes.mjs && node harness/morph/inspector.mjs"
+    "test:morph": "pnpm build && bun build harness/morph/legacy-engine/shader.ts --target browser --external comice/gl --outdir harness/morph/build && node harness/morph/run.mjs && node harness/morph/clip-path.mjs && node harness/morph/demo-shapes.mjs && node harness/morph/demo-shapes.mjs --media=image && node harness/morph/inspector.mjs && node harness/morph/playback.mjs"
   },
   "size-limit": [
     {
