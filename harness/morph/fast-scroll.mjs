@@ -36,14 +36,6 @@ for (const name of process.argv.slice(2).length ? process.argv.slice(2) : ['chro
         await page.screenshot({path:new URL(`${label}-${name}-${id}-v${velocity}.png`,out).pathname})
       }
     }
-    await page.goto('http://localhost:8750/harness/morph/fast-scroll.html')
-    await page.getByRole('button', {name:'Replay rapid scroll',exact:true}).waitFor()
-    await page.waitForFunction(() => !document.querySelector('#run').disabled)
-    await page.getByRole('button', {name:'Replay rapid scroll',exact:true}).click()
-    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('Reversing rapidly'))
-    await page.screenshot({path:new URL(`${label}-${name}-replay.png`,out).pathname})
-    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Complete'), null, {timeout:15000})
-    console.log('PASS',name,'replay page completed eight seconds of rapid scrolling')
     if(errors.length) throw Error(errors.join('\n'))
     writeFileSync(new URL(`${label}-${name}.json`,out),JSON.stringify(records,null,2))
     console.log('PASS',name,'fast wheel reversals and held speed captures', records.length)

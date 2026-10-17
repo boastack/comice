@@ -102,13 +102,11 @@ silhouette, exact rest with zero GPU draws after a pointer wake, and a responsiv
 pixel-radius resize after the background fields commit. These run in Chromium,
 WebKit and iPhone emulation as part of `clip-path.mjs`.
 
-Open `/harness/morph/fast-scroll.html` for a replay of rapid scroll reversals
-on the actual showcase, with six selectable scenes and three speeds. Replay
-stops after eight seconds. Run `node harness/morph/fast-scroll.mjs` to capture
-wheel reversals and held scroll-speed extremes in Chromium and WebKit. Screenshots
-and progress/visibility traces are written to `out/fast-scroll/`. The runner also
-checks that the replay finishes and that no source media remains under a moving
-silhouette. `MORPH_CAPTURE` can label a before/after capture (default: after).
+Run `node harness/morph/fast-scroll.mjs` to check rapid wheel reversals and
+held scroll-speed extremes on the actual showcase in Chromium and WebKit.
+Screenshots and progress/visibility traces are written to `out/fast-scroll/`.
+The runner checks that no source media remains under a moving silhouette.
+`MORPH_CAPTURE` can label a before/after capture (default: after).
 
 The GPU edge regression now compares every endpoint alpha pixel at velocities
 -20, -1, 1 and 20, checks all four corners near the endpoints, and verifies that
