@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from 'bun:test'
-import { ease, meltFrame, thresholdMatrix, wordFilter } from '../packages/type/src/gooey.js'
+import { ease, meltFrame, thresholdMatrix, wobbleAmount, wordFilter } from '../packages/type/src/gooey.js'
 
 describe('ease (melt.curve)', () => {
   it('every named curve runs 0 -> 1 and clamps', () => {
@@ -62,5 +62,21 @@ describe('wordFilter', () => {
   it('blur, or none', () => {
     expect(wordFilter({ opacity: 1, blur: 0 })).toBe('none')
     expect(wordFilter({ opacity: 0.5, blur: 3.456 })).toBe('blur(3.46px)')
+  })
+})
+
+describe('wobbleAmount', () => {
+  it('is none at either end of the melt and the full amount in the middle', () => {
+    expect(wobbleAmount(0, 40)).toBe(0)
+    expect(wobbleAmount(1, 40)).toBeCloseTo(0, 10)
+    expect(wobbleAmount(0.5, 40)).toBeCloseTo(40, 10)
+    expect(wobbleAmount(0.25, 40)).toBeCloseTo(40 * Math.SQRT1_2, 10)
+  })
+  it('clamps progress and is off without an amount', () => {
+    expect(wobbleAmount(-3, 40)).toBeCloseTo(0, 10)
+    expect(wobbleAmount(7, 40)).toBeCloseTo(0, 10)
+    expect(wobbleAmount(0.5)).toBe(0)
+    expect(wobbleAmount(0.5, 0)).toBe(0)
+    expect(wobbleAmount(0.5, -5)).toBe(0)
   })
 })

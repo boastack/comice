@@ -26,6 +26,19 @@ export type MeltOptions = {
    *  solid, over a ramp `1 / sharpness` wide. Default `[0.5, 18]`, the
    *  spec's example. */
   threshold?: readonly [number, number]
+  /** How far the outline is pushed around by liquid turbulence at the middle
+   *  of the melt, px: 0 at both ends, most mid-melt. It turns the clean blur
+   *  of the words into wavy, organic blobs instead of soft pills. Default 0
+   *  (off). */
+  wobble?: number
+  /** Size of the waves `wobble` makes, px. Larger is slower, rounder swells;
+   *  smaller is finer ripples. Default 90. */
+  wobbleSize?: number
+  /** Blur after the threshold, px. A sharp threshold (a high `sharpness`)
+   *  sets a crisp, solid edge; a fraction of a pixel of blur after it stands
+   *  in for antialiasing, so the edge is clean instead of stair-stepped.
+   *  Viscose's melt uses .35 after a gain of 400. Default 0. */
+  soften?: number
   /** Easing over the melt. Default 'easeInOut'. */
   curve?: MeltCurve
   /** A word that doesn't change stays perfectly still instead of melting
@@ -76,6 +89,12 @@ export function meltFrame(progress: number, options: MeltOptions = {}): { from: 
 export function thresholdMatrix(threshold: readonly [number, number] = [0.5, 18]): string {
   const [cutoff, sharpness] = threshold
   return `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 ${sharpness} ${0.5 - sharpness * cutoff}`
+}
+
+/** The displacement, in px, of the outline at `progress` (already eased): none at
+ *  either end of the melt, `amount` at its middle. */
+export function wobbleAmount(progress: number, amount = 0): number {
+  return amount > 0 ? amount * Math.sin(Math.PI * clamp01(progress)) : 0
 }
 
 /** The CSS `filter` for one word: its blur, or none. */
