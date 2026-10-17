@@ -32,39 +32,24 @@ function isAlreadyReady(el: HTMLImageElement | HTMLVideoElement): boolean {
  * is. Uses HTMLImageElement.decode() where available and falls back to the
  * loadeddata event for <video>, matching reveal's waitForMediaReady exactly.
  */
-export async function waitForMediaReady(target: HTMLImageElement | HTMLVideoElement): Promise<void> {
-  if (target instanceof HTMLImageElement) {
-    if (isAlreadyReady(target)) return
-    if (typeof target.decode === 'function') {
-      try {
-        await target.decode()
-        return
-      } catch {
-        // Falls through to the load/error event path below rather than
-        // leaving the caller waiting forever.
-      }
-    }
-    await new Promise<void>((resolve) => {
-      const onSettle = () => {
-        target.removeEventListener('load', onSettle)
-        target.removeEventListener('error', onSettle)
-        resolve()
-      }
-      target.addEventListener('load', onSettle, { once: true })
-      target.addEventListener('error', onSettle, { once: true })
-    })
-    return
-  }
-
-  // HTMLVideoElement
-  if (isAlreadyReady(target)) return
-  await new Promise<void>((resolve) => {
-    const onSettle = () => {
-      target.removeEventListener('loadeddata', onSettle)
-      target.removeEventListener('error', onSettle)
+export function waitForMediaReady(target: HTMLImageElement | HTMLVideoElement, signal?: AbortSignal): Promise<void> {
+  if (isAlreadyReady(target) || signal?.aborted) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    const event = target instanceof HTMLImageElement ? 'load' : 'loadeddata'
+    const settle = () => {
+      target.removeEventListener(event, settle)
+      target.removeEventListener('error', settle)
+      signal?.removeEventListener('abort', settle)
       resolve()
     }
-    target.addEventListener('loadeddata', onSettle, { once: true })
-    target.addEventListener('error', onSettle, { once: true })
+    target.addEventListener(event, settle, { once: true })
+    target.addEventListener('error', settle, { once: true })
+    signal?.addEventListener('abort', settle, { once: true })
+    if (target instanceof HTMLImageElement && typeof target.decode === 'function') {
+      // Install listeners before decoding: an error can arrive while decode rejects.
+      target.decode().then(settle, () => {
+        if (target.complete && target.currentSrc) settle()
+      })
+    }
   })
 }
