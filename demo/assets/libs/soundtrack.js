@@ -1,5 +1,5 @@
 (() => {
-  const audio = new Audio('assets/audio/fela.mp3');
+  const audio = new Audio('/demo/assets/audio/fela.mp3');
   const targetVolume = 0.36;
   const button = document.createElement('button');
   let started = false;
