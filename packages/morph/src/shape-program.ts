@@ -4,7 +4,7 @@ import { shapeFragmentShader } from './shape-shader.js'
 import type { SurfaceOptions } from './surface.js'
 import type { InteractionOptions } from './index.js'
 import type { JoinOptions } from './shape-shader.js'
-export type MorphShaderOptions = SurfaceOptions & { shapeTransition?: boolean; signedMask?: boolean; hasFromMask?: boolean; join?: JoinOptions | false; liquid?: number; liquidSheen?: number; cursorFollow?: boolean | { offset?: number; zoom?: number }; bend?: boolean | { x?: number; y?: number }; direction?: 'forward' | 'reverse'; interaction?: InteractionOptions | boolean }
+export type MorphShaderOptions = SurfaceOptions & { shapeTransition?: boolean; textTransition?: boolean; signedMask?: boolean; hasFromMask?: boolean; join?: JoinOptions | false; liquid?: number; liquidSheen?: number; cursorFollow?: boolean | { offset?: number; zoom?: number }; bend?: boolean | { x?: number; y?: number }; direction?: 'forward' | 'reverse'; interaction?: InteractionOptions | boolean }
 const VERTEX_SHADER = `#version 300 es
 in vec2 a_position;
 in vec2 a_uv;

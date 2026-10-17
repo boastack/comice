@@ -52,7 +52,7 @@ float smoothMax(float a, float b, float k) {
 }
 `
 
-export function shapeFragmentShader(options: SurfaceOptions & { hasFromMask?: boolean; signedMask?: boolean; direction?: 'forward' | 'reverse'; join?: JoinOptions | false; liquid?: number; liquidSheen?: number; cursorFollow?: boolean | { offset?: number; zoom?: number }; bend?: boolean | { x?: number; y?: number }; interaction?: { radius?: number; softness?: number; wake?: number; decay?: number } | boolean }): string {
+export function shapeFragmentShader(options: SurfaceOptions & { hasFromMask?: boolean; textTransition?: boolean; signedMask?: boolean; direction?: 'forward' | 'reverse'; join?: JoinOptions | false; liquid?: number; liquidSheen?: number; cursorFollow?: boolean | { offset?: number; zoom?: number }; bend?: boolean | { x?: number; y?: number }; interaction?: { radius?: number; softness?: number; wake?: number; decay?: number } | boolean }): string {
   const join = options.join || undefined
   // Bend: where the shape is read is shifted by the scroll velocity, an arch
   // along x and a pinch along y, so the media stays put while the shape flexes.
@@ -140,6 +140,16 @@ uniform int u_joinCount;
 uniform bool u_joinFrom;
 ${BRIDGE_GLSL}
 ${surfaceGLSL(options)}
+${options.textTransition ? `// Filter the distance field during text interpolation, not the final alpha.
+// This rounds competing glyph contours without a blurry overlay or soft endpoints.
+float filteredTextDistance(sampler2D field, vec2 uv, vec2 stepUV, float scale) {
+  float value = texture(field, uv).r * .25;
+  value += (texture(field, uv + vec2(stepUV.x, 0.0)).r + texture(field, uv - vec2(stepUV.x, 0.0)).r
+    + texture(field, uv + vec2(0.0, stepUV.y)).r + texture(field, uv - vec2(0.0, stepUV.y)).r) * .125;
+  value += (texture(field, uv + stepUV).r + texture(field, uv - stepUV).r
+    + texture(field, uv + vec2(stepUV.x, -stepUV.y)).r + texture(field, uv + vec2(-stepUV.x, stepUV.y)).r) * .0625;
+  return ${options.signedMask ? 'value' : '(value - .5) * 2.0'} * scale;
+}` : ''}
 float frameDistance(vec2 point, vec2 halfSize, float radius) {
   vec2 q = abs(point) - halfSize + radius;
   return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - radius;
@@ -152,6 +162,12 @@ void main() {
   float dFrom = ${options.hasFromMask ? options.signedMask ? 'texture(u_fromMask, suv).r * u_fromScale' : '(texture(u_fromMask, suv).r - .5) * 2.0 * u_fromScale' : 'frameDistance(st, vec2(aspect * .5, .5), u_sourceRadius * px)'};
   float dTo = ${options.signedMask ? 'texture(u_mask, suv).r * u_maskScale' : '(texture(u_mask, suv).r - .5) * 2.0 * u_maskScale'};
   float phase = sin(p * 3.14159265);
+  ${options.textTransition ? `if (p > 0.0 && p < 1.0) {
+    float radius = min(8.0, u_resolution.x * .008) * phase * phase;
+    vec2 stepUV = vec2(radius) / u_resolution;
+    dFrom = filteredTextDistance(u_fromMask, suv, stepUV, u_fromScale);
+    dTo = filteredTextDistance(u_mask, suv, stepUV, u_maskScale);
+  }` : ''}
   // The union of everything the shape may occupy; the surface is kept inside it.
   float dKeep = min(dFrom, dTo);
   // How softly the shape is kept inside the union of its two endpoints. It

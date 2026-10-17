@@ -1,6 +1,6 @@
 /** @comice/morph — media changing shape over signed distance fields.
  * Mounts a GPU surface over the real image/video, driven through core's
- * progress and mapping APIs. Geometry comes exclusively from caller-supplied SVG or CSS clip-path. */
+ * progress and mapping APIs. Geometry comes from caller-supplied SVG, CSS clip-path, or text masks. */
 
 import type { ComiceInstance, ComicePlugin } from 'comice'
 import { snapForReducedMotion, prefersReducedMotion, pointer } from 'comice'
@@ -185,7 +185,7 @@ export function morph(options: MorphOptions): ComicePlugin {
   let lastBake = ''
   let bakeGeneration = 0
   let baking = false
-  let failEffect: (error: unknown) => void = () => {}
+  let failEffect: (error: unknown) => void
   const resolvedJoin: JoinOptions | false = options.join === true ? {} : options.join || false
   const automaticJoins = !!resolvedJoin && !resolvedJoin.points
   const joinPoints = new Float32Array(64)
@@ -276,7 +276,8 @@ export function morph(options: MorphOptions): ComicePlugin {
     }
     try {
       const toBake = rasterizedMask.rasterize(typeof mask === 'function' ? mask(cssWidth, cssHeight) : mask, cssWidth, cssHeight, { ...bake, components: !!resolvedJoin })
-      const fromBake = fromSource ? fromRasterizedMask?.rasterize(typeof fromSource === 'function' ? fromSource(cssWidth, cssHeight) : fromSource, cssWidth, cssHeight, { ...bake, fill: 1 }) : undefined
+      const fromMask = typeof fromSource === 'function' ? fromSource(cssWidth, cssHeight) : fromSource
+      const fromBake = fromMask ? fromRasterizedMask?.rasterize(fromMask, cssWidth, cssHeight, { ...bake, fill: fromMask.type === 'text' ? bake.fill : 1 }) : undefined
       Promise.all([toBake, fromBake]).then(([to, from]) => {
         if (destroyed || generation !== bakeGeneration) return
         baking = false
@@ -594,6 +595,7 @@ export function morph(options: MorphOptions): ComicePlugin {
             ...options,
             join: resolvedJoin,
             shapeTransition: true,
+            textTransition: !!(fromSource && typeof fromSource !== 'function' && fromSource.type === 'text' && mask && typeof mask !== 'function' && mask.type === 'text'),
             signedMask: (options.maskRasterization?.precision ?? 'half') === 'half',
             hasFromMask: true,
             liquid,
@@ -646,7 +648,7 @@ export function morph(options: MorphOptions): ComicePlugin {
         capturedFrame = readFrame(rawTarget)
         // Keep the original media visible while URL/SVG inputs load. Progress
         // mappings can already write their requested value during this wait.
-        const load = (shape: MorphShape) => resolveShape(shape, shapeAbort.signal).then((resolved) => {
+        const load = (shape: MorphShape) => resolveShape(shape, shapeAbort.signal, rawTarget.ownerDocument).then((resolved) => {
           if (destroyed) { resolved.release(); throw new DOMException('Shape load aborted.', 'AbortError') }
           shapeReleases.push(resolved.release)
           return resolved

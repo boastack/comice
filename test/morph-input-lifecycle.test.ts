@@ -295,6 +295,44 @@ describe('public shape morph lifecycle',()=>{
     const noGL=media(),a=use(noGL);await drain();expect(noGL.style.visibility).toBe('');a.h.destroy()
     for(const options of [{failShaderCompile:true},{failProgramLink:true}]){fake(options);const target=media(),{h}=use(target);await drain();expect(target.style.visibility).toBe('');h.destroy()}
   })
+  it('restores media and releases textures when background mask allocation fails', async () => {
+    const gl = fake({ failCreateFramebuffer: true })
+    const allocated = new Set<WebGLTexture>(), deleted = new Set<WebGLTexture>()
+    const createTexture = gl.createTexture.bind(gl)
+    gl.createTexture = () => { const texture = createTexture(); if (texture) allocated.add(texture); return texture }
+    gl.deleteTexture = texture => { if (texture) deleted.add(texture) }
+    let draws = 0
+    gl.drawArrays = () => { draws++ }
+    const target = media()
+    const { h, effect } = use(target, morph({ from: { type: 'text', text: 'Olawale Balo' }, to: { type: 'text', text: 'Design Engineer' } }))
+    const errors: string[] = []
+    h.on('error', (_, event) => errors.push(event.error.message))
+    await drain(); await drain()
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toMatch(/Could not prepare the distance fields/)
+    expect(target.style.visibility).toBe('')
+    expect(document.querySelector('canvas')).toBeNull()
+    expect(allocated.size).toBeGreaterThan(0)
+    expect(deleted).toEqual(allocated)
+    h.set(effect, { progress: .5 })
+    expect(draws).toBe(0)
+  })
+  it('restores media when the completed background distance field cannot upload', async () => {
+    const gl = fake(), upload = gl.texImage2D
+    gl.texImage2D = ((...args: unknown[]) => {
+      if (args[2] === gl.R16F) throw new Error('Mask upload failed')
+      return upload.apply(gl, args as never)
+    }) as typeof upload
+    const target = media(), { h, effect } = use(target)
+    const errors: string[] = []
+    h.on('error', (_, event) => errors.push(event.error.message))
+    await drain(); await drain()
+    expect(errors).toEqual(['Mask upload failed'])
+    expect(target.style.visibility).toBe('')
+    expect(document.querySelector('canvas')).toBeNull()
+    h.set(effect, { progress: .5 })
+    expect(effect.params!.getParam('progress')).toBe(0)
+  })
   it('restores media after a texture upload fails following shape initialization', async () => {
     const gl=fake(),upload=gl.texImage2D;gl.texImage2D=((...args:unknown[])=>{if(args.length===6)throw Error('Media CORS upload failed');return upload.apply(gl,args as never)}) as typeof upload
     const target=media(),{h,effect}=use(target);const errors:string[]=[];h.on('error',(_,e)=>errors.push(e.error.message));await drain();h.set(effect,{progress:.5});expect(target.style.visibility).toBe('');expect(errors[0]).toMatch(/CORS/)

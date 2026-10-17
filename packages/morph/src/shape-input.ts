@@ -14,14 +14,32 @@ export function validateShape(shape: MorphShape): void {
   }
   if (shape && typeof shape === 'object' && 'clipPath' in shape) { compileClipPath(shape.clipPath); return }
   if (shape instanceof Element && (shape.tagName.toLowerCase() === 'svg' || shape instanceof HTMLImageElement)) return
-  if (shape && typeof shape === 'object' && 'type' in shape && ['shape', 'text', 'image'].includes(shape.type)) return
+  if (shape && typeof shape === 'object' && 'type' in shape && ['shape', 'text', 'image'].includes(shape.type)) {
+    if (shape.type === 'text') {
+      if (typeof shape.text !== 'string' || !shape.text.trim()) throw new Error('[comice] A morph text mask needs non-empty text.')
+      if (shape.font !== undefined && (typeof shape.font !== 'string' || !shape.font.trim())) throw new Error('[comice] A morph text font must be a CSS font string.')
+    }
+    return
+  }
   throw new Error('[comice] A morph shape must be an SVG URL/document/element, CSS clip-path, decoded image, or mask source.')
 }
 
-export async function resolveShape(shape: MorphShape, signal: AbortSignal): Promise<ResolvedShape> {
+export async function resolveShape(shape: MorphShape, signal: AbortSignal, doc: Document = document): Promise<ResolvedShape> {
   validateShape(shape)
   if (signal.aborted) throw new DOMException('Shape load aborted.', 'AbortError')
   if (typeof shape === 'object' && 'type' in shape) {
+    if (shape.type === 'text' && shape.font && doc.fonts?.load) {
+      // Load the actual font before measuring or baking either endpoint. Waiting
+      // for fonts.ready alone does not start a face unused by any DOM text.
+      const loaded = doc.fonts.load(shape.font, shape.text)
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => { signal.removeEventListener('abort', abort); reject(new DOMException('Shape load aborted.', 'AbortError')) }
+        signal.addEventListener('abort', abort, { once: true })
+        loaded.then(() => { signal.removeEventListener('abort', abort); resolve() }, error => { signal.removeEventListener('abort', abort); reject(error) })
+        if (signal.aborted) abort()
+      })
+      if (signal.aborted) throw new DOMException('Shape load aborted.', 'AbortError')
+    }
     if (shape.type !== 'image') return { mask: shape, release() {} }
     shape = shape.source
   }
