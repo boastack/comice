@@ -45,7 +45,7 @@ import {
   type RasterizedMaskSource,
 } from 'comice/gl'
 import { createVisibilityGate, getSharedScheduler } from 'comice/scheduler'
-import { compileDissolveProgram, destroyDissolveProgram, drawDissolve, type DissolveProgram, type DissolveTransition, type NoiseOptions } from './shader.js'
+import { compileDissolveProgram, coverScale, destroyDissolveProgram, drawDissolve, type DissolveProgram, type DissolveTransition, type NoiseOptions } from './shader.js'
 
 type Media = HTMLImageElement | HTMLVideoElement
 
@@ -125,6 +125,10 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
 
     if (derived && maskPlane?.texture) derived.reduce(maskPlane.texture, width, height)
 
+    // Each source cropped to cover the stage, never stretched.
+    const aspectOf = (media: Media) => (media instanceof HTMLVideoElement ? media.videoWidth / media.videoHeight : media.naturalWidth / media.naturalHeight)
+    const stage = width / height
+
     // Every texture in the SAME residency pass — T2's point: independent
     // textures resident and addressable together.
     getResidencyPool(glContext).beginPass()
@@ -134,6 +138,8 @@ export function dissolve(options: DissolveOptions): ComicePlugin {
       resolutionHeight: height,
       mapTexture: mapPlane?.texture ?? null,
       maskField: rasterized?.field ?? derived?.field ?? null,
+      fromCover: coverScale(aspectOf(sources[leg]!), stage),
+      toCover: coverScale(aspectOf(sources[leg + 1]!), stage),
     })
     reporter?.afterDraw(planes[leg]!, planes[leg + 1]!, ...(mapPlane ? [mapPlane] : []), ...(maskPlane ? [maskPlane] : []))
   }

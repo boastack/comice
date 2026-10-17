@@ -243,7 +243,7 @@ function buildFragmentShader(options: DissolveShaderOptions): string {
   outColor = mix(texture(u_from, v_uv), texture(u_to, v_uv), smoothstep(t - edge, t + edge, sampleMask(v_uv)));`,
   }
 
-  return `#version 300 es
+  return withCover(`#version 300 es
 precision mediump float;
 
 uniform float u_progress;
@@ -261,7 +261,7 @@ ${noiseGLSL}
 void main() {
   float p = clamp(u_progress, 0.0, 1.0);
   ${BLENDS[transition]}
-}`
+}`)
 }
 
 function compileShader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader | null {
@@ -276,6 +276,33 @@ function compileShader(gl: WebGL2RenderingContext, type: number, source: string)
   return shader
 }
 
+/**
+ * Every media read goes through sampleFrom()/sampleTo(), which crop the
+ * source to cover the stage (CSS object-fit: cover) — it used to stretch
+ * every source to the stage's shape, so a portrait clip in a wide stage
+ * came out squashed. u_fromCover/u_toCover are each source's scale around
+ * the centre (index.ts, from the media's own aspect against the stage's).
+ */
+function withCover(source: string): string {
+  const helpers = `uniform vec2 u_fromCover;
+uniform vec2 u_toCover;
+vec4 sampleFrom(vec2 uv) { return texture(u_from, (uv - 0.5) * u_fromCover + 0.5); }
+vec4 sampleTo(vec2 uv) { return texture(u_to, (uv - 0.5) * u_toCover + 0.5); }`
+  return source
+    .split('texture(u_from, ')
+    .join('sampleFrom(')
+    .split('texture(u_to, ')
+    .join('sampleTo(')
+    .replace('uniform vec2 u_resolution;', `uniform vec2 u_resolution;\n${helpers}`)
+}
+
+/** The cover scale for media of aspect `media` in a stage of aspect
+ *  `stage` (width / height): the share of the media that shows. */
+export function coverScale(media: number, stage: number): [number, number] {
+  if (!(media > 0) || !(stage > 0)) return [1, 1]
+  return media > stage ? [stage / media, 1] : [1, media / stage]
+}
+
 export type DissolveProgram = {
   program: WebGLProgram
   vao: WebGLVertexArrayObject
@@ -283,6 +310,8 @@ export type DissolveProgram = {
   uFrom: WebGLUniformLocation | null
   uTo: WebGLUniformLocation | null
   uResolution?: WebGLUniformLocation | null
+  uFromCover?: WebGLUniformLocation | null
+  uToCover?: WebGLUniformLocation | null
   uMap?: WebGLUniformLocation | null
   /** For 'mask': what bindMaskUniforms() writes. */
   mask?: Parameters<typeof bindMaskUniforms>[1] | null
@@ -381,6 +410,8 @@ export function compileDissolveProgram(gl: WebGL2RenderingContext, options: Diss
     uFrom: gl.getUniformLocation(program, 'u_from'),
     uTo: gl.getUniformLocation(program, 'u_to'),
     uResolution: gl.getUniformLocation(program, 'u_resolution'),
+    uFromCover: gl.getUniformLocation(program, 'u_fromCover'),
+    uToCover: gl.getUniformLocation(program, 'u_toCover'),
     uMap: gl.getUniformLocation(program, 'u_map'),
     mask:
       options.transition === 'mask'
@@ -429,6 +460,9 @@ export type DissolveDrawState = {
   /** 'mask''s field (core's mask producers). An absent field reveals
    *  nothing, so the transition holds on `from` until the mask exists. */
   maskField?: MaskField | null
+  /** Each source's cover scale (coverScale()); default [1, 1], stretched. */
+  fromCover?: readonly [number, number]
+  toCover?: readonly [number, number]
 }
 
 /**
@@ -467,6 +501,10 @@ export function drawDissolve(context: GLContext, dissolveProgram: DissolveProgra
   gl.uniform1i(dissolveProgram.uFrom, fromUnit)
   gl.uniform1i(dissolveProgram.uTo, toUnit)
   gl.uniform2f(dissolveProgram.uResolution ?? null, state.resolutionWidth ?? 1, state.resolutionHeight ?? 1)
+  const [fx, fy] = state.fromCover ?? [1, 1]
+  const [tx, ty] = state.toCover ?? [1, 1]
+  gl.uniform2f(dissolveProgram.uFromCover ?? null, fx, fy)
+  gl.uniform2f(dissolveProgram.uToCover ?? null, tx, ty)
   if (state.mapTexture) {
     const mapUnit = pool.bind(state.mapTexture)
     if (mapUnit !== null) gl.uniform1i(dissolveProgram.uMap ?? null, mapUnit)

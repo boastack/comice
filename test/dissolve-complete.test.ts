@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { comice, type ComiceHandle } from 'comice'
 import { getSharedScheduler } from 'comice/scheduler'
 import { dissolve } from '../packages/dissolve/src/index.js'
-import { compileDissolveProgram, drawDissolve, type DissolveShaderOptions, type DissolveTransition } from '../packages/dissolve/src/shader.js'
+import { compileDissolveProgram, coverScale, drawDissolve, type DissolveShaderOptions, type DissolveTransition } from '../packages/dissolve/src/shader.js'
 import { getResidencyPool } from '../packages/core/src/gl/residency.js'
 import type { Plane } from '../packages/core/src/gl/plane.js'
 import { createFakeGL2, createFakeGLContext, installFake2DContext } from './fake-webgl2.js'
@@ -29,8 +29,8 @@ function fragmentSource(options: DissolveShaderOptions): string {
 
 describe('every transition on the card, in GLSL', () => {
   const signatures: Record<DissolveTransition, string> = {
-    crossfade: 'mix(texture(u_from, v_uv), texture(u_to, v_uv), p)',
-    displace: 'texture(u_from, clamp(v_uv + field * p * push',
+    crossfade: 'mix(sampleFrom(v_uv), sampleTo(v_uv), p)',
+    displace: 'sampleFrom(clamp(v_uv + field * p * push',
     wipe: 'float along = dot(v_uv - 0.5, dir)',
     zoomBlur: 'for (int i = 0; i < 12; i++)',
     pixelBridge: 'vec2 cell = size / u_resolution;',
@@ -52,6 +52,18 @@ describe('every transition on the card, in GLSL', () => {
     expect(s).toContain('float n01 = 0.300000 + 0.5 * n * 1.000000 + dot(v_uv - 0.5, vec2(0.000000, 1.000000)) * 0.8;')
     // no direction: no sweep term
     expect(fragmentSource({ transition: 'noise' })).toContain('+ 0.0;')
+  })
+
+  it('every media read covers the stage (object-fit: cover), never stretches', () => {
+    const s = fragmentSource({ transition: 'crossfade' })
+    expect(s).toContain('vec4 sampleFrom(vec2 uv) { return texture(u_from, (uv - 0.5) * u_fromCover + 0.5); }')
+    expect(s.match(/texture\(u_(from|to), /g)).toHaveLength(2) // only inside the two helpers
+  })
+
+  it('coverScale: the share of the media that shows', () => {
+    expect(coverScale(2, 1)).toEqual([0.5, 1]) // wider: cropped at the sides
+    expect(coverScale(0.5, 1)).toEqual([1, 0.5]) // taller: cropped top and bottom
+    expect(coverScale(Number.NaN, 1)).toEqual([1, 1]) // no size yet: as is
   })
 
   it('displace reads the caller\'s map when there is one, procedural noise otherwise', () => {
