@@ -1,7 +1,7 @@
-const video = '/demo/assets/video/bg.mp4'
-const film = '/demo/assets/video/canvas.mp4'
+const video = '/demo/assets/video/a.mp4'
+const film = '/demo/assets/video/b.mp4'
 const slug = text => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-const shape = name => `./assets/${name}.svg`
+const shape = name => `../assets/images/${name}.svg`
 
 // The finish every demo shares: a clean, watery edge with a hairline of light,
 // a little refraction with no colour fringe, and a gentle wake behind the
@@ -30,7 +30,7 @@ const fine = {
 const classic = { ...finish, join: true }
 const list = [
   { id: 'progress-dial', title: 'Progress Dial', note: 'A dial of tick marks fills into one smooth shape as the count completes', src: film, square: true, word: { from: '0%', count: '100%', to: '\u00a0' }, options: { ...fine, from: shape('reel'), to: shape('ellipse') } },
-  { id: 'sunflower', title: 'Sunflower', note: 'Footage opens into the striped petals and sun of a sunflower', src: film, square: true, mask: './assets/masks/sunflower.svg', options: { ...fine, maskRasterization: { fill: .9 } } },
+  { id: 'sunflower', title: 'Sunflower', note: 'Footage opens into the striped petals and sun of a sunflower', src: film, square: true, mask: '../assets/images/sunflower.svg', options: { ...fine, maskRasterization: { fill: .9 } } },
   { id: 'hero-merge', title: 'Hero Merge', note: 'Three panels flow together into one seamless frame', src: film, options: { ...classic, from: shape('shelf') } },
   ...[
     ['circles', 'Circle Breakout', 'circles', 'The frame breaks apart into a row of floating circles'],
@@ -40,9 +40,9 @@ const list = [
     ['deck', 'Card Deck', 'deck', 'A deck of cards fans out from the frame'],
     ['petals', 'Petals', 'petals', 'The frame blooms into a ring of soft petals'],
   ].map(([id, title, layout, note]) => ({ id, title, note, src: video, options: { ...classic, from: shape(layout), direction: 'reverse' } })),
-  { id: 'medallion', title: 'Medallion', note: 'Footage settles into a ringed medallion of petals and calligraphy', src: video, square: true, mask: './assets/masks/medallion.svg', options: { ...fine, maskRasterization: { fill: .9 } } },
-  { id: 'lotus', title: 'Lotus', note: 'The ellipse folds open into a geometric lotus', src: video, square: true, mask: './assets/masks/lotus.svg', options: { ...fine, from: shape('ellipse'), maskRasterization: { fill: .9 } } },
-  { id: 'apple', title: 'Apple Contour', note: 'Footage settles inside the silhouette of a logo', src: video, mask: './assets/masks/apple.svg', options: { ...finish, maskRasterization: { fill: .78 } } },
+  { id: 'medallion', title: 'Medallion', note: 'Footage settles into a ringed medallion of petals and calligraphy', src: video, square: true, mask: '../assets/images/medallion.svg', options: { ...fine, maskRasterization: { fill: .9 } } },
+  { id: 'lotus', title: 'Lotus', note: 'The ellipse folds open into a geometric lotus', src: video, square: true, mask: '../assets/images/lotus.svg', options: { ...fine, from: shape('ellipse'), maskRasterization: { fill: .9 } } },
+  { id: 'apple', title: 'Apple Contour', note: 'Footage settles inside the silhouette of a logo', src: video, mask: '../assets/images/apple.svg', options: { ...finish, maskRasterization: { fill: .78 } } },
   ...[
     ['Africa', 'The continent drawn in flowing footage'],
     ['Warrior', 'A warrior silhouette carved from live footage'],
@@ -58,7 +58,7 @@ const list = [
     ['African Symbols', 'Nine symbols of the continent, each carved from live footage'],
   ].map(([title, note]) => ({
     id: slug(title), title, note, src: film, square: true,
-    mask: `./assets/masks/${slug(title)}.svg`,
+    mask: `../assets/images/${slug(title)}.svg`,
     options: { ...finish, maskRasterization: { fill: .82 } },
   })),
 ]

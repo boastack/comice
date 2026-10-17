@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Comice — what it can do</title>
 <meta name="description" content="A tour of Comice, the GPU interaction engine for images and video." />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,800&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet" />
+<link rel="icon" href="./assets/images/favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="./assets/fonts/fonts.css" />
+<link rel="stylesheet" href="./assets/libs/soundtrack.css" />
 <style>
   :root {
     color-scheme: dark;
@@ -24,19 +24,19 @@
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   html, body { overflow-x: clip; }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 Inter, system-ui, sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 Geist, system-ui, sans-serif; }
   img { display: block; max-width: 100%; }
   a { color: inherit; }
 
   /* ── chrome ─────────────────────────────────────────────── */
   .nav { position: fixed; inset: 0 0 auto; z-index: 50; display: flex; justify-content: space-between; align-items: center; padding: 14px var(--gutter); background: linear-gradient(var(--bg), transparent); pointer-events: none; }
-  .nav b { font: 800 18px Inter; letter-spacing: -0.02em; pointer-events: auto; }
+  .nav b { font: 800 18px Geist; letter-spacing: -0.02em; pointer-events: auto; }
   .nav span { color: var(--muted); font-size: 13px; }
   .section { padding: 18vh var(--gutter) 10vh; max-width: 1240px; margin: 0 auto; }
-  .eyebrow { font: 500 12px/1 'JetBrains Mono', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin: 0 0 14px; }
-  h2 { font: 800 clamp(34px, 6vw, 72px)/1.02 Fraunces, Georgia, serif; letter-spacing: -0.02em; margin: 0 0 16px; max-width: 16ch; }
+  .eyebrow { font: 500 12px/1 'Geist Mono', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin: 0 0 14px; }
+  h2 { font: 800 clamp(34px, 6vw, 72px)/1.02 Geist, Georgia, serif; letter-spacing: -0.02em; margin: 0 0 16px; max-width: 16ch; }
   .lede { color: var(--muted); max-width: 56ch; margin: 0 0 28px; font-size: 17px; }
-  pre { background: var(--panel); border: 1px solid var(--line); color: var(--code); padding: 14px 16px; border-radius: var(--radius); font: 13px/1.6 'JetBrains Mono', monospace; overflow-x: auto; margin: 0 0 32px; max-width: 760px; }
+  pre { background: var(--panel); border: 1px solid var(--line); color: var(--code); padding: 14px 16px; border-radius: var(--radius); font: 13px/1.6 'Geist Mono', monospace; overflow-x: auto; margin: 0 0 32px; max-width: 760px; }
   .hint { font-size: 13px; color: var(--muted); margin-top: 12px; }
 
   /* ── pinned, scroll-driven sections ─────────────────────── */
@@ -47,9 +47,9 @@
   .meter i { display: block; height: 100%; width: 0; background: var(--accent); }
 
   /* hero */
-  .hero h1 { font: 800 clamp(44px, 9vw, 120px)/0.95 Fraunces, Georgia, serif; letter-spacing: -0.03em; margin: 0; }
+  .hero h1 { font: 800 clamp(44px, 9vw, 120px)/0.95 Geist, Georgia, serif; letter-spacing: -0.03em; margin: 0; }
   .hero p { color: var(--muted); max-width: 46ch; margin: 12px 0 0; }
-  #stage { position: absolute; inset: 0; color: var(--fg); font-family: Fraunces, Georgia, serif; font-weight: 800; }
+  #stage { position: absolute; inset: 0; color: var(--fg); font-family: Geist, Georgia, serif; font-weight: 800; }
 
   #film { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius); }
   video { display: block; max-width: 100%; }
@@ -59,21 +59,21 @@
   .trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
   .trio figure { margin: 0; }
   .trio img, .trio video { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: var(--radius); }
-  .trio figcaption { font: 13px 'JetBrains Mono', monospace; color: var(--muted); margin-top: 10px; }
+  .trio figcaption { font: 13px 'Geist Mono', monospace; color: var(--muted); margin-top: 10px; }
 
   /* spotlight */
   .projects { display: flex; gap: 14px; height: 420px; }
   .project { flex: 1; position: relative; border-radius: var(--radius); overflow: hidden; min-width: 0; cursor: pointer; }
   .project img { width: 100%; height: 100%; object-fit: cover; }
   .project .meta { position: absolute; left: 16px; bottom: 14px; right: 16px; }
-  .project .meta b { display: block; font: 800 22px Fraunces, serif; }
+  .project .meta b { display: block; font: 800 22px Geist, serif; }
   .project .meta span { font-size: 13px; color: #ddd; }
 
   /* rail + type */
   .rail { display: flex; gap: 20px; height: 360px; align-items: center; user-select: none; }
   .slide { width: 260px; height: 300px; border-radius: var(--radius); overflow: hidden; }
   .slide img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
-  .name { font: 800 clamp(40px, 7vw, 88px)/1 Fraunces, Georgia, serif; letter-spacing: -0.02em; margin: 8px 0 0; color: var(--fg); }
+  .name { font: 800 clamp(40px, 7vw, 88px)/1 Geist, Georgia, serif; letter-spacing: -0.02em; margin: 8px 0 0; color: var(--fg); }
 
   /* reveal */
   .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
@@ -83,11 +83,11 @@
   /* rebuilt */
   .pair { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
   .pair img, .pair video { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius); }
-  .control { display: flex; align-items: center; gap: 12px; margin-top: 20px; font: 13px 'JetBrains Mono', monospace; color: var(--muted); }
+  .control { display: flex; align-items: center; gap: 12px; margin-top: 20px; font: 13px 'Geist Mono', monospace; color: var(--muted); }
   input[type=range] { accent-color: var(--accent); width: min(320px, 60vw); }
 
   /* audio */
-  .play { border: 0; border-radius: 999px; padding: 12px 22px; background: var(--accent); color: #1a1206; font: 700 15px Inter; cursor: pointer; }
+  .play { border: 0; border-radius: 999px; padding: 12px 22px; background: var(--accent); color: #1a1206; font: 700 15px Geist; cursor: pointer; }
   .bars { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 24px; }
   .bars img, .bars video { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: var(--radius); background: #fff; }
 
@@ -98,7 +98,7 @@
   .swatches { display: flex; gap: 10px; margin-top: 16px; }
   .swatches i { width: 56px; height: 56px; border-radius: var(--radius); border: 1px solid #ffffff22; transition: background 0.6s ease; }
   footer { padding: 12vh var(--gutter); text-align: center; color: var(--muted); }
-  footer b { display: block; font: 800 clamp(32px, 6vw, 64px) Fraunces, serif; color: var(--fg); margin-bottom: 8px; }
+  footer b { display: block; font: 800 clamp(32px, 6vw, 64px) Geist, serif; color: var(--fg); margin-bottom: 8px; }
 
   @media (max-width: 720px) {
     .trio, .pair, .grid, .bars { grid-template-columns: 1fr 1fr; }
@@ -153,7 +153,7 @@
       <p class="eyebrow">morph</p>
       <h2>Live footage collapsing into a logo.</h2>
     </div>
-    <div class="stage"><video id="film" src="./assets/video/canvas.mp4" muted loop playsinline autoplay></video><div class="meter"><i></i></div></div>
+    <div class="stage"><video id="film" src="./assets/video/b.mp4" muted loop playsinline autoplay></video><div class="meter"><i></i></div></div>
   </div>
 </section>
 <div class="section" style="padding-top:4vh">
@@ -170,9 +170,9 @@
   <h2>The cursor is a force in the field.</h2>
   <p class="lede">Not a shape drawn at a point: the image itself bends around the pointer. Move over each one.</p>
   <div class="trio">
-    <figure><img class="fx-glass" src="media/hand-a.jpg" alt="" /><figcaption>effect: 'glass'</figcaption></figure>
-    <figure><img class="fx-ripple" src="media/tailor-b.jpg" alt="" /><figcaption>effect: 'ripple'</figcaption></figure>
-    <figure><video class="fx-liquid" src="./assets/video/canvas.mp4" muted loop playsinline autoplay></video><figcaption>effect: 'liquid', on video</figcaption></figure>
+    <figure><img class="fx-glass" src="./assets/images/b.jpg" alt="" /><figcaption>effect: 'glass'</figcaption></figure>
+    <figure><img class="fx-ripple" src="./assets/images/a.jpg" alt="" /><figcaption>effect: 'ripple'</figcaption></figure>
+    <figure><video class="fx-liquid" src="./assets/video/b.mp4" muted loop playsinline autoplay></video><figcaption>effect: 'liquid', on video</figcaption></figure>
   </div>
   <pre style="margin-top:24px">comice('.fx-glass').use(distort({ effect: 'glass' })).driver(pointer())</pre>
 </section>
@@ -183,10 +183,10 @@
   <h2>One item emphasised, the rest recede.</h2>
   <p class="lede">Hover (or tap) a project. It widens, its peers soften and dim, and a real, selectable caption appears.</p>
   <div class="projects">
-    <div class="project"><img src="media/portrait.jpg" alt="" /><div class="meta"><b>Adaeze</b><span>Portrait, fabric market</span></div></div>
-    <div class="project"><img src="media/hand-a.jpg" alt="" /><div class="meta"><b>Gold</b><span>Product film, 2026</span></div></div>
-    <div class="project"><img src="media/tailor-a.jpg" alt="" /><div class="meta"><b>Atelier</b><span>Tailoring series</span></div></div>
-    <div class="project"><img src="media/hand-b.jpg" alt="" /><div class="meta"><b>Ember</b><span>Brand identity</span></div></div>
+    <div class="project"><img src="./assets/images/a.jpg" alt="" /><div class="meta"><b>Adaeze</b><span>Portrait, fabric market</span></div></div>
+    <div class="project"><img src="./assets/images/b.jpg" alt="" /><div class="meta"><b>Gold</b><span>Product film, 2026</span></div></div>
+    <div class="project"><img src="./assets/images/a.jpg" alt="" /><div class="meta"><b>Atelier</b><span>Tailoring series</span></div></div>
+    <div class="project"><img src="./assets/images/b.jpg" alt="" /><div class="meta"><b>Ember</b><span>Brand identity</span></div></div>
   </div>
   <pre style="margin-top:24px">comice('.project').use(spotlight({
   peers: { selector: '.project', blur: 4, dim: 0.4 },
@@ -200,11 +200,11 @@
   <h2>Drag through. Names melt into each other.</h2>
   <p class="lede">Real momentum and a snap into place; arrow keys work, and screen readers hear which one is active. The name is live text that melts word to word.</p>
   <div class="rail" id="rail">
-    <div class="slide"><img src="media/portrait.jpg" alt="Adaeze" /></div>
-    <div class="slide"><img src="media/hand-a.jpg" alt="Gold" /></div>
-    <div class="slide"><img src="media/tailor-a.jpg" alt="Atelier" /></div>
-    <div class="slide"><img src="media/hand-b.jpg" alt="Ember" /></div>
-    <div class="slide"><img src="media/tailor-b.jpg" alt="Kente" /></div>
+    <div class="slide"><img src="./assets/images/a.jpg" alt="Adaeze" /></div>
+    <div class="slide"><img src="./assets/images/b.jpg" alt="Gold" /></div>
+    <div class="slide"><img src="./assets/images/a.jpg" alt="Atelier" /></div>
+    <div class="slide"><img src="./assets/images/b.jpg" alt="Ember" /></div>
+    <div class="slide"><img src="./assets/images/a.jpg" alt="Kente" /></div>
   </div>
   <p class="name" id="name">Adaeze</p>
   <pre style="margin-top:24px">comice('.name').use(type({ mode: 'melt', melt: { blur: 14, threshold: [0.5, 18] } }))
@@ -237,12 +237,12 @@ comice('#rail').use(rail({
   <h2>A grid opening as it arrives.</h2>
   <p class="lede">No driver at all: each image slats open when it scrolls into view, as a wave from the corner. It never shows a blank frame: it waits for the image to decode.</p>
   <div class="grid">
-    <figure><img src="media/portrait.jpg" alt="" /></figure>
-    <figure><img src="media/hand-a.jpg" alt="" /></figure>
-    <figure><img src="media/tailor-a.jpg" alt="" /></figure>
-    <figure><img src="media/hand-b.jpg" alt="" /></figure>
-    <figure><img src="media/tailor-b.jpg" alt="" /></figure>
-    <figure><img src="media/portrait.jpg" alt="" /></figure>
+    <figure><img src="./assets/images/a.jpg" alt="" /></figure>
+    <figure><img src="./assets/images/b.jpg" alt="" /></figure>
+    <figure><img src="./assets/images/a.jpg" alt="" /></figure>
+    <figure><img src="./assets/images/b.jpg" alt="" /></figure>
+    <figure><img src="./assets/images/a.jpg" alt="" /></figure>
+    <figure><img src="./assets/images/a.jpg" alt="" /></figure>
   </div>
   <pre style="margin-top:24px">comice('.grid figure').use(reveal({ effect: 'blinds', stagger: { each: 0.06, grid: 'auto' } }))</pre>
 </section>
@@ -253,9 +253,9 @@ comice('#rail').use(rail({
   <h2>The same picture, rebuilt live on the GPU.</h2>
   <p class="lede">Live video as characters, a halftone in brand colours, a duotone with film grain. Every parameter is live: drag the slider.</p>
   <div class="pair">
-    <video id="as-ascii" src="./assets/video/canvas.mp4" muted loop playsinline autoplay></video>
-    <img id="as-mosaic" src="media/portrait.jpg" alt="" />
-    <img id="as-color" src="media/tailor-b.jpg" alt="" />
+    <video id="as-ascii" src="./assets/video/b.mp4" muted loop playsinline autoplay></video>
+    <img id="as-mosaic" src="./assets/images/a.jpg" alt="" />
+    <img id="as-color" src="./assets/images/a.jpg" alt="" />
   </div>
   <label class="control">cell <input id="cell" type="range" min="6" max="28" value="10" /> <output id="cell-out">10px</output></label>
   <pre style="margin-top:24px">const art = ascii({ cell: 10 })
@@ -269,14 +269,13 @@ slider.oninput = () => asciiHandle.set(art, { cell: slider.value })</pre>
   <h2>Sound driving the picture.</h2>
   <p class="lede">Fela on the speakers: the bass pushes the lens, the highs turn the hue. Neither plugin knows audio exists: one line of mapping connects them.</p>
   <button class="play" id="play">▶ Play the track</button>
-  <audio id="track" src="./assets/audio/fela.mp3" loop></audio>
   <div class="bars">
-    <video id="au-distort" src="./assets/video/bg.mp4" muted loop playsinline autoplay></video>
-    <img id="au-color" src="media/tailor-a.jpg" alt="" />
+    <video id="au-distort" src="./assets/video/a.mp4" muted loop playsinline autoplay></video>
+    <img id="au-color" src="./assets/images/a.jpg" alt="" />
   </div>
-  <pre style="margin-top:24px">comice('#au-distort').use(lens).driver(audio({ source: '#track' }))
+  <pre style="margin-top:24px">comice('#au-distort').use(lens).driver(audio({ source: '#soundtrack' }))
   .map('bass').to(lens, 'strength', { output: [0, 0.9] })
-comice('#au-color').use(grade).driver(audio({ source: '#track' }))
+comice('#au-color').use(grade).driver(audio({ source: '#soundtrack' }))
   .map('high').to(grade, 'shift')</pre>
 </section>
 
@@ -285,7 +284,7 @@ comice('#au-color').use(grade).driver(audio({ source: '#track' }))
   <p class="eyebrow">aura</p>
   <h2>The picture colouring the page around it.</h2>
   <p class="lede">The playing video is sampled a few times a second; its palette becomes this section's background and the swatches below, clamped so text stays readable.</p>
-  <div class="reel-wrap"><video id="reel" src="./assets/video/canvas.mp4" muted loop playsinline autoplay></video></div>
+  <div class="reel-wrap"><video id="reel" src="./assets/video/b.mp4" muted loop playsinline autoplay></video></div>
   <div class="swatches" id="swatches"></div>
   <pre style="margin-top:24px">comice('#reel').use(aura({
   sample: 'palette', colors: 5, contrast: 4.5,
@@ -301,6 +300,7 @@ comice('#au-color').use(grade).driver(audio({ source: '#track' }))
 <script type="module">
   import { comice, pointer, hover, scroll } from 'comice'
   import { audio } from 'comice/drivers/audio'
+  import { soundtrack } from './assets/libs/soundtrack.js'
   import { particles } from '@comice/particles'
   import { morph } from '@comice/morph'
   import { distort } from '@comice/distort'
@@ -314,7 +314,13 @@ comice('#au-color').use(grade).driver(audio({ source: '#track' }))
   import { color } from '@comice/color'
   import { aura } from '@comice/aura'
 
-  const asset = (name) => `media/${name}.jpg`
+  const track = soundtrack.element, play = document.getElementById('play')
+  const syncSound = () => { play.textContent = track.paused || track.muted ? '▶ Play the track' : '❚❚ Mute the track' }
+  play.addEventListener('click', () => soundtrack.toggle())
+  for (const event of ['play', 'pause', 'volumechange']) track.addEventListener(event, syncSound)
+  syncSound()
+
+  const asset = (name) => `./assets/images/${['portrait', 'tailor-a', 'tailor-b'].includes(name) ? 'a' : 'b'}.jpg`
   const load = async (name) => {
     const image = new Image()
     image.src = asset(name)
@@ -348,7 +354,7 @@ comice('#au-color').use(grade).driver(audio({ source: '#track' }))
   })).driver(through(document.getElementById('s-particles')))
 
   // 2. morph: footage collapsing into a logo
-  const svg = await (await fetch('./morph/assets/masks/apple.svg')).text()
+  const svg = await (await fetch('./assets/images/apple.svg')).text()
   const applePath = new DOMParser().parseFromString(svg, 'image/svg+xml').querySelector('path').getAttribute('d')
   comice('#film').use(morph({
     to: { type: 'shape', path: applePath, viewBox: [0, 0, 24, 24] },
@@ -402,9 +408,9 @@ comice('#au-color').use(grade).driver(audio({ source: '#track' }))
   // 9. audio -> parameters
   const lens = distort({ effect: 'bulge', radius: 260, strength: 0, anchor: [0.5, 0.5] })
   const grade = color({ effects: ['grain'] })
-  comice('#au-distort').use(lens).driver(audio({ source: '#track' }))
+  comice('#au-distort').use(lens).driver(audio({ source: '#soundtrack' }))
     .map('bass').to(lens, 'strength', { output: [0, 0.9] })
-  comice('#au-color').use(grade).driver(audio({ source: '#track' }))
+  comice('#au-color').use(grade).driver(audio({ source: '#soundtrack' }))
     .map('high').to(grade, 'shift')
   // 10. aura: the palette, as data, painting the section
   const section = document.getElementById('s-aura')
@@ -419,12 +425,6 @@ comice('#au-color').use(grade).driver(audio({ source: '#track' }))
     },
   }))
 
-  const track = document.getElementById('track')
-  document.getElementById('play').onclick = () => {
-    if (track.paused) track.play()
-    else track.pause()
-    document.getElementById('play').textContent = track.paused ? '▶ Play the track' : '❚❚ Pause'
-  }
 </script>
 </body>
 </html>

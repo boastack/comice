@@ -126,7 +126,7 @@ for (const name of projects) {
     if(!copied.code.includes('polygon(')||copied.progress<.45||copied.progress>.55)throw Error('Copied uploaded SVG/CSS demo differs')
     await page.getByRole('button',{name:'Morph settings',exact:true}).click()
     await page.getByRole('button',{name:'Reset demo',exact:true}).click()
-    await page.waitForFunction(()=>__demos[2].options.to===undefined&&__demos[2].options.from==='./assets/shelf.svg')
+    await page.waitForFunction(()=>__demos[2].options.to===undefined&&__demos[2].options.from==='../assets/images/shelf.svg')
     await page.keyboard.press('Escape')
     if(await page.locator('#settings-toggle').count()!==1||await page.locator('[data-settings-for]').count())throw Error('Duplicate Settings controls remain')
     await page.getByRole('button',{name:'Morph settings',exact:true}).click()

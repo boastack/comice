@@ -158,7 +158,7 @@ for (const name of ['chromium', 'webkit', 'iphone']) {
       window.cleanup()
     })
     await check('SVG CSS mixed joins separation sheen refraction and holes', async () => {
-      await window.mount({ to: '/demo/morph/assets/panel.svg', join: { points: [[.205,.5],[.5,.5],[.795,.5]] }, outline: { style: 'sheen', width: 8 }, glass: { width: 24, refraction: 18 } })
+      await window.mount({ to: '/demo/assets/images/panel.svg', join: { points: [[.205,.5],[.5,.5],[.795,.5]] }, outline: { style: 'sheen', width: 8 }, glass: { width: 24, refraction: 18 } })
       const samples = [.0, .1, .3, .5, .85, 1].map(p => window.pixels(p).data.reduce((n, v, i) => n + (i % 4 === 3 ? v : 0), 0))
       if (new Set(samples).size < 5) throw Error('Separation failed to animate')
       const neck = window.pixels(.9), x = Math.floor((.5 + (412 - 612) / 688 * .5) * neck.width)
@@ -166,12 +166,12 @@ for (const name of ['chromium', 'webkit', 'iphone']) {
       const top = neck.data[(Math.floor(.88 * neck.height) * neck.width + x) * 4 + 3]
       if (center < 240 || top > 20) throw Error(`Explicit separation centers used the wrong endpoint: ${center}/${top}`)
       window.cleanup()
-      await window.mount({ from: '/demo/morph/assets/panel.svg', to: `path(evenodd, 'M10 10H390V190H10Z M140 60H260V140H140Z')`, join: { style: 'slab' }, direction: 'reverse' }, 0)
+      await window.mount({ from: '/demo/assets/images/panel.svg', to: `path(evenodd, 'M10 10H390V190H10Z M140 60H260V140H140Z')`, join: { style: 'slab' }, direction: 'reverse' }, 0)
       const a = window.pixels(0); if (a.data[(100 * a.width + 200) * 4 + 3] > 5) throw Error('Destination hole filled'); window.pixels(.5); window.pixels(1); window.cleanup()
     })
     await check('joins preserve supplied outer edges and shared holes', async () => {
       for (const style of ['metaball', 'slab']) for (const direction of ['forward', 'reverse']) {
-        await window.mount({ from: '/demo/morph/assets/panel.svg', to: '/demo/morph/assets/shape.svg', join: { style }, direction, outline: { style: 'sheen', width: 8 }, glass: { width: 24, refraction: 18 } }, 0, 612, 344)
+        await window.mount({ from: '/demo/assets/images/panel.svg', to: '/demo/assets/images/shape.svg', join: { style }, direction, outline: { style: 'sheen', width: 8 }, glass: { width: 24, refraction: 18 } }, 0, 612, 344)
         const start = window.pixels(0), end = window.pixels(1)
         const outside = []
         // Ignore two pixels of endpoint antialiasing when checking empty space.
@@ -199,7 +199,7 @@ for (const name of ['chromium', 'webkit', 'iphone']) {
       }
     })
     await check('native pointer softening wake and directional glass preserve endpoints', async () => {
-      await window.mount({ from: '/demo/morph/assets/panel.svg', to: '/demo/morph/assets/shape.svg', join: true, interaction: { radius: 160, softness: 30, wake: 6, decay: .8 }, glass: { rim: .1 } }, .1, 612, 344)
+      await window.mount({ from: '/demo/assets/images/panel.svg', to: '/demo/assets/images/shape.svg', join: true, interaction: { radius: 160, softness: 30, wake: 6, decay: .8 }, glass: { rim: .1 } }, .1, 612, 344)
       const initial = window.pixels(.1), start = window.pixels(0), end = window.pixels(1)
       window.pixels(.1)
       const move = (x,y) => document.body.dispatchEvent(new PointerEvent('pointermove',{clientX:x,clientY:y,bubbles:true}))

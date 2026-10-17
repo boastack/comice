@@ -1,7 +1,7 @@
 .soundtrack-control {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  bottom: 24px;
+  left: 24px;
   z-index: 20;
   display: inline-flex;
   align-items: center;
@@ -67,8 +67,8 @@
 
 @media (max-width: 600px) {
   .soundtrack-control {
-    top: 14px;
-    right: 14px;
+    bottom: 16px;
+    left: 16px;
     width: 40px;
     height: 40px;
   }

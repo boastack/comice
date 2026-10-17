@@ -1,112 +1,87 @@
-(() => {
-  const audio = new Audio('/demo/assets/audio/fela.mp3');
-  const targetVolume = 0.36;
-  const button = document.createElement('button');
-  let started = false;
-  let startPromise = null;
-  let fadeFrame = 0;
+// Shared showcase soundtrack: starts on the first scroll,
+// wheel, touch or key press (browsers only allow sound after one of those),
+// fades in, and a small EQ-bar button in the bottom corner mutes it.
+const audio = new Audio(new URL('../audio/fela.mp3', import.meta.url).href)
+const volume = .36
+const button = document.createElement('button')
+let started = false, starting = null, fade = 0
 
-  audio.loop = true;
-  audio.preload = 'metadata';
-  audio.volume = 0;
-  audio.setAttribute('aria-hidden', 'true');
-  audio.style.display = 'none';
+audio.id = 'soundtrack'
+audio.hidden = true
+audio.setAttribute('aria-hidden', 'true')
+audio.loop = true
+audio.preload = 'metadata'
+audio.volume = 0
 
-  button.className = 'soundtrack-control';
-  button.type = 'button';
-  button.dataset.state = 'ready';
-  button.setAttribute('aria-label', 'Play soundtrack');
-  button.setAttribute('aria-pressed', 'false');
-  button.title = 'Play soundtrack';
-  button.innerHTML = `
-    <svg viewBox="0 0 18 18" aria-hidden="true">
-      <rect class="sound-bar" x="3" y="6" width="2.5" height="6" rx="1.25"/>
-      <rect class="sound-bar" x="7.75" y="3" width="2.5" height="12" rx="1.25"/>
-      <rect class="sound-bar" x="12.5" y="5" width="2.5" height="8" rx="1.25"/>
-    </svg>`;
+button.className = 'soundtrack-control'
+button.type = 'button'
+button.innerHTML = '<svg viewBox="0 0 18 18" aria-hidden="true"><rect class="sound-bar" x="3" y="6" width="2.5" height="6" rx="1.25"/><rect class="sound-bar" x="7.75" y="3" width="2.5" height="12" rx="1.25"/><rect class="sound-bar" x="12.5" y="5" width="2.5" height="8" rx="1.25"/></svg>'
 
-  function setButtonState(state) {
-    button.dataset.state = state;
-    const playing = state === 'playing';
-    button.setAttribute('aria-label', playing ? 'Mute soundtrack' : 'Play soundtrack');
-    button.setAttribute('aria-pressed', String(playing));
-    button.title = playing ? 'Mute soundtrack' : 'Play soundtrack';
+function state(next) {
+  button.dataset.state = next
+  const playing = next === 'playing'
+  const label = playing ? 'Mute soundtrack' : 'Play soundtrack'
+  button.setAttribute('aria-label', label)
+  button.setAttribute('aria-pressed', String(playing))
+  button.title = label
+}
+state('ready')
+
+function fadeIn() {
+  cancelAnimationFrame(fade)
+  const from = audio.volume, start = performance.now()
+  const tick = now => {
+    const t = Math.max(0, Math.min(1, (now - start) / 1800))
+    audio.volume = from + (volume - from) * (1 - (1 - t) ** 3)
+    if (t < 1) fade = requestAnimationFrame(tick)
   }
+  fade = requestAnimationFrame(tick)
+}
 
-  function fadeIn() {
-    cancelAnimationFrame(fadeFrame);
-    const start = performance.now();
-    const initialVolume = audio.volume;
-    const duration = 1800;
-    const tick = (now) => {
-      const progress = Math.min(1, (now - start) / duration);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      audio.volume = initialVolume + (targetVolume - initialVolume) * eased;
-      if (progress < 1) fadeFrame = requestAnimationFrame(tick);
-    };
-    fadeFrame = requestAnimationFrame(tick);
-  }
-
-  async function startSoundtrack() {
-    if (started && !audio.paused) return true;
-    if (startPromise) return startPromise;
-    startPromise = (async () => {
-      try {
-        audio.muted = false;
-        await audio.play();
-        started = true;
-        fadeIn();
-        setButtonState('playing');
-        return true;
-      } catch (_) {
-        setButtonState('ready');
-        return false;
-      } finally {
-        startPromise = null;
-      }
-    })();
-    return startPromise;
-  }
-
-  async function handleFirstScrollIntent(event) {
-    if (event.type === 'keydown' && !['ArrowDown', 'PageDown', 'End', ' '].includes(event.key)) return;
-    if (await startSoundtrack()) removeStartListeners();
-  }
-
-  function removeStartListeners() {
-    window.removeEventListener('wheel', handleFirstScrollIntent);
-    window.removeEventListener('touchstart', handleFirstScrollIntent);
-    window.removeEventListener('touchmove', handleFirstScrollIntent);
-    window.removeEventListener('keydown', handleFirstScrollIntent);
-    window.removeEventListener('scroll', handleFirstScrollIntent);
-  }
-
-  window.addEventListener('wheel', handleFirstScrollIntent, { passive: true });
-  window.addEventListener('touchstart', handleFirstScrollIntent, { passive: true });
-  window.addEventListener('touchmove', handleFirstScrollIntent, { passive: true });
-  window.addEventListener('keydown', handleFirstScrollIntent);
-  window.addEventListener('scroll', handleFirstScrollIntent, { passive: true });
-
-  button.addEventListener('click', async () => {
-    removeStartListeners();
-    if (!started || audio.paused) {
-      await startSoundtrack();
-      return;
+function start() {
+  if (started && !audio.paused) return Promise.resolve(true)
+  starting ??= (async () => {
+    try {
+      audio.muted = false
+      await audio.play()
+      started = true
+      fadeIn()
+      state('playing')
+      return true
+    } catch {
+      state('ready')
+      return false
+    } finally {
+      starting = null
     }
-    audio.muted = !audio.muted;
-    setButtonState(audio.muted ? 'muted' : 'playing');
-  });
+  })()
+  return starting
+}
 
-  document.addEventListener('visibilitychange', () => {
-    if (!started) return;
-    if (document.hidden) audio.pause();
-    else if (!audio.muted) audio.play().catch(() => setButtonState('ready'));
-  });
+const intents = ['wheel', 'touchstart', 'touchmove', 'keydown', 'scroll']
+async function onIntent(event) {
+  if (event.type === 'keydown' && !['ArrowDown', 'PageDown', 'End', ' '].includes(event.key)) return
+  if (await start()) stopListening()
+}
+function stopListening() { intents.forEach(type => removeEventListener(type, onIntent)) }
+intents.forEach(type => addEventListener(type, onIntent, { passive: true }))
 
-  audio.addEventListener('error', () => {
-    button.hidden = true;
-    removeStartListeners();
-  });
+async function toggle() {
+  stopListening()
+  if (!started || audio.paused) { await start(); return }
+  audio.muted = !audio.muted
+  state(audio.muted ? 'muted' : 'playing')
+}
+button.addEventListener('click', toggle)
+document.addEventListener('visibilitychange', () => {
+  if (!started) return
+  if (document.hidden) audio.pause()
+  else if (!audio.muted) audio.play().catch(() => state('ready'))
+})
+// Hide the control if the optional local track is unavailable.
+audio.addEventListener('error', () => { button.hidden = true; stopListening() })
 
-  document.body.append(audio, button);
-})();
+document.body.append(audio, button)
+
+// The audio driver (runtime.js) listens to this element and may need it started.
+export const soundtrack = { element: audio, start, toggle }

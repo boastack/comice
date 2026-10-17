@@ -12,6 +12,6 @@ export const examples = demos.map(demo => {
   // The demo's relative asset paths, as absolute URLs from this page.
   // The comparison renders the footage each demo was tuned on (the page now alternates
   // the two clips down the list): the tailor for masks and Hero Merge, the hand for the rest.
-  const src = demo.square || demo.id === 'hero-merge' ? '/demo/assets/video/canvas.mp4' : '/demo/assets/video/bg.mp4'
+  const src = demo.square || demo.id === 'hero-merge' ? '/demo/assets/video/b.mp4' : '/demo/assets/video/a.mp4'
   return {...demo,src,...(demo.mask && { mask: new URL(demo.mask, location.origin + '/demo/morph/').pathname }),options}
 })

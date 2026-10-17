@@ -98,10 +98,10 @@ async function run() {
   // ── morph — all five operations ─────────────────────────────────────
   const { morph } = await import('@comice/morph')
   const morphOps = [
-    ['merge', { from: '/demo/morph/assets/shelf.svg', to: 'inset(0 round 24px)', join: true }],
-    ['breakout', { to: '/demo/morph/assets/fan.svg', join: true }],
-    ['distribute', { to: '/demo/morph/assets/circles.svg' }],
-    ['recompose', { from: '/demo/morph/assets/shelf.svg', to: 'circle(40%)' }],
+    ['merge', { from: '/demo/assets/images/shelf.svg', to: 'inset(0 round 24px)', join: true }],
+    ['breakout', { to: '/demo/assets/images/fan.svg', join: true }],
+    ['distribute', { to: '/demo/assets/images/circles.svg' }],
+    ['recompose', { from: '/demo/assets/images/shelf.svg', to: 'circle(40%)' }],
     ['mask', { to: { type: 'text', text: 'COMICE' } }],
   ]
   for (const [name, opts] of morphOps) {
@@ -117,7 +117,7 @@ async function run() {
   mount('morph — thread', 'distribute + thread', (stage) => {
     const el = makeMediaClone(media.portrait)
     stage.appendChild(el)
-    const handle = comice(el).use(morph({ to: '/demo/morph/assets/petals.svg', join: { style: 'slab', width: 8, sag: 4 } }))
+    const handle = comice(el).use(morph({ to: '/demo/assets/images/petals.svg', join: { style: 'slab', width: 8, sag: 4 } }))
     handle.setProgress(0.5)
     return handle
   })

@@ -65,7 +65,7 @@ export async function metaballReferenceChecks() {
     }
     gl.linkProgram(reference)
     if (!gl.getProgramParameter(reference, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(reference))
-    for (const [mask, url] of [[from, '/demo/morph/assets/panel.svg'], [to, '/demo/morph/assets/shape.svg']]) {
+    for (const [mask, url] of [[from, '/demo/assets/images/panel.svg'], [to, '/demo/assets/images/shape.svg']]) {
       const image = new Image(); image.src = url; await image.decode()
       mask.rasterize({ type: 'image', source: image }, 612, 344, { sdf: true, precision: 'half', maxDistance: 612, fill: 1, components: true, resolution: [612, 344] })
     }

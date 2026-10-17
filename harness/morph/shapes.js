@@ -44,7 +44,7 @@ export async function shapeChecks() {
   }
   await check('svg-metaball-supplied-reference', metaballReferenceChecks)
   await check('svg-metaball-neck-growth', async () => {
-    const m = await mount({ from: '/demo/morph/assets/panel.svg', to: '/demo/morph/assets/shape.svg', join: true })
+    const m = await mount({ from: '/demo/assets/images/panel.svg', to: '/demo/assets/images/shape.svg', join: true })
     try {
       // The 1224×688 SVG is contained in the 400×200 test media.
       const x = .5 + (412 - 612) / 688 * 200 / 400
@@ -180,7 +180,7 @@ export async function shapeChecks() {
   })
   await check('surface-options-on-supplied-shapes', async () => {
     for (const options of [
-      { from: '/demo/morph/assets/panel.svg', to: 'inset(0)', join: true },
+      { from: '/demo/assets/images/panel.svg', to: 'inset(0)', join: true },
       { to: { type: 'text', text: 'COMICE' } },
       { to: { type: 'shape', path: 'M0 0L100 0L50 100Z', viewBox: [0, 0, 100, 100] } },
     ]) {

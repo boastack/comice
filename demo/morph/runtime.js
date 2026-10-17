@@ -3,7 +3,7 @@ import { morph } from '@comice/morph'
 import { getSharedScheduler } from 'comice/scheduler'
 import { type } from '@comice/type'
 import { audio } from 'comice/drivers/audio'
-import { soundtrack } from './soundtrack.js'
+import { soundtrack } from '../assets/libs/soundtrack.js'
 import { formatOptions, highlight } from './snippet.js'
 
 // Each demo's panel keeps its generated code (hidden) and its status line,

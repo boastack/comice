@@ -51,7 +51,7 @@ export const examples = {
     run() {
       // given: .card tiles, and an <img class="hero"> below the fold
       comice('.card').use(spotlight()).driver(hover({ intent: 80 }))
-      comice('.hero').use(morph({ to: '/demo/morph/assets/fan.svg', join: true })).driver(scroll({ threshold: 0.5 }))
+      comice('.hero').use(morph({ to: '/demo/assets/images/fan.svg', join: true })).driver(scroll({ threshold: 0.5 }))
     },
   },
 
