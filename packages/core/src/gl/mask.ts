@@ -670,17 +670,24 @@ export function createRasterizedMask(context: GLContext | null): RasterizedMask 
       const h = source.source.naturalHeight * scale
       ctx2d.drawImage(source.source, (width - w) / 2, (height - h) / 2, w, h)
     } else {
-      // Centred, as large as fits FIT of the box (it used to be drawn
-      // left-aligned at 80% of the height, running off a narrow box).
-      const fontAt = (size: number) => source.font ?? `${size}px sans-serif`
-      let size = Math.round(height * 0.6)
-      ctx2d.font = fontAt(size)
-      const measured = ctx2d.measureText(source.text).width
-      if (!source.font && measured > width * FIT) size = Math.max(1, Math.floor((size * width * FIT) / measured))
-      ctx2d.font = fontAt(size)
-      ctx2d.textAlign = 'center'
-      ctx2d.textBaseline = 'middle'
-      ctx2d.fillText(source.text, width / 2, height / 2)
+      // Fit visible glyph bounds, including custom CSS fonts and overhangs.
+      // Uniform scaling keeps the letter proportions at any bake resolution.
+      const size = Math.max(1, Math.round(height * 0.6))
+      ctx2d.font = source.font ?? `${size}px sans-serif`
+      ctx2d.textAlign = 'left'
+      ctx2d.textBaseline = 'alphabetic'
+      const metrics = ctx2d.measureText(source.text)
+      const left = metrics.actualBoundingBoxLeft ?? 0
+      const right = metrics.actualBoundingBoxRight ?? metrics.width
+      const ascent = metrics.actualBoundingBoxAscent ?? size * .8
+      const descent = metrics.actualBoundingBoxDescent ?? size * .2
+      const inkWidth = Math.max(1, left + right)
+      const inkHeight = Math.max(1, ascent + descent)
+      const fill = options.fill ?? FIT
+      const scale = Math.min(width * fill / inkWidth, height * fill / inkHeight)
+      ctx2d.setTransform(scale, 0, 0, scale, (width - inkWidth * scale) / 2 + left * scale, (height - inkHeight * scale) / 2 + ascent * scale)
+      ctx2d.fillText(source.text, 0, 0)
+      ctx2d.setTransform(1, 0, 0, 1, 0, 0)
     }
 
     const imageData = sdf || options.components ? ctx2d.getImageData(0, 0, width, height) : null

@@ -102,12 +102,16 @@ describe('core mask fitting', () => {
     const { uninstall, callLog } = installFake2DContext() // measureText: 10px a character
     let align = ''
     let at: number[] = []
+    let transform = [1, 0, 0, 1, 0, 0]
+    let drawnTransform = transform
     let font = ''
     const getContext = HTMLCanvasElement.prototype.getContext
     ;(HTMLCanvasElement.prototype as any).getContext = function (type: string) {
       const ctx = getContext.call(this, type) as any
       if (type === '2d' && ctx) {
+        ctx.setTransform = (...values: number[]) => { transform = values }
         ctx.fillText = (_t: string, x: number, y: number) => {
+          drawnTransform = transform
           align = ctx.textAlign
           at = [x, y]
           font = ctx.font
@@ -118,10 +122,16 @@ describe('core mask fitting', () => {
     try {
       const context = createFakeGLContext(document.createElement('canvas'))
       document.body.appendChild(context.canvas)
-      createRasterizedMask(context).rasterize({ type: 'text', text: 'A VERY LONG NAME' }, 100, 100) // 160px measured at 60px
-      expect(align).toBe('center')
-      expect(at).toEqual([50, 50])
-      expect(font).toBe('30px sans-serif') // 60 * 80 / 160
+      const text = 'A VERY LONG NAME'
+      createRasterizedMask(context).rasterize({ type: 'text', text }, 100, 100)
+      const [sx, , , sy, x, y] = drawnTransform
+      expect(align).toBe('left')
+      expect(at).toEqual([0, 0])
+      expect(sx).toBe(sy) // the font is uniformly transformed, never squeezed
+      expect(text.length * 10 * sx!).toBeCloseTo(80)
+      expect(x! + text.length * 10 * sx! / 2).toBeCloseTo(50)
+      expect(y! + (12 - 48) * sy! / 2).toBeCloseTo(50)
+      expect(parseFloat(font) * sx!).toBeLessThan(60)
       createRasterizedMask(context).rasterize({ type: 'text', text: 'X', font: '12px serif' }, 100, 100)
       expect(font).toBe('12px serif') // a given font is used as is
       void callLog
