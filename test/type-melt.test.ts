@@ -211,3 +211,76 @@ describe('melt: the ghost stylesheet', () => {
     expect(Array.from(doc.querySelectorAll('style')).filter((style) => style.textContent?.includes('data-comice-melt'))).toHaveLength(1)
   })
 })
+
+describe('melt: wobble', () => {
+  const filterOf = (el: Element) => {
+    const id = /#(comice-melt-\d+)/.exec(el.style.filter)![1]
+    return document.getElementById(id!)!
+  }
+  const start = async (options: Parameters<typeof type>[0]) => {
+    const el = heading('Aurora')
+    const handle = comice(el).use(type(options))
+    el.textContent = 'Basalt'
+    await mutations()
+    frames(1)
+    return { el, handle }
+  }
+
+  it('is off by default: the filter is just the threshold', async () => {
+    const { el } = await start({ mode: 'melt' })
+    const filter = filterOf(el)
+    expect(filter.querySelector('feTurbulence')).toBeNull()
+    expect(filter.querySelector('feDisplacementMap')).toBeNull()
+    expect(filter.querySelector('feColorMatrix')!.getAttribute('in')).toBe('SourceGraphic')
+  })
+
+  it('adds liquid turbulence ahead of the threshold, sized by wobbleSize', async () => {
+    const { el } = await start({ mode: 'melt', melt: { wobble: 30, wobbleSize: 60 } })
+    const filter = filterOf(el)
+    expect(filter.querySelector('feTurbulence')!.getAttribute('baseFrequency')).toBe(String(1 / 60))
+    expect(filter.querySelector('feDisplacementMap')!.getAttribute('in2')).toBe('noise')
+    expect(filter.querySelector('feColorMatrix')!.getAttribute('in')).toBe('warped')
+  })
+
+  it('keeps the waves from getting so fine they alias, and has a default size', async () => {
+    const fine = await start({ mode: 'melt', melt: { wobble: 10, wobbleSize: 1 } })
+    expect(filterOf(fine.el).querySelector('feTurbulence')!.getAttribute('baseFrequency')).toBe(String(1 / 8))
+    document.body.innerHTML = ''
+    const standard = await start({ mode: 'melt', melt: { wobble: 10 } })
+    expect(filterOf(standard.el).querySelector('feTurbulence')!.getAttribute('baseFrequency')).toBe(String(1 / 90))
+  })
+
+  it('its strength follows the melt: none at the start, most in the middle, none at the end', async () => {
+    const el = heading('Aurora')
+    const effect = type({ mode: 'melt', melt: { wobble: 40, curve: 'linear' } })
+    comice(el).use(effect)
+    el.textContent = 'Basalt'
+    await mutations()
+    const scale = () => Number(filterOf(el).querySelector('feDisplacementMap')!.getAttribute('scale'))
+    effect.params!.setParam('progress', 0)
+    expect(scale()).toBe(0)
+    effect.params!.setParam('progress', 0.5)
+    expect(scale()).toBeCloseTo(40, 1)
+    effect.params!.setParam('progress', 0.25)
+    expect(scale()).toBeGreaterThan(20)
+    expect(scale()).toBeLessThan(40)
+  })
+})
+
+describe('melt: soften', () => {
+  it('adds a blur after the threshold only when asked', async () => {
+    const plain = heading('Aurora')
+    comice(plain).use(type({ mode: 'melt' }))
+    plain.textContent = 'Basalt'
+    await mutations(); frames(1)
+    const id = (el: Element) => /#(comice-melt-\d+)/.exec((el as HTMLElement).style.filter)![1]!
+    expect(document.getElementById(id(plain))!.querySelector('feGaussianBlur')).toBeNull()
+    const soft = heading('Aurora')
+    comice(soft).use(type({ mode: 'melt', melt: { threshold: [0.33, 400], soften: 0.35 } }))
+    soft.textContent = 'Basalt'
+    await mutations(); frames(1)
+    const blur = document.getElementById(id(soft))!.querySelector('feGaussianBlur')!
+    expect(blur.getAttribute('stdDeviation')).toBe('0.35')
+    expect(blur.previousElementSibling!.tagName.toLowerCase()).toBe('fecolormatrix')
+  })
+})

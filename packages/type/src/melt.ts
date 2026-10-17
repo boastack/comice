@@ -24,7 +24,7 @@
 
 import { prefersReducedMotion } from 'comice'
 import { getSharedScheduler } from 'comice/scheduler'
-import { ease, meltFrame, thresholdMatrix, wordFilter, type MeltOptions } from './gooey.js'
+import { ease, meltFrame, thresholdMatrix, wobbleAmount, wordFilter, type MeltOptions } from './gooey.js'
 
 const SVG = 'http://www.w3.org/2000/svg'
 let filterCount = 0
@@ -84,11 +84,36 @@ export function createMelt(target: HTMLElement, options: MeltOptions = {}): Melt
   filter.setAttribute('y', '-100%')
   filter.setAttribute('width', '200%')
   filter.setAttribute('height', '300%')
+  // Optional liquid turbulence: noise pushes the blurred words around before the
+  // threshold cuts them, so the welded outline is wavy and organic. Its strength
+  // follows the melt (see render), so both ends stay exactly the real text.
+  let displace: Element | null = null
+  if (options.wobble && options.wobble > 0) {
+    const noise = doc.createElementNS(SVG, 'feTurbulence')
+    noise.setAttribute('type', 'fractalNoise')
+    noise.setAttribute('baseFrequency', String(1 / Math.max(8, options.wobbleSize ?? 90)))
+    noise.setAttribute('numOctaves', '2')
+    noise.setAttribute('seed', '7')
+    noise.setAttribute('result', 'noise')
+    displace = doc.createElementNS(SVG, 'feDisplacementMap')
+    displace.setAttribute('in', 'SourceGraphic')
+    displace.setAttribute('in2', 'noise')
+    displace.setAttribute('scale', '0')
+    displace.setAttribute('xChannelSelector', 'R')
+    displace.setAttribute('yChannelSelector', 'G')
+    displace.setAttribute('result', 'warped')
+    filter.append(noise, displace)
+  }
   const matrix = doc.createElementNS(SVG, 'feColorMatrix')
-  matrix.setAttribute('in', 'SourceGraphic')
+  matrix.setAttribute('in', displace ? 'warped' : 'SourceGraphic')
   matrix.setAttribute('type', 'matrix')
   matrix.setAttribute('values', thresholdMatrix(options.threshold))
   filter.appendChild(matrix)
+  if (options.soften && options.soften > 0) {
+    const soften = doc.createElementNS(SVG, 'feGaussianBlur')
+    soften.setAttribute('stdDeviation', String(options.soften))
+    filter.appendChild(soften)
+  }
   svg.appendChild(filter)
   doc.body.appendChild(svg)
 
@@ -127,7 +152,9 @@ export function createMelt(target: HTMLElement, options: MeltOptions = {}): Melt
   function render(progress: number): void {
     if (progress >= 1 || !pair) return hideGhosts()
     showGhosts()
-    const frame = meltFrame(ease(options.curve, progress), options)
+    const eased = ease(options.curve, progress)
+    displace?.setAttribute('scale', wobbleAmount(eased, options.wobble).toFixed(2))
+    const frame = meltFrame(eased, options)
     const values = [`${frame.from.opacity}`, wordFilter(frame.from), `${frame.to.opacity}`, wordFilter(frame.to)]
     GHOST_PROPS.forEach((p, i) => target.style.setProperty(p, values[i]!))
   }
