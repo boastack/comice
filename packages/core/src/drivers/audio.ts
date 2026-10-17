@@ -52,6 +52,22 @@ export type AudioOptions = {
   /** Exponential smoothing the AnalyserNode itself applies, 0..1, before
    *  this driver reads frequency data. Default 0.8 (AnalyserNode default). */
   smoothing?: number
+  /**
+   * Automatic gain. Each of `bass`, `mid`, `high`, `energy` and `amplitude` is
+   * rescaled against its own recent quietest and loudest moments, so any track
+   * fills 0..1 with no hand-tuned `range` in the mapping, and a quiet song
+   * moves a shape as much as a loud one. Silence stays 0 (it is never
+   * amplified into noise). Pass `{ window }` for how many seconds the floor
+   * and ceiling take to follow the music (default 8). `spectrum` is left raw.
+   * Off by default: signals are the analyser's own values.
+   */
+  normalize?: boolean | { window?: number }
+  /** Milliseconds a signal takes to rise toward a louder value. With `release`,
+   *  this is an envelope follower: a short attack and a longer release keep a
+   *  hit punchy and the fall fluid. Default: no smoothing on the way up. */
+  attack?: number
+  /** Milliseconds a signal takes to fall toward a quieter value. Default: none. */
+  release?: number
   /** Called on a detected beat/onset (see the onset-detection note below). */
   onBeat?: () => void
   /** Called on a detected onset. Distinct callback from onBeat so a caller
@@ -170,6 +186,9 @@ export function audio(options: AudioOptions = {}): NamedSignalDriver {
     bands = 8,
     fftSize = 1024,
     smoothing = 0.8,
+    normalize,
+    attack,
+    release,
     onBeat,
     onOnset,
     onDrop,
@@ -282,6 +301,53 @@ export function audio(options: AudioOptions = {}): NamedSignalDriver {
         }
       }
 
+      // Shaping (opt-in): automatic gain, then an attack/release envelope.
+      // Per signal, a floor that drops to any new low and a ceiling that climbs
+      // to any new peak, both easing back toward the music over `window`
+      // seconds: the standard peak-follower way to level audio for visuals.
+      const SHAPED = ['bass', 'mid', 'high', 'energy', 'amplitude'] as const
+      const SILENCE = 0.003 // mean bin level under which nothing is playing
+      const MIN_SPAN = 0.06 // never stretch a near-flat signal into noise
+      const gainWindow = (typeof normalize === 'object' && normalize.window && normalize.window > 0 ? normalize.window : 8)
+      const levelling = !!normalize
+      const enveloping = attack !== undefined || release !== undefined
+      const floors: Record<string, number> = {}
+      const ceilings: Record<string, number> = {}
+      const followed: Record<string, number> = {}
+      let lastShapeAt = 0
+
+      function shape(rawEnergy: number, timestamp: number): void {
+        if (!levelling && !enveloping) return
+        const dt = lastShapeAt ? Math.min(0.25, (timestamp - lastShapeAt) / 1000) : 1 / 60
+        lastShapeAt = timestamp
+        const silent = rawEnergy < SILENCE
+        for (const key of SHAPED) {
+          let value = signals[key] as number
+          if (levelling) {
+            if (silent) value = 0
+            else {
+              if (floors[key] === undefined) {
+                floors[key] = value
+                ceilings[key] = value
+              } else {
+                const ease = 1 - Math.exp(-dt / gainWindow)
+                ceilings[key] = value > ceilings[key]! ? value : ceilings[key]! + (value - ceilings[key]!) * ease
+                floors[key] = value < floors[key]! ? value : floors[key]! + (value - floors[key]!) * ease
+              }
+              const span = Math.max(ceilings[key]! - floors[key]!, MIN_SPAN)
+              value = Math.min(1, Math.max(0, (value - floors[key]!) / span))
+            }
+          }
+          if (enveloping) {
+            const current = followed[key] ?? 0
+            const ms = (value > current ? attack : release) ?? 0
+            value = ms > 0 ? current + (value - current) * (1 - Math.exp(-(dt * 1000) / ms)) : value
+            followed[key] = value
+          }
+          signals[key] = value
+        }
+      }
+
       function ensureContext(): boolean {
         if (context) return true
         const newContext = getSharedAudioContext()
@@ -346,6 +412,7 @@ export function audio(options: AudioOptions = {}): NamedSignalDriver {
         signals.amplitude = peak / 255
 
         detectOnsets(signals.energy, timestamp)
+        shape(signals.energy, timestamp)
         onSignals(signals)
       }
 

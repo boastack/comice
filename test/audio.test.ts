@@ -569,3 +569,138 @@ describe('audio driver — one driver, many elements (a group handle)', () => {
     expect(received).not.toHaveBeenCalled()
   })
 })
+
+describe('audio driver — automatic gain and envelope', () => {
+  let target: HTMLElement
+  let raf: ReturnType<typeof installFakeRaf>
+  let clock = 0
+
+  beforeEach(() => {
+    resetSharedAudioContext()
+    installFakeWebAudio()
+    installFakeIntersectionObserver()
+    target = document.createElement('div')
+    const mediaEl = document.createElement('audio')
+    mediaEl.id = 'track'
+    target.appendChild(mediaEl)
+    document.body.appendChild(target)
+    raf = installFakeRaf()
+    clock = 0
+  })
+  afterEach(() => {
+    getSharedScheduler().stop()
+    target.remove()
+    uninstallFakeWebAudio()
+    uninstallFakeIntersectionObserver()
+  })
+
+  /** Attaches a driver and returns helpers that play a constant level for N frames at 60fps. */
+  function rig(options: Parameters<typeof audio>[0]) {
+    const seen: Record<string, number>[] = []
+    const driver = audio({ source: '#track', ...options })
+    driver.attachSignals!(target, (signals) => seen.push({ ...(signals as Record<string, number>) }))
+    raf.flush((clock += 16)) // creates the context
+    return {
+      play(level: number, frames: number) {
+        for (let i = 0; i < frames; i++) {
+          lastContext!.analyser!.setFrequencyData(new Array(512).fill(level))
+          raf.flush((clock += 16.67))
+        }
+        return seen[seen.length - 1]!
+      },
+      all: seen,
+    }
+  }
+
+  it('leaves signals raw by default', () => {
+    const { play } = rig({})
+    expect(play(102, 4).energy).toBeCloseTo(0.4, 2)
+  })
+
+  it('normalize: the loudest passage reads 1 and the quietest 0, whatever the track', () => {
+    const { play } = rig({ normalize: true })
+    for (let i = 0; i < 6; i++) {
+      play(60, 20)
+      play(200, 20)
+    }
+    expect(play(200, 5).energy).toBeGreaterThan(0.95)
+    expect(play(60, 5).energy).toBeLessThan(0.05)
+  })
+
+  it('normalize: a quiet track moves a shape as far as a loud one', () => {
+    const quiet = rig({ normalize: true })
+    for (let i = 0; i < 5; i++) { quiet.play(20, 20); quiet.play(45, 20) }
+    const quietPeak = quiet.play(45, 5).bass
+    getSharedScheduler().stop(); raf = installFakeRaf(); resetSharedAudioContext(); clock = 0
+    const loud = rig({ normalize: true })
+    for (let i = 0; i < 5; i++) { loud.play(130, 20); loud.play(250, 20) }
+    const loudPeak = loud.play(250, 5).bass
+    expect(quietPeak).toBeGreaterThan(0.9)
+    expect(loudPeak).toBeGreaterThan(0.9)
+  })
+
+  it('normalize: silence stays 0 instead of being amplified, and the levels are remembered', () => {
+    const { play } = rig({ normalize: true })
+    for (let i = 0; i < 4; i++) { play(60, 20); play(200, 20) }
+    expect(play(0, 10).energy).toBe(0)
+    expect(play(0, 10).bass).toBe(0)
+    expect(play(200, 5).energy).toBeGreaterThan(0.9)
+  })
+
+  it('normalize: a flat signal is not stretched into noise', () => {
+    const { play } = rig({ normalize: true })
+    play(100, 30)
+    // One level of jitter on a flat track is a tiny fraction of the range, not a full swing.
+    expect(play(101, 3).energy).toBeLessThan(0.1)
+  })
+
+  it('normalize: the window sets how fast the loudest level fades; bad values fall back', () => {
+    const fast = rig({ normalize: { window: 0.5 } })
+    fast.play(220, 20)
+    const faded = fast.play(100, 120).energy // after 2s the old peak has mostly gone
+    getSharedScheduler().stop(); raf = installFakeRaf(); resetSharedAudioContext(); clock = 0
+    const slow = rig({ normalize: { window: 30 } })
+    slow.play(220, 20)
+    const held = slow.play(100, 120).energy
+    expect(faded).toBeGreaterThanOrEqual(held)
+    expect(() => rig({ normalize: { window: 0 } })).not.toThrow()
+    expect(() => rig({ normalize: {} })).not.toThrow()
+  })
+
+  it('attack and release: a hit rises quickly and the fall is slow', () => {
+    const { play } = rig({ attack: 40, release: 500 })
+    play(0, 5)
+    const rising = play(255, 2).energy
+    expect(rising).toBeGreaterThan(0.2)
+    expect(rising).toBeLessThan(0.9)
+    const peak = play(255, 30).energy
+    expect(peak).toBeGreaterThan(0.95)
+    const falling = play(0, 3).energy
+    expect(falling).toBeGreaterThan(0.8)
+    expect(play(0, 120).energy).toBeLessThan(0.1)
+  })
+
+  it('an attack alone falls instantly, a release alone rises instantly', () => {
+    const attackOnly = rig({ attack: 100 })
+    attackOnly.play(255, 30)
+    expect(attackOnly.play(0, 1).energy).toBe(0)
+    getSharedScheduler().stop(); raf = installFakeRaf(); resetSharedAudioContext(); clock = 0
+    const releaseOnly = rig({ release: 400 })
+    expect(releaseOnly.play(255, 1).energy).toBeCloseTo(1, 2)
+    expect(releaseOnly.play(0, 1).energy).toBeGreaterThan(0.9)
+  })
+
+  it('a zero attack or release means no smoothing on that side', () => {
+    const { play } = rig({ attack: 0, release: 0 })
+    expect(play(255, 1).energy).toBeCloseTo(1, 2)
+    expect(play(0, 1).energy).toBe(0)
+  })
+
+  it('beats are still found from the raw level, whatever normalize and the envelope do', () => {
+    const onBeat = mock()
+    const { play } = rig({ normalize: true, attack: 30, release: 300, onBeat })
+    play(40, 60)
+    play(240, 2)
+    expect(onBeat).toHaveBeenCalled()
+  })
+})
