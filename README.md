@@ -329,4 +329,4 @@ Use [GitHub Issues](https://github.com/boastack/comice/issues) for reproducible 
 
 ## License
 
-Comice is [MIT licensed](./LICENSE), copyright Olawale Balo. Third-party code and assets retain their own notices, including the morph package's [Viscose attribution](./packages/morph/LICENSE) and the bundled font license.
+Comice is [MIT licensed](./LICENSE), copyright Olawale Balo. Third-party code and assets retain their own notices, including the morph package's and the bundled font license.
