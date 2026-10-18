@@ -22,7 +22,6 @@ export type JoinOptions = {
   dissolve?: number
 }
 
-// The shader license notice is retained in this package's LICENSE.
 // A swept slab keeps flat silhouettes flat as neighbors fuse.
 export const BRIDGE_GLSL = `
 float sdBridge(vec2 point, vec2 a, vec2 b, float rEnd, float rMid, float sag) {
