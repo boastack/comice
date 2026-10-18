@@ -1,9 +1,8 @@
 <h1 align="center">Comice</h1>
 
-<p align="center">
-  Interactive images, video, and typography for the web.<br />
-  A modular TypeScript engine with GPU effects and native input drivers.
-</p>
+<h3 align="center">
+  Comice is a GPU interaction engine for images, video, and typography, with native scroll, hover, pointer, drag, click, time, and audio drivers.
+</h3>
 
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
@@ -329,4 +328,4 @@ Use [GitHub Issues](https://github.com/boastack/comice/issues) for reproducible 
 
 ## License
 
-Comice is [MIT licensed](./LICENSE), copyright Olawale Balo. Third-party code and assets retain their own notices, including the morph package's and the bundled font license.
+MIT © 2026 [Olawale Balo](https://github.com/walebuilds)
