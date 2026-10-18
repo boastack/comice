@@ -19,8 +19,8 @@ screen, with syntax colours and a copy button; Settings opens a floating 256px
 inspector for the same demo. Only one is open at a time, and Escape closes it.
 The speaker button, bottom left, plays the shared Fela track. It starts on the
 first scroll, wheel, touch or key press, as browsers only allow sound then.
-The track lives in `demo/assets/audio/`, which is not published; without it
-the button hides itself.
+The track lives in `demo/assets/audio/` and is included in the hosted showcase.
+If it cannot load, the button hides itself.
 
 Settings > Shapes holds each demo's From and To: SVG markup, a URL or a CSS
 clip-path, with an upload for each. Apply shapes loads them; an empty From
@@ -44,9 +44,8 @@ pause video playback. Failed loads and missing WebGL keep the real media.
 
 All images, SVG silhouettes, fonts, footage, and soundtrack helpers live in
 `demo/assets/`.
-Video and audio stay ignored by Git, so another checkout must supply
-`demo/assets/video/a.mp4`, `demo/assets/video/b.mp4` and optionally
-`demo/assets/audio/fela.mp3`. The page imports the shared font stylesheet and soundtrack module directly.
+Video and audio are committed with the demo: `demo/assets/video/a.mp4`,
+`demo/assets/video/b.mp4`, and `demo/assets/audio/fela.mp3`. The page imports the shared font stylesheet and soundtrack module directly.
 No duplicated assets or soundtrack files are kept inside `demo/morph/`.
 
 See `harness/morph/README.md` for visual regression checks.

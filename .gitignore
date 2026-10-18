@@ -10,10 +10,6 @@ coverage/
 .vscode/
 .cursor/
 
-# Shared demo footage and soundtrack stay local and are not published.
-demo/assets/video/
-demo/assets/audio/
-
 # Internal planning doc, not meant to be public on GitHub.
 ROADMAP.md
 
@@ -26,3 +22,6 @@ demo/media/
 # Morph browser regression artifacts and generated test bundle.
 harness/morph/out/
 harness/morph/build/
+# Generated static demo deployment and local Vercel settings.
+.vercel-static/
+.vercel/

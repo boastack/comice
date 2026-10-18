@@ -280,7 +280,7 @@ The morph showcase includes editable shapes, driver and surface controls, and co
 
 All showcase images, SVG silhouettes, fonts, media, and shared helpers live in [`demo/assets/`](./demo/assets/README.md). The Morph directory contains only its page, styles, and behavior. Package builds include their declared distribution files rather than the demo assets.
 
-Video and audio are intentionally excluded from Git. Supply your own media at these paths to reproduce the complete showcases:
+The shared video and audio are included in Git and the hosted showcase:
 
 ```text
 demo/assets/video/a.mp4
@@ -289,6 +289,16 @@ demo/assets/audio/fela.mp3       # Optional soundtrack
 ```
 
 The [showcase guide](./demo/morph/README.md) explains local media behavior. Bundled Geist fonts retain their [Open Font License](./demo/assets/fonts/OFL.txt).
+
+### Deploy the showcase to Vercel
+
+Import this repository with the project root set to the repository root. The
+included `vercel.json` runs `pnpm build:demo` and serves `.vercel-static/`.
+The root URL redirects to `/demo/`, and the Morph showcase lives at `/demo/morph/`.
+
+The static output includes the demo pages, shared audio and video, fonts, and the
+built core, Morph, and Type modules. Source files, tests, and internal documents
+stay outside the deployment. Run `pnpm build:demo` locally to check the output.
 
 ## Project structure
 
